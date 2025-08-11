@@ -1,4 +1,5 @@
-// BetconsultingLogo.tsx
+import Logo from '@/assets/betconsulting_logo.png';
+
 export default function BetconsultingLogo({ className }: { className?: string }) {
-    return <img src="/storage/images/betconsulting_logo.png" alt="Betconsulting Logo" className={className} />;
+    return <img src={Logo} alt="Betconsulting Logo" className={className} />;
 }

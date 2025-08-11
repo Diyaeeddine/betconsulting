@@ -19,13 +19,13 @@ Route::get('/', function () {
     return redirect()->route('login');
 })->name('home');
 
-Route::get('/dashboard', function () {
-    return Inertia::render('dashboard', [
-        'auth' => [
-            'user' => auth()->user(),
-        ],
-    ]);
-})->middleware(['auth', 'verified'])->name('dashboard');
+// Route::get('/dashboard', function () {
+//     return Inertia::render('dashboard', [
+//         'auth' => [
+//             'user' => auth()->user(),
+//         ],
+//     ]);
+// })->middleware(['auth', 'verified'])->name('dashboard');
 
 // Direction Générale (Admin)
 Route::middleware(['auth', 'verified', 'role:admin'])->group(function () {
