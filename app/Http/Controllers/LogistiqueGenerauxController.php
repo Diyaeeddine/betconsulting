@@ -8,6 +8,7 @@ class LogistiqueGenerauxController extends Controller
 {
     public function index()
     {
-        return Inertia::render('dashboards/LogistiqueGeneraux');
+        return Inertia::render('logistique-generaux/Dashboard');
+
     }
 }

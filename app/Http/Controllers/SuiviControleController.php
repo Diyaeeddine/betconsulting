@@ -8,6 +8,7 @@ class SuiviControleController extends Controller
 {
     public function index()
     {
-        return Inertia::render('dashboards/SuiviControle');
+        return Inertia::render('suivi-controle/Dashboard');
+
     }
 }

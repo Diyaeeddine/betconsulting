@@ -8,6 +8,7 @@ class MarchesMarketingController extends Controller
 {
     public function index()
     {
-        return Inertia::render('dashboards/MarchesMarketing');
+        return Inertia::render('marches-marketing/Dashboard');
+
     }
 }

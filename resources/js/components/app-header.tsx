@@ -15,6 +15,8 @@ import { BookOpen, Folder, LayoutGrid, Menu, Search } from 'lucide-react';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
 
+
+ 
 const mainNavItems: NavItem[] = [
     {
         title: 'Dashboard',
@@ -24,11 +26,7 @@ const mainNavItems: NavItem[] = [
 ];
 
 const rightNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: Folder,
-    },
+
     {
         title: 'Documentation',
         href: 'https://laravel.com/docs/starter-kits#react',
@@ -61,7 +59,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                             <SheetContent side="left" className="flex h-full w-64 flex-col items-stretch justify-between bg-sidebar">
                                 <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                                 <SheetHeader className="flex justify-start text-left">
-                                    <AppLogoIcon className="h-6 w-6 fill-current text-black dark:text-white" />
+                                    {/* <AppLogoIcon className="h-6 w-6 fill-current text-black dark:text-white" /> */}
                                 </SheetHeader>
                                 <div className="flex h-full flex-1 flex-col space-y-4 p-4">
                                     <div className="flex h-full flex-col justify-between text-sm">
@@ -83,8 +81,8 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                                     rel="noopener noreferrer"
                                                     className="flex items-center space-x-2 font-medium"
                                                 >
-                                                    {item.icon && <Icon iconNode={item.icon} className="h-5 w-5" />}
-                                                    <span>{item.title}</span>
+                                                    {/* {item.icon && <Icon iconNode={item.icon} className="h-5 w-5" />}
+                                                    <span>{item.title}</span> */}
                                                 </a>
                                             ))}
                                         </div>
@@ -93,10 +91,6 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                             </SheetContent>
                         </Sheet>
                     </div>
-
-                    <Link href="/dashboard" prefetch className="flex items-center space-x-2">
-                        <AppLogo />
-                    </Link>
 
                     {/* Desktop Navigation */}
                     <div className="ml-6 hidden h-full items-center space-x-6 lg:flex">

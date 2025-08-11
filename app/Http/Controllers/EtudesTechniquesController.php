@@ -8,6 +8,7 @@ class EtudesTechniquesController extends Controller
 {
     public function index()
     {
-        return Inertia::render('dashboards/EtudesTechniques');
+        return Inertia::render('etudes-techniques/Dashboard');
+
     }
 }

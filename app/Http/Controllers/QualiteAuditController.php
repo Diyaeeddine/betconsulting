@@ -8,6 +8,7 @@ class QualiteAuditController extends Controller
 {
     public function index()
     {
-        return Inertia::render('dashboards/QualiteAuditController');
+        return Inertia::render('qualite-audit/Dashboard');
+
     }
 }
