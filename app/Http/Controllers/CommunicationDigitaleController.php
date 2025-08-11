@@ -8,6 +8,6 @@ class CommunicationDigitaleController extends Controller
 {
     public function index()
     {
-        return Inertia::render('dashboards/CommunicationDigitale');
+        return Inertia::render('communication-digitale/Dashboard');
     }
 }

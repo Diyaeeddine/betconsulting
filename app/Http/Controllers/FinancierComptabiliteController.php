@@ -8,6 +8,8 @@ class FinancierComptabiliteController extends Controller
 {
     public function index()
     {
-        return Inertia::render('dashboards/FinancierComptabilite');
+        // return Inertia::render('dashboards/FinancierComptabilite');
+        return Inertia::render('financier-comptabilite/Dashboard');
+
     }
 }
