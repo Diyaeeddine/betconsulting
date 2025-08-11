@@ -35,11 +35,11 @@ export function AppSidebar() {
             href: dashboardHref,
             icon: LayoutGrid,
         },
-        // {
-        //     title: 'Demandes',
-        //     href: dashboardHref,
-        //     icon: LayoutGrid,
-        // },
+        {
+            title: 'Demandes',
+            href: dashboardHref,
+            icon: LayoutGrid,
+        },
     ];
 
     return (
