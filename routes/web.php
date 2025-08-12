@@ -14,20 +14,23 @@ use App\Http\Controllers\MarchesMarketingController;
 use App\Http\Controllers\QualiteAuditController;
 use App\Http\Controllers\RessourcesHumainesController;
 use App\Http\Controllers\SuiviControleController;
+use App\Http\Controllers\ScreenshotController;
 
 Route::get('/', function () {
     return redirect()->route('login');
 })->name('home');
 
-// Route::get('/dashboard', function () {
-//     return Inertia::render('dashboard', [
-//         'auth' => [
-//             'user' => auth()->user(),
-//         ],
-//     ]);
-// })->middleware(['auth', 'verified'])->name('dashboard');
+Route::get('/dashboard', function () {
+    return Inertia::render('dashboard', [
+        'auth' => [
+            'user' => auth()->user(),
+        ],
+    ]);
+})->middleware(['auth', 'verified'])->name('dashboard');
 
 // Direction Générale (Admin)
+
+
 Route::middleware(['auth', 'verified', 'role:admin'])->group(function () {
     Route::get('/direction-generale/dashboard', [DirectionGeneraleController::class, 'index'])
         ->name('dashboard.direction-generale');
@@ -81,20 +84,32 @@ Route::middleware(['auth', 'verified', 'role:marches-marketing'])->group(functio
         ->name('dashboard.marches-marketing');
 });
 
-
-
-
 // Qualité & Audit
 Route::middleware(['auth', 'verified', 'role:qualite-audit'])->group(function () {
     Route::get('/qualite-audit/dashboard', [QualiteAuditController::class, 'index'])
         ->name('dashboard.qualite-audit');
 });
 
+
+
 // Ressources Humaines
 Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(function () {
     Route::get('/ressources-humaines/dashboard', [RessourcesHumainesController::class, 'index'])
         ->name('dashboard.ressources-humaines');
+
+    Route::get('/ressources-humaines/projects', [RessourcesHumainesController::class, 'menuProjects'])
+        ->name('ressources-humaines.projects');
+
+    Route::get('/ressources-humaines/maps', [RessourcesHumainesController::class, 'Maps'])
+        ->name('maps.ressources-humaines');
+
+    Route::get('/ressources-humaines/users', [RessourcesHumainesController::class, 'Users'])
+        ->name('users.ressources-humaines');
 });
+
+
+
+
 
 // Suivi & Contrôle
 Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function () {
@@ -102,29 +117,70 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
         ->name('dashboard.suivi-controle');
 });
 
+Route::get('/dashboard', function () {
+    $user = auth()->user();
+    return match (true) {
+        $user->hasRole('admin') => redirect()->route('dashboard.direction-generale'),
+        $user->hasRole('marches-marketing') => redirect()->route('dashboard.marches-marketing'),
+        $user->hasRole('direction-generale') => redirect()->route('dashboard.direction-generale'),
+        $user->hasRole('communication-digitale') => redirect()->route('dashboard.communication-digitale'),
+        $user->hasRole('etudes-techniques') => redirect()->route('dashboard.etudes-techniques'),
+        $user->hasRole('financier-comptabilite') => redirect()->route('dashboard.financier-comptabilite'),
+        $user->hasRole('fournisseurs-traitants') => redirect()->route('dashboard.fournisseurs-traitants'),
+        $user->hasRole('innovation-transition') => redirect()->route('dashboard.innovation-transition'),
+        $user->hasRole('juridique') => redirect()->route('dashboard.juridique'),
+        $user->hasRole('logistique-generaux') => redirect()->route('dashboard.logistique-generaux'),
+        $user->hasRole('qualite-audit') => redirect()->route('dashboard.qualite-audit'),
+        $user->hasRole('ressources-humaines') => redirect()->route('dashboard.ressources-humaines'),
+        $user->hasRole('suivi-controle') => redirect()->route('dashboard.suivi-controle'),
+        default => redirect('/'),
+    };
+})->middleware(['auth', 'verified'])->name('dashboard');
 
+// ===== ROUTES SCREENSHOTS =====
 
+// Routes API pour la capture de screenshots (tous les services autorisés)
+Route::middleware(['auth'])->group(function () {
+    Route::post('/api/screenshots', [ScreenshotController::class, 'store'])
+        ->name('api.screenshots.store');
+    Route::delete('/api/screenshots/{screenshot}', [ScreenshotController::class, 'deleteOwn'])
+        ->name('api.screenshots.destroy');
+});
 
-// Route::get('/dashboard', function () {
-//     $user = auth()->user();
+// Routes pour visualiser et télécharger les screenshots (utilisateurs autorisés + RH + Direction Générale)
+Route::middleware(['auth'])->group(function () {
+    Route::get('/screenshots/view/{id}', [ScreenshotController::class, 'viewById'])
+        ->name('screenshots.view')
+        ->where('id', '[0-9]+');
+    Route::get('/screenshots/download/{id}', [ScreenshotController::class, 'downloadById'])
+        ->name('screenshots.download')
+        ->where('id', '[0-9]+');
+    Route::get('/storage/screenshots/{path}', [ScreenshotController::class, 'serveStorage'])
+        ->where('path', '.*')
+        ->name('storage.screenshots');
+});
 
-//     return match (true) {
-//         $user->hasRole('admin') => redirect()->route('dashboard.direction-generale'),
-//         $user->hasRole('marches-marketing') => redirect()->route('dashboard.marches-marketing'),
-//         $user->hasRole('direction-generale') => redirect()->route('dashboard.direction-generale'),
-//         $user->hasRole('communication-digitale') => redirect()->route('dashboard.communication-digitale'),
-//         $user->hasRole('etudes-techniques') => redirect()->route('dashboard.etudes-techniques'),
-//         $user->hasRole('financier-comptabilite') => redirect()->route('dashboard.financier-comptabilite'),
-//         $user->hasRole('fournisseurs-traitants') => redirect()->route('dashboard.fournisseurs-traitants'),
-//         $user->hasRole('innovation-transition') => redirect()->route('dashboard.innovation-transition'),
-//         $user->hasRole('juridique') => redirect()->route('dashboard.juridique'),
-//         $user->hasRole('logistique-generaux') => redirect()->route('dashboard.logistique-generaux'),
-//         $user->hasRole('qualite-audit') => redirect()->route('dashboard.qualite-audit'),
-//         $user->hasRole('ressources-humaines') => redirect()->route('dashboard.ressources-humaines'),
-//         $user->hasRole('suivi-controle') => redirect()->route('dashboard.suivi-controle'),
-//         default => redirect('/'),
-//     };
-// })->middleware(['auth', 'verified'])->name('dashboard');
+// Routes d'administration des screenshots (Direction Générale + RH uniquement)
+Route::middleware(['auth'])->group(function () {
+    Route::get('/admin/screenshots/data', [ScreenshotController::class, 'adminIndex'])
+        ->name('admin.screenshots.data')
+        ->middleware('role:admin|ressources-humaines');
+    Route::get('/admin/screenshots/stats', [ScreenshotController::class, 'adminStats'])
+        ->name('admin.screenshots.stats')
+        ->middleware('role:admin|ressources-humaines');
+    Route::get('/admin/screenshots/users', [ScreenshotController::class, 'getUsers'])
+        ->name('admin.screenshots.users')
+        ->middleware('role:admin|ressources-humaines');
+    Route::get('/admin/screenshots', [ScreenshotController::class, 'adminView'])
+        ->name('admin.screenshots')
+        ->middleware('role:admin|ressources-humaines');
+    Route::get('/admin/screenshots/{screenshot}/details', [ScreenshotController::class, 'show'])
+        ->name('admin.screenshots.show')
+        ->middleware('role:admin|ressources-humaines');
+    Route::delete('/admin/screenshots/{screenshot}', [ScreenshotController::class, 'destroy'])
+        ->name('admin.screenshots.destroy')
+        ->middleware('role:admin|ressources-humaines');
+});
 
 
 
