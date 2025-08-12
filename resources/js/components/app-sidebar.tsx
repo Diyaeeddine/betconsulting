@@ -1,6 +1,9 @@
+import { useState, useEffect } from 'react';
+
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
+
 import {
   Sidebar,
   SidebarContent,
@@ -10,20 +13,28 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { type NavItem, type SharedData } from '@/types';
+
+import { type SharedData, type NavItem } from '@/types';
+
 import { Link, usePage } from '@inertiajs/react';
-import {
-  LayoutGrid,
-  FolderKanban,
-  Briefcase,
-  CalendarDays,
-  ChartPie,
-  FileText,
-} from 'lucide-react';
+
+import { LayoutGrid, FolderKanban, MapPin, Users } from 'lucide-react';
+
 import BetconsultingDashLogo from './betconsulting-dash-logo';
 
 export function AppSidebar() {
-  const { auth } = usePage<SharedData>().props;
+  const page = usePage<SharedData>();
+  const { auth, projects = [] } = page.props;
+
+  // State for projects submenu open/close
+  const [isProjectsMenuOpen, setIsProjectsMenuOpen] = useState(false);
+
+  // Auto-open projects submenu if current URL starts with /projects
+  useEffect(() => {
+    if (page.url.startsWith('/projects')) {
+      setIsProjectsMenuOpen(true);
+    }
+  }, [page.url]);
 
   const roleDashboardMap: Record<string, string> = {
     admin: '/direction-generale/dashboard',
@@ -45,6 +56,12 @@ export function AppSidebar() {
       ? roleDashboardMap[auth.user.role]
       : '/dashboard';
 
+  const projectsNavItems: NavItem[] = projects.map((project: any) => ({
+    title: project.nom,
+    href: `/projects/${project.id}`,
+    icon: FolderKanban,
+  }));
+
   const mainNavItems: NavItem[] = [
     {
       title: 'Dashboard',
@@ -54,13 +71,18 @@ export function AppSidebar() {
     {
       title: 'Projets',
       icon: FolderKanban,
-      items: [
-        { title: 'Projet Alpha', href: '/projects/alpha', icon: FolderKanban },
-        { title: 'Projet Beta', href: '/projects/beta', icon: Briefcase },
-        { title: 'Projet Gamma', href: '/projects/gamma', icon: CalendarDays },
-        { title: 'Projet Delta', href: '/projects/delta', icon: ChartPie },
-        { title: 'Projet Epsilon', href: '/projects/epsilon', icon: FileText },
-      ],
+      items: isProjectsMenuOpen ? projectsNavItems : [],
+      // No href here to prevent navigation on toggle click
+    },
+    {
+      title: 'Maps',
+      href: '/ressources-humaines/maps',
+      icon: MapPin,
+    },
+    {
+      title: 'Users',
+      href: '/ressources-humaines/users',
+      icon: Users,
     },
   ];
 
@@ -83,7 +105,10 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        <NavMain items={mainNavItems} />
+        <NavMain
+          items={mainNavItems}
+          onProjectsToggle={() => setIsProjectsMenuOpen(!isProjectsMenuOpen)}
+        />
       </SidebarContent>
 
       <SidebarFooter>

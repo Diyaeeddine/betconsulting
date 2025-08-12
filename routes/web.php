@@ -94,6 +94,15 @@ Route::middleware(['auth', 'verified', 'role:qualite-audit'])->group(function ()
 Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(function () {
     Route::get('/ressources-humaines/dashboard', [RessourcesHumainesController::class, 'index'])
         ->name('dashboard.ressources-humaines');
+
+    Route::get('/ressources-humaines/projects', [RessourcesHumainesController::class, 'menuProjects'])
+        ->name('ressources-humaines.projects');
+
+    Route::get('/ressources-humaines/maps', [RessourcesHumainesController::class, 'Maps'])
+        ->name('maps.ressources-humaines');
+
+    Route::get('/ressources-humaines/users', [RessourcesHumainesController::class, 'Users'])
+        ->name('users.ressources-humaines');
 });
 
 
