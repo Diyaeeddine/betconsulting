@@ -49,7 +49,7 @@ class AuthenticatedSessionController extends Controller
         $user->hasRole('qualite-audit') => redirect()->route('dashboard.qualite-audit'),
         $user->hasRole('ressources-humaines') => redirect()->route('dashboard.ressources-humaines'),
         $user->hasRole('suivi-controle') => redirect()->route('dashboard.suivi-controle'),
-        default => redirect('/dashboard'),
+        
     };
 }
 
