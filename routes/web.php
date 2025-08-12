@@ -88,11 +88,17 @@ Route::middleware(['auth', 'verified', 'role:qualite-audit'])->group(function ()
         ->name('dashboard.qualite-audit');
 });
 
+
+
 // Ressources Humaines
 Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(function () {
     Route::get('/ressources-humaines/dashboard', [RessourcesHumainesController::class, 'index'])
         ->name('dashboard.ressources-humaines');
 });
+
+
+
+
 
 // Suivi & Contrôle
 Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function () {
