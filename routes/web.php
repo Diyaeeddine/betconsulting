@@ -81,20 +81,23 @@ Route::middleware(['auth', 'verified', 'role:marches-marketing'])->group(functio
         ->name('dashboard.marches-marketing');
 });
 
-
-
-
 // Qualité & Audit
 Route::middleware(['auth', 'verified', 'role:qualite-audit'])->group(function () {
     Route::get('/qualite-audit/dashboard', [QualiteAuditController::class, 'index'])
         ->name('dashboard.qualite-audit');
 });
 
+
+
 // Ressources Humaines
 Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(function () {
     Route::get('/ressources-humaines/dashboard', [RessourcesHumainesController::class, 'index'])
         ->name('dashboard.ressources-humaines');
 });
+
+
+
+
 
 // Suivi & Contrôle
 Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function () {
