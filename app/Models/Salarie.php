@@ -23,4 +23,8 @@ class Salarie extends Model {
     public function materiels() {
         return $this->hasMany(Materiel::class);
     }
+    public function profils()
+{
+    return $this->hasMany(Profil::class, 'user_id');
+}
 }

@@ -8,6 +8,10 @@ use Inertia\Inertia;
 
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Hash;
+
 use App\Models\Salarie;
 
 
@@ -139,6 +143,83 @@ class RessourcesHumainesController extends Controller
     {
         $project = $salarie->project;
         return response()->json($project);
+    }
+
+    public function getUser(Salarie $user)
+    {
+        return response()->json($user);
+    }
+
+   
+    public function storeUsers(Request $request)
+    {
+        // Validate the incoming request data based on the salaries table schema.
+        $validatedData = $request->validate([
+            'nom' => 'required|string|max:255',
+            'prenom' => 'required|string|max:255',
+            'poste' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:salaries',
+            'telephone' => 'required|string|max:20',
+            'salaire_mensuel' => 'required|numeric',
+            'date_embauche' => 'nullable|date',
+        ]);
+
+        // Create a new Salarie instance. The 'statut' field will default to 'actif' as per your schema.
+        $salarie = Salarie::create($validatedData);
+
+        // Return a JSON response with the new salary user and a success message.
+        return response()->json([
+            'message' => 'Salarie created successfully.',
+            'salarie' => $salarie
+        ], 201);
+    }
+
+    
+    public function updateUser(Request $request, Salarie $salarie)
+    {
+        // Validate the incoming request data. The 'email' rule ignores the current user's email.
+        $validatedData = $request->validate([
+            'nom' => 'required|string|max:255',
+            'prenom' => 'required|string|max:255',
+            'poste' => 'required|string|max:255',
+            'email' => [
+                'required',
+                'string',
+                'email',
+                'max:255',
+                Rule::unique('salaries')->ignore($salarie->id),
+            ],
+            'telephone' => 'required|string|max:20',
+            'salaire_mensuel' => 'required|numeric',
+            'date_embauche' => 'nullable|date',
+            'statut' => 'required|in:actif,inactif',
+        ]);
+
+        // Update the salary user's attributes.
+        $salarie->update($validatedData);
+
+        // Return a JSON response with the updated salary user and a success message.
+        return response()->json([
+            'message' => 'Salarie updated successfully.',
+            'salarie' => $salarie
+        ]);
+    }
+
+    public function updateUserPass(Request $request, Salarie $user)
+    {
+        // Validate the incoming request data for the new password.
+        $validatedData = $request->validate([
+            'password' => 'required|string|min:8|confirmed', // 'confirmed' checks for 'password_confirmation' field
+        ]);
+
+        // Hash the new password and update the user's password.
+        $user->password = Hash::make($validatedData['password']);
+        $user->save();
+
+        // Return a JSON response with a success message.
+        return response()->json([
+            'message' => 'User password updated successfully.'
+        ]);
     }
 
 

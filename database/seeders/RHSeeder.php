@@ -3,18 +3,22 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
+
+use App\Models\User;
 use App\Models\Projet;
 use App\Models\Salarie;
 use App\Models\Vehicule;
 use App\Models\Materiel;
 use App\Models\Depense;
-use App\Models\User;
+use App\Models\Profil;
 
 class RHSeeder extends Seeder
 {
     public function run(): void
     {
-        // Récupérer un user existant ou en créer un pour responsable et dépenses
+        // Ensure a User exists
         $user = User::first();
         if (!$user) {
             $user = User::create([
@@ -24,7 +28,26 @@ class RHSeeder extends Seeder
             ]);
         }
 
-        // Créer 3 projets
+        // Enum values for profils (example)
+        $profilTypes = [
+            'ingenieur_structure',
+            'ingenieur_genie_civil',
+            'ingenieur_electricite_fluides',
+            'dessinateur_projeteur',
+            'ingenieur_bim',
+            'chef_de_chantier',
+            'conducteur_de_travaux',
+            'techniciens_ouvriers_specialises',
+            'technicien_specialise',
+            'responsable_hse',
+            'controleur_technique',
+            'metreur_economiste',
+            'geometre_topographe',
+            'responsable_achats',
+            'gestionnaire_contrats',
+        ];
+
+        // Create 3 projets
         for ($i = 1; $i <= 3; $i++) {
             $projet = Projet::create([
                 'nom' => "Projet $i",
@@ -36,21 +59,21 @@ class RHSeeder extends Seeder
                 'statut' => 'en_cours',
                 'client' => "Client $i",
                 'lieu_realisation' => "Ville $i",
-                'latitude' => 35.689487 + ($i * 0.01), // Exemple latitude
-                'longitude' => -5.799999 + ($i * 0.01), // Exemple longitude
-                'radius' => 5 + $i, // Rayon en km
+                'latitude' => 35.689487 + ($i * 0.01),
+                'longitude' => -5.799999 + ($i * 0.01),
+                'radius' => 5 + $i,
                 'responsable_id' => $user->id,
                 'type_projet' => 'etude',
             ]);
 
-            // Créer 4 salariés affectés à ce projet
+            // Create 4 salariés affectés to the project
             for ($j = 1; $j <= 4; $j++) {
-                $email = "salarie{$j}_projet{$i}@exemple.com"; // email unique
+                $email = "salarie{$j}_projet{$i}@exemple.com";
 
+                // Create Salarie WITHOUT 'poste'
                 $salarie = Salarie::create([
                     'nom' => "Nom $j",
                     'prenom' => "Prénom $j",
-                    'poste' => "Poste $j",
                     'email' => $email,
                     'telephone' => "060000000$j",
                     'salaire_mensuel' => 3000 + $j * 500,
@@ -59,7 +82,16 @@ class RHSeeder extends Seeder
                     'projet_id' => $projet->id,
                 ]);
 
-                // Créer 1 véhicule affecté au salarié ou non
+                // Create one Profil per salarie with random type_profil
+                Profil::create([
+                    'user_id' => $salarie->id,
+                    'nom_profil' => "Profil Exemple $j",
+                    'type_profil' => $profilTypes[array_rand($profilTypes)],
+                ]);
+
+                // Optionally, create multiple profils per salarie here if needed
+
+                // Create 1 vehicle affected to the salarie or not
                 if (rand(0, 1)) {
                     Vehicule::create([
                         'modele' => "Modèle $j",
@@ -90,7 +122,7 @@ class RHSeeder extends Seeder
                     ]);
                 }
 
-                // Créer 2 matériels affectés au salarié
+                // Create 2 matériels affected to the salarie
                 for ($k = 1; $k <= 2; $k++) {
                     Materiel::create([
                         'nom' => "Materiel $k",
@@ -104,7 +136,7 @@ class RHSeeder extends Seeder
                 }
             }
 
-            // Créer 5 matériels non affectés
+            // Create 5 matériels non affectés
             for ($m = 1; $m <= 5; $m++) {
                 Materiel::create([
                     'nom' => "Materiel Non Affecté $m",
@@ -117,7 +149,7 @@ class RHSeeder extends Seeder
                 ]);
             }
 
-            // Créer 5 véhicules non affectés
+            // Create 5 véhicules non affectés
             for ($v = 1; $v <= 5; $v++) {
                 Vehicule::create([
                     'modele' => "Modèle Non Affecté $v",
@@ -134,7 +166,7 @@ class RHSeeder extends Seeder
                 ]);
             }
 
-            // Créer 6 dépenses liées au projet
+            // Create 6 dépenses linked to the project
             for ($d = 1; $d <= 6; $d++) {
                 Depense::create([
                     'projet_id' => $projet->id,

@@ -10,7 +10,7 @@ return new class extends Migration {
             $table->id();
             $table->string('nom');
             $table->string('prenom');
-            $table->string('poste');
+            $table->string('poste')->nullable();
             $table->string('email')->unique();
             $table->string('telephone');
             $table->decimal('salaire_mensuel', 10, 2);
