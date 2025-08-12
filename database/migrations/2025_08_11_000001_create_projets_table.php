@@ -19,6 +19,9 @@ return new class extends Migration {
             $table->string('lieu_realisation')->nullable();
             $table->foreignId('responsable_id')->constrained('users')->onDelete('cascade');
             $table->enum('type_projet', ['suivi', 'etude', 'controle']);
+            $table->decimal('latitude', 10, 7)->nullable();
+            $table->decimal('longitude', 10, 7)->nullable();
+            $table->decimal('radius', 8, 2)->nullable();
             $table->timestamps();
         });
     }

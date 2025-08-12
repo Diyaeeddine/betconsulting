@@ -92,6 +92,28 @@ Route::middleware(['auth', 'verified', 'role:qualite-audit'])->group(function ()
 Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(function () {
     Route::get('/ressources-humaines/dashboard', [RessourcesHumainesController::class, 'index'])
         ->name('dashboard.ressources-humaines');
+
+    Route::get('/ressources-humaines/projets', [RessourcesHumainesController::class, 'projets'])
+        ->name('ressources-humaines.projets');
+
+    Route::get('/ressources-humaines/vehicules', [RessourcesHumainesController::class, 'vehicules'])
+        ->name('ressources-humaines.vehicules');
+
+    // Routes CRUD pour les projets
+    Route::post('/ressources-humaines/projets', [RessourcesHumainesController::class, 'store'])
+        ->name('ressources-humaines.projets.store');
+    Route::put('/ressources-humaines/projets/{projet}', [RessourcesHumainesController::class, 'update'])
+        ->name('ressources-humaines.projets.update');
+    Route::delete('/ressources-humaines/projets/{projet}', [RessourcesHumainesController::class, 'destroy'])
+        ->name('ressources-humaines.projets.destroy');
+
+    // Routes CRUD pour les véhicules
+    Route::post('/ressources-humaines/vehicules', [RessourcesHumainesController::class, 'storeVehicule'])
+        ->name('ressources-humaines.vehicules.store');
+    Route::put('/ressources-humaines/vehicules/{vehicule}', [RessourcesHumainesController::class, 'updateVehicule'])
+        ->name('ressources-humaines.vehicules.update');
+    Route::delete('/ressources-humaines/vehicules/{vehicule}', [RessourcesHumainesController::class, 'destroyVehicule'])
+        ->name('ressources-humaines.vehicules.destroy');
 });
 
 // Suivi & Contrôle
@@ -108,7 +130,6 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
 //         $user->hasRole('direction-generale') => redirect()->route('dashboard.direction-generale'),
 //         $user->hasRole('communication-digitale') => redirect()->route('dashboard.communication-digitale'),
 //         $user->hasRole('etudes-techniques') => redirect()->route('dashboard.etudes-techniques'),
-//         $user->hasRole('financier-comptabilite') => redirect()->route('dashboard.financier-comptabilite'),
 //         $user->hasRole('fournisseurs-traitants') => redirect()->route('dashboard.fournisseurs-traitants'),
 //         $user->hasRole('innovation-transition') => redirect()->route('dashboard.innovation-transition'),
 //         $user->hasRole('juridique') => redirect()->route('dashboard.juridique'),
@@ -165,5 +186,5 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('role:admin|ressources-humaines');
 });
 
-require __DIR__.'/settings.php';
-require __DIR__.'/auth.php';
+require __DIR__ . '/settings.php';
+require __DIR__ . '/auth.php';

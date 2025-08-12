@@ -10,7 +10,8 @@ class Projet extends Model {
     protected $fillable = [
         'nom', 'description', 'budget_total', 'budget_utilise',
         'date_debut', 'date_fin', 'statut', 'client',
-        'lieu_realisation', 'responsable_id', 'type_projet'
+        'lieu_realisation', 'responsable_id', 'type_projet', 
+        'latitude', 'longitude', 'radius'
     ];
 
     public function responsable() {

@@ -6,7 +6,8 @@ import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
 import { LayoutGrid } from 'lucide-react';
 import BetconsultingDashLogo from './betconsulting-dash-logo';
-
+import {
+  Users, Route,Car} from "lucide-react"
 export function AppSidebar() {
     const { auth } = usePage<SharedData>().props;
 
@@ -28,18 +29,33 @@ export function AppSidebar() {
 
     const dashboardHref = auth?.user?.role && roleDashboardMap[auth.user.role] ? roleDashboardMap[auth.user.role] : '/dashboard';
 
-    const mainNavItems: NavItem[] = [
+const mainNavItems: NavItem[] = [
         {
             title: 'Dashboard',
             href: dashboardHref,
             icon: LayoutGrid,
         },
-        // {
-        //     title: 'Demandes',
-        //     href: dashboardHref,
-        //     icon: LayoutGrid,
-        // },
-    ];
+
+        // Ressources Humaines
+        ...(auth?.user?.role === 'ressources-humaines'
+            ? [
+                {
+                    title: 'Tracking',
+                    href: '/ressources-humaines/tracking',
+                    icon: Route,
+                },
+                {
+                    title: 'Projets',
+                    href: '/ressources-humaines/projets',
+                    icon: Users,
+                },
+                                {
+                    title: 'Véhicules',
+                    href: '/ressources-humaines/vehicules',
+                    icon: Car,
+                },
+            ]
+            : [])];
 
     return (
         <Sidebar collapsible="icon" variant="floating">

@@ -14,7 +14,7 @@ class RHSeeder extends Seeder
 {
     public function run(): void
     {
-        // Récupérer un user existant ou en créer un pour responsable et dépenses
+        // Récupérer ou créer un user admin
         $user = User::first();
         if (!$user) {
             $user = User::create([
@@ -36,13 +36,16 @@ class RHSeeder extends Seeder
                 'statut' => 'en_cours',
                 'client' => "Client $i",
                 'lieu_realisation' => "Ville $i",
+                'latitude' => 35.689487 + ($i * 0.01),
+                'longitude' => -5.799999 + ($i * 0.01),
+                'radius' => 5 + $i,
                 'responsable_id' => $user->id,
                 'type_projet' => 'etude',
             ]);
 
-            // Créer 4 salariés affectés à ce projet
+            // Créer 4 salariés par projet
             for ($j = 1; $j <= 4; $j++) {
-                $email = "salarie{$j}_projet{$i}@exemple.com"; // email unique
+                $email = "salarie{$j}_projet{$i}@exemple.com";
 
                 $salarie = Salarie::create([
                     'nom' => "Nom $j",
@@ -56,38 +59,63 @@ class RHSeeder extends Seeder
                     'projet_id' => $projet->id,
                 ]);
 
-                // Créer 1 véhicule affecté au salarié ou non
-                if (rand(0,1)) {
-                    Vehicule::create([
-                        'modele' => "Modèle $j",
-                        'matricule' => "MATRICULE{$j}{$i}",
-                        'marque' => "Marque $j",
-                        'type' => 'voiture',
-                        'etat' => 'disponible',
-                        'cout_location_jour' => 50.00,
-                        'date_affectation' => now()->subDays(10)->toDateString(),
-                        'date_disponibilite' => now()->addDays(20)->toDateString(),
-                        'duree_affectation' => 30,
-                        'salarie_id' => $salarie->id,
-                        'duree_location' => 0,
-                    ]);
+                // Créer 1 véhicule affecté au salarié ou non, avec statut achat ou location
+                $statut = ['achete', 'loue'][array_rand(['achete', 'loue'])];
+
+                $vehiculeData = [
+                    'modele' => "Modèle $j",
+                    'matricule' => $statut === 'achete' ? "ACHAT{$j}{$i}" : "LOUE{$j}{$i}",
+                    'marque' => "Marque $j",
+                    'type' => 'voiture',
+                    'etat' => 'disponible',
+                    'salarie_id' => rand(0,1) ? $salarie->id : null,
+                    'date_affectation' => rand(0,1) ? now()->subDays(rand(1,30))->toDateString() : null,
+                    'date_disponibilite' => rand(0,1) ? now()->addDays(rand(10,60))->toDateString() : null,
+                    'duree_affectation' => rand(0,1) ? rand(1,90) : null,
+                ];
+
+                if ($statut === 'achete') {
+                    // Champs achat
+                    $vehiculeData['statut'] = 'achete';
+                    $vehiculeData['date_achat'] = now()->subMonths(rand(1,24))->toDateString();
+                    $vehiculeData['type_paiement'] = ['espece', 'credit'][array_rand(['espece', 'credit'])];
+                    $vehiculeData['cout_location_jour'] = null;
+                    $vehiculeData['duree_location'] = null;
+                    $vehiculeData['date_debut_location'] = null;
+                    $vehiculeData['date_fin_location'] = null;
+                    $vehiculeData['cout_location'] = null;
+
+                    if ($vehiculeData['type_paiement'] === 'credit') {
+                        $vehiculeData['montant_credit_total'] = 20000 + rand(0,10000);
+                        $vehiculeData['montant_credit_mensuel'] = 500 + rand(0,300);
+                        $vehiculeData['duree_credit_mois'] = rand(12,48);
+                        $vehiculeData['date_debut_credit'] = now()->subMonths(rand(1,24))->toDateString();
+                    } else {
+                        $vehiculeData['montant_credit_total'] = null;
+                        $vehiculeData['montant_credit_mensuel'] = null;
+                        $vehiculeData['duree_credit_mois'] = null;
+                        $vehiculeData['date_debut_credit'] = null;
+                    }
                 } else {
-                    Vehicule::create([
-                        'modele' => "Modèle $j",
-                        'matricule' => "MATRICULE_NOAFFECT{$j}{$i}",
-                        'marque' => "Marque $j",
-                        'type' => 'voiture',
-                        'etat' => 'disponible',
-                        'cout_location_jour' => 50.00,
-                        'date_affectation' => null,
-                        'date_disponibilite' => null,
-                        'duree_affectation' => null,
-                        'salarie_id' => null,
-                        'duree_location' => 0,
-                    ]);
+                    // Champs location
+                    $vehiculeData['statut'] = 'loue';
+                    $vehiculeData['cout_location_jour'] = 50.00 + rand(0,20);
+                    $vehiculeData['duree_location'] = rand(1,12);
+                    $vehiculeData['date_debut_location'] = now()->subDays(rand(1,30))->toDateString();
+                    $vehiculeData['date_fin_location'] = now()->addDays(rand(30,90))->toDateString();
+
+                    // Champs achat null
+                    $vehiculeData['date_achat'] = null;
+                    $vehiculeData['type_paiement'] = null;
+                    $vehiculeData['montant_credit_total'] = null;
+                    $vehiculeData['montant_credit_mensuel'] = null;
+                    $vehiculeData['duree_credit_mois'] = null;
+                    $vehiculeData['date_debut_credit'] = null;
                 }
 
-                // Créer 2 matériels affectés au salarié
+                Vehicule::create($vehiculeData);
+
+                // Créer 2 matériels affectés
                 for ($k = 1; $k <= 2; $k++) {
                     Materiel::create([
                         'nom' => "Materiel $k",
@@ -101,7 +129,7 @@ class RHSeeder extends Seeder
                 }
             }
 
-            // Créer 5 matériels non affectés
+            // Matériels non affectés
             for ($m = 1; $m <= 5; $m++) {
                 Materiel::create([
                     'nom' => "Materiel Non Affecté $m",
@@ -114,7 +142,7 @@ class RHSeeder extends Seeder
                 ]);
             }
 
-            // Créer 5 véhicules non affectés
+            // Véhicules non affectés
             for ($v = 1; $v <= 5; $v++) {
                 Vehicule::create([
                     'modele' => "Modèle Non Affecté $v",
@@ -122,16 +150,26 @@ class RHSeeder extends Seeder
                     'marque' => "Marque $v",
                     'type' => 'voiture',
                     'etat' => 'disponible',
-                    'cout_location_jour' => 45.00,
+                    'statut' => ['achete', 'loue'][array_rand(['achete', 'loue'])],
+                    'cout_location_jour' => 40.00,
                     'date_affectation' => null,
                     'date_disponibilite' => null,
                     'duree_affectation' => null,
                     'salarie_id' => null,
                     'duree_location' => 0,
+                    'date_achat' => null,
+                    'type_paiement' => null,
+                    'montant_credit_total' => null,
+                    'montant_credit_mensuel' => null,
+                    'duree_credit_mois' => null,
+                    'date_debut_credit' => null,
+                    'date_debut_location' => null,
+                    'date_fin_location' => null,
+                    'cout_location' => null,
                 ]);
             }
 
-            // Créer 6 dépenses liées au projet, avec user_id et item JSON
+            // Dépenses
             for ($d = 1; $d <= 6; $d++) {
                 Depense::create([
                     'projet_id' => $projet->id,
