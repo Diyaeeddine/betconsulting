@@ -36,6 +36,9 @@ class RHSeeder extends Seeder
                 'statut' => 'en_cours',
                 'client' => "Client $i",
                 'lieu_realisation' => "Ville $i",
+                'latitude' => 35.689487 + ($i * 0.01), // Exemple latitude
+                'longitude' => -5.799999 + ($i * 0.01), // Exemple longitude
+                'radius' => 5 + $i, // Rayon en km
                 'responsable_id' => $user->id,
                 'type_projet' => 'etude',
             ]);
@@ -57,7 +60,7 @@ class RHSeeder extends Seeder
                 ]);
 
                 // Créer 1 véhicule affecté au salarié ou non
-                if (rand(0,1)) {
+                if (rand(0, 1)) {
                     Vehicule::create([
                         'modele' => "Modèle $j",
                         'matricule' => "MATRICULE{$j}{$i}",
@@ -131,7 +134,7 @@ class RHSeeder extends Seeder
                 ]);
             }
 
-            // Créer 6 dépenses liées au projet, avec user_id et item JSON
+            // Créer 6 dépenses liées au projet
             for ($d = 1; $d <= 6; $d++) {
                 Depense::create([
                     'projet_id' => $projet->id,

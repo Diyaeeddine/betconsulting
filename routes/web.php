@@ -98,17 +98,25 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
     Route::get('/ressources-humaines/projects', [RessourcesHumainesController::class, 'menuProjects'])
         ->name('ressources-humaines.projects');
 
+
     Route::get('/ressources-humaines/maps', [RessourcesHumainesController::class, 'Maps'])
         ->name('maps.ressources-humaines');
 
     Route::get('/ressources-humaines/users', [RessourcesHumainesController::class, 'Users'])
         ->name('users.ressources-humaines');
+    Route::get('/users/{user}/projets', [RessourcesHumainesController::class, 'getUserProjects'])->name('user.projects.ressources-humaines');
+    Route::get('/users/{user}/projets', [RessourcesHumainesController::class, 'getUserProjects'])->name('user.projects.ressources-humaines');
+
+
+    // Route::get('/ressources-humaines/getusers', [RessourcesHumainesController::class, 'getUsers'])
+    // ->name('users.ressources-humaines');
 });
 
+// Route::get('/ressources-humaines/getusers', [RessourcesHumainesController::class, 'Users'])
+//     ->middleware('auth.basic')
+//     ->name('users.ressources-humaines');
 
-
-
-
+    
 // Suivi & Contrôle
 Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function () {
     Route::get('/suivi-controle/dashboard', [SuiviControleController::class, 'index'])

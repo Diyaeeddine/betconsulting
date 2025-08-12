@@ -12,10 +12,10 @@ class Salarie extends Model {
         'salaire_mensuel', 'date_embauche', 'statut', 'projet_id'
     ];
 
-    public function projet() {
-        return $this->belongsTo(Projet::class);
-    }
-
+    public function project()
+{
+    return $this->belongsTo(Projet::class, 'projet_id');
+}
     public function vehicule() {
         return $this->hasOne(Vehicule::class);
     }
