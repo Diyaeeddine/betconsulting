@@ -93,11 +93,22 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
     Route::get('/ressources-humaines/dashboard', [RessourcesHumainesController::class, 'index'])
         ->name('dashboard.ressources-humaines');
 
+    Route::get('/ressources-humaines/tracking', [RessourcesHumainesController::class, 'tracking'])
+        ->name('tracking.ressources-humaines');
+
     Route::get('/ressources-humaines/projets', [RessourcesHumainesController::class, 'projets'])
         ->name('ressources-humaines.projets');
 
     Route::get('/ressources-humaines/vehicules', [RessourcesHumainesController::class, 'vehicules'])
         ->name('ressources-humaines.vehicules');
+
+    Route::get('/ressources-humaines/progressions', [RessourcesHumainesController::class, 'progressions'])
+        ->name('ressources-humaines.progressions');
+
+
+    Route::get('/ressources-humaines/materiels', [RessourcesHumainesController::class, 'materiels'])
+        ->name('ressources-humaines.materiels');
+
 
     // Routes CRUD pour les projets
     Route::post('/ressources-humaines/projets', [RessourcesHumainesController::class, 'store'])
@@ -114,6 +125,21 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
         ->name('ressources-humaines.vehicules.update');
     Route::delete('/ressources-humaines/vehicules/{vehicule}', [RessourcesHumainesController::class, 'destroyVehicule'])
         ->name('ressources-humaines.vehicules.destroy');
+
+    // Routes CRUD pour les progressions
+    Route::post('/ressources-humaines/progressions', [RessourcesHumainesController::class, 'storeProgression'])
+        ->name('ressources-humaines.progressions.store');
+    Route::put('/ressources-humaines/progressions/{progression}', [RessourcesHumainesController::class, 'updateProgression'])
+        ->name('ressources-humaines.progressions.update');
+    Route::delete('/ressources-humaines/progressions/{progression}', [RessourcesHumainesController::class, 'destroyProgression'])
+        ->name('ressources-humaines.progressions.destroy');
+
+    Route::post('/ressources-humaines/materiels', [RessourcesHumainesController::class, 'storeMateriel'])
+        ->name('ressources-humaines.materiels.store');
+    Route::put('/ressources-humaines/materiels/{materiel}', [RessourcesHumainesController::class, 'updateMateriel'])
+        ->name('ressources-humaines.materiels.update');
+    Route::delete('/ressources-humaines/materiels/{materiel}', [RessourcesHumainesController::class, 'destroyMateriel'])
+        ->name('ressources-humaines.materiels.destroy');
 });
 
 // Suivi & Contrôle

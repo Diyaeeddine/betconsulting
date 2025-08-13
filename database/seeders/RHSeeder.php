@@ -64,8 +64,8 @@ class RHSeeder extends Seeder
 
                 $vehiculeData = [
                     'modele' => "Modèle $j",
-                    'matricule' => $statut === 'achete' ? "ACHAT{$j}{$i}" : "LOUE{$j}{$i}",
                     'marque' => "Marque $j",
+                    'matricule' => $statut === 'achete' ? "ACHAT{$j}{$i}" : "LOUE{$j}{$i}",
                     'type' => 'voiture',
                     'etat' => 'disponible',
                     'salarie_id' => rand(0,1) ? $salarie->id : null,
@@ -75,10 +75,9 @@ class RHSeeder extends Seeder
                 ];
 
                 if ($statut === 'achete') {
-                    // Champs achat
                     $vehiculeData['statut'] = 'achete';
                     $vehiculeData['date_achat'] = now()->subMonths(rand(1,24))->toDateString();
-                    $vehiculeData['type_paiement'] = ['espece', 'credit'][array_rand(['espece', 'credit'])];
+                    $vehiculeData['type_paiement'] = ['espece','credit'][array_rand(['espece','credit'])];
                     $vehiculeData['cout_location_jour'] = null;
                     $vehiculeData['duree_location'] = null;
                     $vehiculeData['date_debut_location'] = null;
@@ -97,14 +96,12 @@ class RHSeeder extends Seeder
                         $vehiculeData['date_debut_credit'] = null;
                     }
                 } else {
-                    // Champs location
                     $vehiculeData['statut'] = 'loue';
                     $vehiculeData['cout_location_jour'] = 50.00 + rand(0,20);
                     $vehiculeData['duree_location'] = rand(1,12);
                     $vehiculeData['date_debut_location'] = now()->subDays(rand(1,30))->toDateString();
                     $vehiculeData['date_fin_location'] = now()->addDays(rand(30,90))->toDateString();
 
-                    // Champs achat null
                     $vehiculeData['date_achat'] = null;
                     $vehiculeData['type_paiement'] = null;
                     $vehiculeData['montant_credit_total'] = null;
@@ -119,11 +116,22 @@ class RHSeeder extends Seeder
                 for ($k = 1; $k <= 2; $k++) {
                     Materiel::create([
                         'nom' => "Materiel $k",
+                        'marque' => "Marque $k",
                         'type' => 'type' . $k,
                         'etat' => 'disponible',
                         'cout_location_jour' => 30.00,
                         'date_acquisition' => now()->subYears(1)->toDateString(),
                         'duree_location' => 0,
+                        'statut' => 'achete',
+                        'type_paiement' => 'espece',
+                        'montant_achat' => 1000 + rand(0,500),
+                        'montant_credit_total' => null,
+                        'montant_credit_mensuel' => null,
+                        'duree_credit_mois' => null,
+                        'date_debut_credit' => null,
+                        'date_debut_location' => null,
+                        'date_fin_location' => null,
+                        'cout_location' => null,
                         'salarie_id' => $salarie->id,
                     ]);
                 }
@@ -133,11 +141,22 @@ class RHSeeder extends Seeder
             for ($m = 1; $m <= 5; $m++) {
                 Materiel::create([
                     'nom' => "Materiel Non Affecté $m",
+                    'marque' => "Marque $m",
                     'type' => 'type' . $m,
                     'etat' => 'disponible',
                     'cout_location_jour' => 25.00,
                     'date_acquisition' => now()->subYears(2)->toDateString(),
                     'duree_location' => 0,
+                    'statut' => 'loue',
+                    'type_paiement' => null,
+                    'montant_achat' => null,
+                    'montant_credit_total' => null,
+                    'montant_credit_mensuel' => null,
+                    'duree_credit_mois' => null,
+                    'date_debut_credit' => null,
+                    'date_debut_location' => now()->subDays(rand(1,30))->toDateString(),
+                    'date_fin_location' => now()->addDays(rand(30,90))->toDateString(),
+                    'cout_location' => 100.00 + rand(0,50),
                     'salarie_id' => null,
                 ]);
             }
@@ -146,8 +165,8 @@ class RHSeeder extends Seeder
             for ($v = 1; $v <= 5; $v++) {
                 Vehicule::create([
                     'modele' => "Modèle Non Affecté $v",
-                    'matricule' => "MATRICULE_NOAFFECT_V{$v}{$i}",
                     'marque' => "Marque $v",
+                    'matricule' => "MATRICULE_NOAFFECT_V{$v}{$i}",
                     'type' => 'voiture',
                     'etat' => 'disponible',
                     'statut' => ['achete', 'loue'][array_rand(['achete', 'loue'])],
