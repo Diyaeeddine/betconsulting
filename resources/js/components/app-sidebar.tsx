@@ -1,58 +1,25 @@
-import { useEffect, useState } from 'react';
-
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
-
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
-
 import { type NavItem, type SharedData } from '@/types';
-
 import { Link, usePage } from '@inertiajs/react';
-
 import {
-    AlertTriangle,
-    BarChart3,
-    ClipboardList,
-    DollarSign,
-    FileText,
-    FolderKanban,
-    Globe,
+    LayoutGrid,
     LayoutDashboard,
-    Leaf,
     Lightbulb,
-    MapPin,
-    Megaphone,
-    Monitor,
-    Package,
-    PenTool,
-    Scale,
-    Search,
-    Settings,
-    Share2,
-    Shield,
-    ShoppingCart,
-    TrendingUp,
-    Truck,
-    Users,
-    Wrench,
+    CheckSquare,
+    Ticket,
+    FileText,
+    MessageSquare,
 } from 'lucide-react';
-
 import BetconsultingDashLogo from './betconsulting-dash-logo';
 
 export function AppSidebar() {
-    const page = usePage<SharedData>();
-    const { auth, projects = [] } = page.props;
-    const [isProjectsMenuOpen, setIsProjectsMenuOpen] = useState(false);
-
-    useEffect(() => {
-        if (page.url.startsWith('/projects')) {
-            setIsProjectsMenuOpen(true);
-        }
-    }, [page.url]);
+    const { auth } = usePage<SharedData>().props;
 
     const roleDashboardMap: Record<string, string> = {
-        admin: '/direction-generale/dashboard',
+        'admin': '/direction-generale/dashboard',
         'marches-marketing': '/marches-marketing/dashboard',
         'etudes-techniques': '/etudes-techniques/dashboard',
         'suivi-controle': '/suivi-controle/dashboard',
@@ -62,168 +29,24 @@ export function AppSidebar() {
         'financier-comptabilite': '/financier-comptabilite/dashboard',
         'logistique-generaux': '/logistique-generaux/dashboard',
         'communication-digitale': '/communication-digitale/dashboard',
-        juridique: '/juridique/dashboard',
+        'juridique': '/juridique/dashboard',
         'fournisseurs-traitants': '/fournisseurs-traitants/dashboard',
     };
 
-    const dashboardHref = roleDashboardMap[auth?.user?.role || ''] || '/dashboard';
+    const dashboardHref = auth?.user?.role && roleDashboardMap[auth.user.role]
+        ? roleDashboardMap[auth.user.role]
+        : '/dashboard';
 
-    const projectsNavItems: NavItem[] = projects.map((project: any) => ({
-        title: project.nom,
-        href: `/projects/${project.id}`,
-        icon: FolderKanban,
-    }));
-
+    // ✅ Définir roleMenus avant de l'utiliser
     const roleMenus: Record<string, NavItem[]> = {
         'ressources-humaines': [
             {
-                title: 'Projets',
-                icon: FolderKanban,
-                items: isProjectsMenuOpen ? projectsNavItems : [],
-            },
-            {
-                title: 'Maps',
-                href: '/ressources-humaines/maps',
-                icon: MapPin,
-            },
-            {
-                title: 'Gestion du personnel',
-                href: '/ressources-humaines/users',
-                icon: Users,
+                title: 'Tracking',
+                href: '/ressources-humaines/tracking',
+                icon: LayoutGrid,
             },
         ],
-        'financier-comptabilite': [
-            {
-                title: 'Budget',
-                href: '/financier-comptabilite/budget',
-                icon: DollarSign,
-            },
-            {
-                title: 'Rapports financiers',
-                href: '/financier-comptabilite/rapports',
-                icon: BarChart3,
-            },
-        ],
-        'marches-marketing': [
-            {
-                title: 'Campagnes',
-                href: '/marches-marketing/campagnes',
-                icon: Megaphone,
-            },
-            {
-                title: 'Analyse marché',
-                href: '/marches-marketing/analyse',
-                icon: TrendingUp,
-            },
-        ],
-        'etudes-techniques': [
-            {
-                title: 'Projets techniques',
-                href: '/etudes-techniques/projets',
-                icon: Wrench,
-            },
-            {
-                title: 'Rapports techniques',
-                href: '/etudes-techniques/rapports',
-                icon: FileText,
-            },
-        ],
-        'suivi-controle': [
-            {
-                title: 'Suivi projets',
-                href: '/suivi-controle/suivi-projets',
-                icon: ClipboardList,
-            },
-            {
-                title: 'Contrôles qualité',
-                href: '/suivi-controle/qualite',
-                icon: Shield,
-            },
-        ],
-        'qualite-audit': [
-            {
-                title: 'Audits',
-                href: '/qualite-audit/audits',
-                icon: Search,
-            },
-            {
-                title: 'Non-conformités',
-                href: '/qualite-audit/non-conformites',
-                icon: AlertTriangle,
-            },
-        ],
-        'innovation-transition': [
-            {
-                title: 'Projets innovants',
-                href: '/innovation-transition/projets',
-                icon: Lightbulb,
-            },
-            {
-                title: 'Transition écologique',
-                href: '/innovation-transition/transition-ecologique',
-                icon: Leaf,
-            },
-        ],
-        'logistique-generaux': [
-            {
-                title: 'Gestion stocks',
-                href: '/logistique-generaux/stocks',
-                icon: Package,
-            },
-            {
-                title: 'Moyens généraux',
-                href: '/logistique-generaux/moyens',
-                icon: Settings,
-            },
-        ],
-        'communication-digitale': [
-            {
-                title: 'Réseaux sociaux',
-                href: '/communication-digitale/reseaux-sociaux',
-                icon: Share2,
-            },
-            {
-                title: 'Campagnes digitales',
-                href: '/communication-digitale/campagnes',
-                icon: Monitor,
-            },
-        ],
-        juridique: [
-            {
-                title: 'Contrats',
-                href: '/juridique/contrats',
-                icon: PenTool,
-            },
-            {
-                title: 'Contentieux',
-                href: '/juridique/contentieux',
-                icon: Scale,
-            },
-        ],
-        'fournisseurs-traitants': [
-            {
-                title: 'Gestion fournisseurs',
-                href: '/fournisseurs-traitants/gestion',
-                icon: Truck,
-            },
-            {
-                title: 'Suivi commandes',
-                href: '/fournisseurs-traitants/commandes',
-                icon: ShoppingCart,
-            },
-        ],
-        admin: [
-            {
-                title: 'Vue globale',
-                href: '/direction-generale/vue-globale',
-                icon: Globe,
-            },
-            {
-                title: 'Rapports stratégiques',
-                href: '/direction-generale/rapports',
-                icon: BarChart3,
-            },
-        ],
+        // Ajoutez d'autres rôles si nécessaire
     };
 
     const mainNavItems: NavItem[] = [
@@ -233,6 +56,41 @@ export function AppSidebar() {
             icon: LayoutDashboard,
         },
         ...(roleMenus[auth?.user?.role || ''] || []),
+        // ✅ Ajouter les pages spécifiques pour innovation-transition
+        ...(auth?.user?.role === 'innovation-transition'
+            ? [
+                  {
+                      title: 'Projets innovants',
+                      href: '/innovation/projets',
+                      icon: Lightbulb,
+                  },
+                  {
+                      title: 'Tâches',
+                      href: '/innovation/taches',
+                      icon: CheckSquare,
+                  },
+                  {
+                      title: 'Tickets Support',
+                      href: '/innovation/tickets',
+                      icon: Ticket,
+                  },
+                  {
+                      title: 'Documents',
+                      href: '/innovation/documents',
+                      icon: FileText,
+                  },
+                //   {
+                //       title: 'Chat Projets',
+                //       href: '/innovation/chat',
+                //       icon: MessageSquare,
+                //   },
+                //   {
+                //       title: 'Transition écologique',
+                //       href: '/innovation/transition-ecologique',
+                //       icon: Leaf,
+                //   },
+              ]
+            : []),
     ];
 
     return (
@@ -250,7 +108,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} onProjectsToggle={() => setIsProjectsMenuOpen(!isProjectsMenuOpen)} />
+                <NavMain items={mainNavItems} />
             </SidebarContent>
 
             <SidebarFooter>

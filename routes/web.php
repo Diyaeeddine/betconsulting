@@ -7,7 +7,6 @@ use App\Http\Controllers\CommunicationDigitaleController;
 use App\Http\Controllers\EtudesTechniquesController;
 use App\Http\Controllers\FinancierComptabiliteController;
 use App\Http\Controllers\FournisseursTraitantsController;
-use App\Http\Controllers\InnovationTransitionController;
 use App\Http\Controllers\JuridiqueController;
 use App\Http\Controllers\LogistiqueGenerauxController;
 use App\Http\Controllers\MarchesMarketingController;
@@ -15,6 +14,7 @@ use App\Http\Controllers\QualiteAuditController;
 use App\Http\Controllers\RessourcesHumainesController;
 use App\Http\Controllers\SuiviControleController;
 use App\Http\Controllers\ScreenshotController;
+use App\Http\Controllers\InnovationTransitionController;
 
 Route::get('/', function () {
     return redirect()->route('login');
@@ -181,9 +181,10 @@ Route::middleware(['auth'])->group(function () {
         ->name('admin.screenshots.destroy')
         ->middleware('role:admin|ressources-humaines');
 });
-
-
-
-
+// Innovation & Transition
+Route::middleware(['auth', 'verified', 'role:innovation-transition'])->group(function () {
+    Route::get('/innovation-transition/dashboard', [InnovationTransitionController::class, 'index'])
+        ->name('dashboard.innovation-transition'); // ✅ Nom que votre redirection cherche
+});
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';
