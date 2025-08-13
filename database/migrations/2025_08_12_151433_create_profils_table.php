@@ -11,27 +11,22 @@ class CreateProfilsTable extends Migration
     {
         Schema::create('profils', function (Blueprint $table) {
             $table->id();
+
+            // Points to salaries table
             $table->foreignId('user_id')->constrained('salaries')->onDelete('cascade');
-            $table->string('nom_profil');
-            $table->enum('type_profil', [
-            'ingenieur_structure',
-            'ingenieur_genie_civil',
-            'ingenieur_electricite_fluides',
-            'dessinateur_projeteur',
-            'ingenieur_bim',
-            'chef_de_chantier',
-            'conducteur_de_travaux',
-            'techniciens_ouvriers_specialises',
-            'technicien_specialise',
-            'responsable_hse',
-            'controleur_technique',
-            'metreur_economiste',
-            'geometre_topographe',
-            'responsable_achats',
-            'gestionnaire_contrats',
-            ])->nullable();
+
+            // Machine-friendly values (no apostrophes / special punctuation)
+            $table->enum('nom_profil', [
+                'bureau_etudes',
+                'construction',
+                'suivi_controle',
+                'support_gestion',
+            ]);
+
+            $table->string('poste_profil')->nullable();
             $table->timestamps();
         });
+
             }
 
     public function down()

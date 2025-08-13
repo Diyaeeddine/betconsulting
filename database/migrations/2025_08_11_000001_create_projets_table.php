@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     public function up(): void {
-        Schema::create('projets', function (Blueprint $table) {
+       Schema::create('projets', function (Blueprint $table) {
             $table->id();
             $table->string('nom');
             $table->text('description')->nullable();
@@ -22,8 +22,10 @@ return new class extends Migration {
             $table->decimal('latitude', 10, 7)->nullable();
             $table->decimal('longitude', 10, 7)->nullable();
             $table->decimal('radius', 8, 2)->nullable();
+            $table->json('salarie_ids')->default('[]'); // Stores related salaries
             $table->timestamps();
         });
+
     }
 
     public function down(): void {
