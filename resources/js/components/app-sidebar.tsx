@@ -11,7 +11,6 @@ import {
     CheckSquare,
     Ticket,
     FileText,
-    MessageSquare,
 } from 'lucide-react';
 import BetconsultingDashLogo from './betconsulting-dash-logo';
 
@@ -56,29 +55,15 @@ export function AppSidebar() {
             icon: LayoutDashboard,
         },
         ...(roleMenus[auth?.user?.role || ''] || []),
-        // ✅ Ajouter les pages spécifiques pour innovation-transition
         ...(auth?.user?.role === 'innovation-transition'
             ? [
-                  {
-                      title: 'Projets innovants',
-                      href: '/innovation/projets',
-                      icon: Lightbulb,
-                  },
-                  {
-                      title: 'Tâches',
-                      href: '/innovation/taches',
-                      icon: CheckSquare,
-                  },
+
                   {
                       title: 'Tickets Support',
-                      href: '/innovation/tickets',
+                      href: '/innovation-transition/tickets',
                       icon: Ticket,
                   },
-                  {
-                      title: 'Documents',
-                      href: '/innovation/documents',
-                      icon: FileText,
-                  },
+
                 //   {
                 //       title: 'Chat Projets',
                 //       href: '/innovation/chat',

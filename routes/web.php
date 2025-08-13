@@ -28,90 +28,78 @@ Route::get('/dashboard', function () {
     ]);
 })->middleware(['auth', 'verified'])->name('dashboard');
 
-// Direction Générale (Admin)
-
-
 Route::middleware(['auth', 'verified', 'role:admin'])->group(function () {
     Route::get('/direction-generale/dashboard', [DirectionGeneraleController::class, 'index'])
         ->name('dashboard.direction-generale');
 });
 
-// Communication Digitale
 Route::middleware(['auth', 'verified', 'role:communication-digitale'])->group(function () {
     Route::get('/communication-digitale/dashboard', [CommunicationDigitaleController::class, 'index'])
         ->name('dashboard.communication-digitale');
 });
 
-// Études Techniques
 Route::middleware(['auth', 'verified', 'role:etudes-techniques'])->group(function () {
     Route::get('/etudes-techniques/dashboard', [EtudesTechniquesController::class, 'index'])
         ->name('dashboard.etudes-techniques');
 });
 
-// Financier & Comptabilité
 Route::middleware(['auth', 'verified', 'role:financier-comptabilite'])->group(function () {
     Route::get('/financier-comptabilite/dashboard', [FinancierComptabiliteController::class, 'index'])
         ->name('dashboard.financier-comptabilite');
 });
 
-// Fournisseurs & Traitants
 Route::middleware(['auth', 'verified', 'role:fournisseurs-traitants'])->group(function () {
     Route::get('/fournisseurs-traitants/dashboard', [FournisseursTraitantsController::class, 'index'])
         ->name('dashboard.fournisseurs-traitants');
 });
 
-// Innovation & Transition
+// Dans routes/web.php - section Innovation & Transition
 Route::middleware(['auth', 'verified', 'role:innovation-transition'])->group(function () {
-    Route::get('/innovation-transition/dashboard', [InnovationTransitionController::class, 'index'])
+    Route::get('/innovation-transition/dashboard', [InnovationTransitionController::class, 'dashboard'])
         ->name('dashboard.innovation-transition');
+
+    // Routes tickets CRUD complet
+    Route::get('/innovation-transition/tickets', [InnovationTransitionController::class, 'tickets'])
+        ->name('innovation.tickets');
+    Route::post('/innovation-transition/tickets', [InnovationTransitionController::class, 'storeTicket'])
+        ->name('innovation.tickets.store');
+    Route::put('/innovation-transition/tickets/{id}', [InnovationTransitionController::class, 'updateTicket'])
+        ->name('innovation.tickets.update');
+    Route::delete('/innovation-transition/tickets/{id}', [InnovationTransitionController::class, 'destroyTicket'])
+        ->name('innovation.tickets.destroy');
 });
 
-// Juridique
 Route::middleware(['auth', 'verified', 'role:juridique'])->group(function () {
     Route::get('/juridique/dashboard', [JuridiqueController::class, 'index'])
         ->name('dashboard.juridique');
 });
 
-// Logistique & Généraux
 Route::middleware(['auth', 'verified', 'role:logistique-generaux'])->group(function () {
     Route::get('/logistique-generaux/dashboard', [LogistiqueGenerauxController::class, 'index'])
         ->name('dashboard.logistique-generaux');
 });
 
-// Marchés & Marketing
 Route::middleware(['auth', 'verified', 'role:marches-marketing'])->group(function () {
     Route::get('/marches-marketing/dashboard', [MarchesMarketingController::class, 'index'])
         ->name('dashboard.marches-marketing');
 });
 
-// Qualité & Audit
 Route::middleware(['auth', 'verified', 'role:qualite-audit'])->group(function () {
     Route::get('/qualite-audit/dashboard', [QualiteAuditController::class, 'index'])
         ->name('dashboard.qualite-audit');
 });
 
-
-
-// Ressources Humaines
 Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(function () {
     Route::get('/ressources-humaines/dashboard', [RessourcesHumainesController::class, 'index'])
         ->name('dashboard.ressources-humaines');
-
     Route::get('/ressources-humaines/projects', [RessourcesHumainesController::class, 'menuProjects'])
         ->name('ressources-humaines.projects');
-
     Route::get('/ressources-humaines/maps', [RessourcesHumainesController::class, 'Maps'])
         ->name('maps.ressources-humaines');
-
     Route::get('/ressources-humaines/users', [RessourcesHumainesController::class, 'Users'])
         ->name('users.ressources-humaines');
 });
 
-
-
-
-
-// Suivi & Contrôle
 Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function () {
     Route::get('/suivi-controle/dashboard', [SuiviControleController::class, 'index'])
         ->name('dashboard.suivi-controle');
@@ -137,9 +125,6 @@ Route::get('/dashboard', function () {
     };
 })->middleware(['auth', 'verified'])->name('dashboard');
 
-// ===== ROUTES SCREENSHOTS =====
-
-// Routes API pour la capture de screenshots (tous les services autorisés)
 Route::middleware(['auth'])->group(function () {
     Route::post('/api/screenshots', [ScreenshotController::class, 'store'])
         ->name('api.screenshots.store');
@@ -147,7 +132,6 @@ Route::middleware(['auth'])->group(function () {
         ->name('api.screenshots.destroy');
 });
 
-// Routes pour visualiser et télécharger les screenshots (utilisateurs autorisés + RH + Direction Générale)
 Route::middleware(['auth'])->group(function () {
     Route::get('/screenshots/view/{id}', [ScreenshotController::class, 'viewById'])
         ->name('screenshots.view')
@@ -160,7 +144,6 @@ Route::middleware(['auth'])->group(function () {
         ->name('storage.screenshots');
 });
 
-// Routes d'administration des screenshots (Direction Générale + RH uniquement)
 Route::middleware(['auth'])->group(function () {
     Route::get('/admin/screenshots/data', [ScreenshotController::class, 'adminIndex'])
         ->name('admin.screenshots.data')
@@ -181,10 +164,6 @@ Route::middleware(['auth'])->group(function () {
         ->name('admin.screenshots.destroy')
         ->middleware('role:admin|ressources-humaines');
 });
-// Innovation & Transition
-Route::middleware(['auth', 'verified', 'role:innovation-transition'])->group(function () {
-    Route::get('/innovation-transition/dashboard', [InnovationTransitionController::class, 'index'])
-        ->name('dashboard.innovation-transition'); // ✅ Nom que votre redirection cherche
-});
+
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';

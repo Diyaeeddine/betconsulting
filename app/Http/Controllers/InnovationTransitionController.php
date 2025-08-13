@@ -4,29 +4,26 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use App\Models\Projet; // ✅ Utiliser le bon modèle
+use App\Models\Projet;
 use App\Models\User;
+use App\Models\TicketSupport;
 use Illuminate\Support\Facades\Log;
 
 class InnovationTransitionController extends Controller
 {
     public function index()
     {
-        // Rediriger vers dashboard pour éviter la duplication
         return $this->dashboard();
     }
 
     public function dashboard()
     {
         try {
-            // Vérifier si nous avons des projets
             $totalProjets = Projet::count();
             Log::info("Dashboard - Total projets: " . $totalProjets);
 
             if ($totalProjets === 0) {
                 Log::warning("Aucun projet trouvé dans la base de données");
-
-                // Retourner des données vides mais structurées
                 return Inertia::render('innovation-transition/InnovationDashboard', [
                     'stats' => $this->getEmptyStats(),
                     'projets_recents' => [],
@@ -34,13 +31,8 @@ class InnovationTransitionController extends Controller
                 ]);
             }
 
-            // Calculer les statistiques réelles
             $stats = $this->calculateDashboardStats();
-
-            // Récupérer les projets récents
             $projets_recents = $this->getRecentProjects();
-
-            // Activités factices
             $activites_recentes = $this->getFakeActivities();
 
             return Inertia::render('innovation-transition/InnovationDashboard', [
@@ -62,71 +54,240 @@ class InnovationTransitionController extends Controller
         }
     }
 
+    public function tickets()
+    {
+        try {
+            $tickets = TicketSupport::with(['demandeur', 'assignee'])
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function ($ticket) {
+                    return [
+                        'id' => $ticket->id,
+                        'titre' => $ticket->titre,
+                        'description' => $ticket->description,
+                        'statut' => $ticket->statut,
+                        'priorite' => $ticket->priorite,
+                        'type' => $ticket->type,
+                        'client' => $ticket->demandeur ? $ticket->demandeur->name : 'Inconnu',
+                        'assignee' => $ticket->assignee ? $ticket->assignee->name : null,
+                        'created_at' => $ticket->created_at->toISOString(),
+                        'updated_at' => $ticket->updated_at->toISOString(),
+                    ];
+                });
+
+            Log::info("Tickets trouvés: " . $tickets->count());
+
+            return Inertia::render('innovation-transition/InnovationTickets', [
+                'tickets' => $tickets
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Erreur dans tickets: " . $e->getMessage());
+
+            return Inertia::render('innovation-transition/InnovationTickets', [
+                'tickets' => [],
+                'error' => 'Erreur lors du chargement des tickets'
+            ]);
+        }
+    }
+
+    public function storeTicket(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'titre' => 'required|string|max:255',
+                'description' => 'required|string|max:2000',
+                'priorite' => 'required|in:basse,moyenne,haute,critique',
+                'type' => 'required|in:bug,amelioration,question,incident,demande',
+                'client' => 'nullable|string|max:255',
+                'assignee' => 'nullable|string|max:255',
+            ]);
+
+            Log::info('Création ticket - données reçues:', $validated);
+
+            $assigneeId = null;
+            if (!empty($validated['assignee'])) {
+                $assigneeUser = User::where('name', 'like', '%' . $validated['assignee'] . '%')->first();
+                if ($assigneeUser) {
+                    $assigneeId = $assigneeUser->id;
+                }
+            }
+
+            $ticket = TicketSupport::create([
+                'titre' => $validated['titre'],
+                'description' => $validated['description'],
+                'priorite' => $validated['priorite'],
+                'type' => $validated['type'],
+                'statut' => 'ouvert',
+                'severite' => 'mineure',
+                'demandeur_id' => auth()->id(),
+                'assignee_id' => $assigneeId,
+                'innovation_id' => null,
+                'environnement' => 'prod',
+            ]);
+
+            Log::info('Ticket créé avec succès - ID: ' . $ticket->id);
+
+            return redirect()->route('innovation.tickets')
+                ->with('success', 'Ticket #' . $ticket->id . ' créé avec succès !');
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('Erreur validation:', $e->errors());
+            return redirect()->back()
+                ->withErrors($e->errors())
+                ->withInput();
+
+        } catch (\Exception $e) {
+            Log::error('Erreur création ticket: ' . $e->getMessage());
+            return redirect()->back()
+                ->with('error', 'Erreur lors de la création du ticket: ' . $e->getMessage())
+                ->withInput();
+        }
+    }
+
+    public function updateTicket(Request $request, $id)
+    {
+        try {
+            $ticket = TicketSupport::findOrFail($id);
+
+            $validated = $request->validate([
+                'titre' => 'required|string|max:255',
+                'description' => 'required|string|max:2000',
+                'priorite' => 'required|in:basse,moyenne,haute,critique',
+                'type' => 'required|in:bug,amelioration,question,incident,demande',
+                'statut' => 'required|in:ouvert,en_cours,en_attente,resolu,ferme',
+                'client' => 'nullable|string|max:255',
+                'assignee' => 'nullable|string|max:255',
+            ]);
+
+            Log::info('Modification ticket #' . $id . ' - données reçues:', $validated);
+
+            $assigneeId = null;
+            if (!empty($validated['assignee'])) {
+                $assigneeUser = User::where('name', 'like', '%' . $validated['assignee'] . '%')->first();
+                if ($assigneeUser) {
+                    $assigneeId = $assigneeUser->id;
+                }
+            }
+
+            $updateData = [
+                'titre' => $validated['titre'],
+                'description' => $validated['description'],
+                'priorite' => $validated['priorite'],
+                'type' => $validated['type'],
+                'statut' => $validated['statut'],
+                'assignee_id' => $assigneeId,
+            ];
+
+            if ($validated['statut'] === 'resolu' && $ticket->statut !== 'resolu') {
+                $updateData['date_resolution'] = now();
+                $updateData['temps_resolution_heures'] = $ticket->created_at->diffInHours(now());
+            }
+
+            $ticket->update($updateData);
+
+            Log::info('Ticket #' . $id . ' modifié avec succès');
+
+            return redirect()->route('innovation.tickets')
+                ->with('success', 'Ticket #' . $ticket->id . ' modifié avec succès !');
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            Log::error('Ticket non trouvé: ' . $id);
+            return redirect()->back()
+                ->with('error', 'Ticket non trouvé.');
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('Erreur validation modification:', $e->errors());
+            return redirect()->back()
+                ->withErrors($e->errors())
+                ->withInput();
+
+        } catch (\Exception $e) {
+            Log::error('Erreur modification ticket: ' . $e->getMessage());
+            return redirect()->back()
+                ->with('error', 'Erreur lors de la modification du ticket: ' . $e->getMessage())
+                ->withInput();
+        }
+    }
+
+    public function destroyTicket($id)
+    {
+        try {
+            $ticket = TicketSupport::findOrFail($id);
+            $ticketTitre = $ticket->titre;
+
+            $ticket->delete();
+
+            Log::info('Ticket #' . $id . ' supprimé avec succès');
+
+            return redirect()->route('innovation.tickets')
+                ->with('success', 'Ticket "' . $ticketTitre . '" supprimé avec succès !');
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            Log::error('Ticket non trouvé pour suppression: ' . $id);
+            return redirect()->back()
+                ->with('error', 'Ticket non trouvé.');
+
+        } catch (\Exception $e) {
+            Log::error('Erreur suppression ticket: ' . $e->getMessage());
+            return redirect()->back()
+                ->with('error', 'Erreur lors de la suppression du ticket: ' . $e->getMessage());
+        }
+    }
+
     private function calculateDashboardStats()
     {
-        // Compter les projets par statut
         $total_projets = Projet::count();
         $projets_en_cours = Projet::where('statut', 'en_cours')->count();
         $projets_termines = Projet::where('statut', 'termine')->count();
         $projets_en_attente = Projet::where('statut', 'en_attente')->count();
 
-        // Projets en retard (date_fin passée et toujours en cours)
         $projets_en_retard = Projet::where('statut', 'en_cours')
             ->where('date_fin', '<', now())
             ->count();
 
-        // Répartition par statut
         $projets_par_statut = [
             'en_cours' => $projets_en_cours,
             'termine' => $projets_termines,
             'en_attente' => $projets_en_attente,
         ];
 
-        // Répartition par type (utilisé comme priorité dans le dashboard)
         $projets_par_priorite = [
             'etude' => Projet::where('type_projet', 'etude')->count(),
             'suivi' => Projet::where('type_projet', 'suivi')->count(),
             'controle' => Projet::where('type_projet', 'controle')->count(),
         ];
 
-        // Calculs budgétaires
         $budget_total_alloue = (float) Projet::sum('budget_total');
         $budget_total_utilise = (float) Projet::sum('budget_utilise');
-
-        // Autres métriques
         $taux_completion = $total_projets > 0 ? round(($projets_termines / $total_projets) * 100) : 0;
-
         $projets_livres_trimestre = Projet::where('statut', 'termine')
             ->whereBetween('date_fin', [now()->startOfQuarter(), now()->endOfQuarter()])
             ->count();
 
+        $tickets_ouverts = TicketSupport::whereIn('statut', ['ouvert', 'en_cours'])->count();
+        $tickets_resolus_semaine = TicketSupport::where('statut', 'resolu')
+            ->whereBetween('date_resolution', [now()->startOfWeek(), now()->endOfWeek()])
+            ->count();
+
         return [
-            // Projets
             'total_projets' => $total_projets,
             'projets_actifs' => $projets_en_cours,
             'projets_en_retard' => $projets_en_retard,
             'projets_par_statut' => $projets_par_statut,
             'projets_par_priorite' => $projets_par_priorite,
-
-            // Budget
             'budget_total_alloue' => $budget_total_alloue,
             'budget_total_utilise' => $budget_total_utilise,
-
-            // Équipe
             'membres_actifs' => User::count(),
             'projets_livres_trimestre' => $projets_livres_trimestre,
             'taux_completion' => $taux_completion,
-
-            // Données simulées pour tâches et tickets (à remplacer plus tard)
             'taches_en_retard' => rand(2, 8),
             'taches_completees_mois' => rand(15, 30),
             'taches_assignees' => rand(10, 25),
-            'tickets_ouverts' => rand(3, 12),
-            'tickets_resolus_semaine' => rand(5, 15),
-            'temps_moyen_resolution' => round(rand(2, 48) + (rand(0, 9) / 10), 1),
-            'satisfaction_client' => rand(82, 98),
-
-            // Tendances (variation par rapport au mois/semaine précédent)
+            'tickets_ouverts' => $tickets_ouverts,
+            'tickets_resolus_semaine' => $tickets_resolus_semaine,
+            'temps_moyen_resolution' => TicketSupport::whereNotNull('temps_resolution_heures')->avg('temps_resolution_heures') ?? 0,
+            'satisfaction_client' => rand(85, 95),
             'tendance_projets' => rand(-20, 30),
             'tendance_tickets' => rand(-25, 20),
             'tendance_satisfaction' => rand(-8, 12),
@@ -140,24 +301,22 @@ class InnovationTransitionController extends Controller
             ->limit(5)
             ->get()
             ->map(function ($projet) {
-                // Calculer la progression basée sur le budget utilisé
                 $progression = 0;
                 if ($projet->budget_total > 0) {
                     $progression = round(($projet->budget_utilise / $projet->budget_total) * 100);
                 }
 
-                // Ajuster selon le statut
                 if ($projet->statut === 'termine') {
                     $progression = 100;
                 } elseif ($projet->statut === 'en_attente') {
-                    $progression = min($progression, 20); // Max 20% pour projets en attente
+                    $progression = min($progression, 20);
                 }
 
                 return [
                     'id' => $projet->id,
                     'nom' => $projet->nom,
                     'statut' => $projet->statut,
-                    'priorite' => $projet->type_projet, // Utiliser type_projet comme priorité
+                    'priorite' => $projet->type_projet,
                     'date_creation' => $projet->created_at->format('d/m/Y'),
                     'responsable' => $projet->responsable ? $projet->responsable->name : 'Non assigné',
                     'progression' => $progression,
@@ -192,22 +351,6 @@ class InnovationTransitionController extends Controller
                 'utilisateur' => 'Marie Leroy',
                 'date' => now()->subDay()->format('d/m/Y H:i'),
                 'projet' => 'Infrastructure portuaire',
-            ],
-            [
-                'id' => 4,
-                'type' => 'document_ajoute',
-                'description' => 'Documentation technique ajoutée',
-                'utilisateur' => 'Pierre Lambert',
-                'date' => now()->subDays(2)->format('d/m/Y H:i'),
-                'projet' => 'Station épuration',
-            ],
-            [
-                'id' => 5,
-                'type' => 'reunion_planifiee',
-                'description' => 'Réunion de suivi planifiée',
-                'utilisateur' => 'Julie Moreau',
-                'date' => now()->subDays(3)->format('d/m/Y H:i'),
-                'projet' => 'Barrage Kalaya',
             ],
         ];
     }
@@ -246,21 +389,3 @@ class InnovationTransitionController extends Controller
         ];
     }
 }
-
-// Vérifiez aussi vos routes dans routes/web.php :
-
-/*
-Route::prefix('innovation-transition')->name('innovation.')->group(function () {
-    Route::get('/dashboard', [App\Http\Controllers\InnovationTransitionController::class, 'dashboard'])->name('dashboard');
-    Route::get('/', [App\Http\Controllers\InnovationTransitionController::class, 'index'])->name('index');
-
-    // Autres routes...
-    Route::get('/projets', function() { return 'Liste des projets'; })->name('projets.index');
-    Route::get('/projets/create', function() { return 'Créer un projet'; })->name('projets.create');
-    Route::get('/taches', function() { return 'Liste des tâches'; })->name('taches.index');
-    Route::get('/tickets', function() { return 'Liste des tickets'; })->name('tickets.index');
-    Route::get('/documents', function() { return 'Documents'; })->name('documents.index');
-    Route::get('/budget', function() { return 'Budget'; })->name('budget.index');
-    Route::get('/analytics', function() { return 'Analytics'; })->name('analytics.index');
-});
-*/
