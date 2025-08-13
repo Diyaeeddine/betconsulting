@@ -120,7 +120,7 @@ Route::get('/users/projets', [RessourcesHumainesController::class, 'getProjects'
     Route::get('/users/{user}', [RessourcesHumainesController::class, 'getUser'])->name('user.show.ressources-humaines')->middleware('auth.basic');   
     Route::post('/users', [RessourcesHumainesController::class, 'storeUsers'])->name('user.store.ressources-humaines')->middleware('auth.basic');
     Route::put('/users/{salarie}', [RessourcesHumainesController::class, 'enableDisableUser'])->name('user.update.ressources-humaines')->middleware('auth.basic');   
-    Route::put('/userPass/{user}', [RessourcesHumainesController::class, 'updateUserPass'])->name('user.updatePass.ressources-humaines')->middleware('auth.basic');   
+    Route::put('/userPass/{salarie}', [RessourcesHumainesController::class, 'updateUserPass'])->name('user.updatePass.ressources-humaines')->middleware('auth.basic');   
     Route::put('/userProjet/{salarie}', [RessourcesHumainesController::class, 'affecteGrantUser'])->name('user.updateProject.ressources-humaines')->middleware('auth.basic');   
 
 // Route::get('/ressources-humaines/getusers', [RessourcesHumainesController::class, 'Users'])

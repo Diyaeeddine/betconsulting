@@ -13,6 +13,7 @@ class Salarie extends Model
         'nom', 
         'prenom', 
         'email', 
+        'password',
         'telephone',
         'salaire_mensuel', 
         'date_embauche', 
@@ -22,6 +23,10 @@ class Salarie extends Model
 
     protected $casts = [
         'projet_ids' => 'array',  // JSON array of project IDs
+        'password' => 'hashed',
+    ];
+    protected $hidden = [
+        'password',
     ];
 
     public function vehicule()
@@ -33,7 +38,7 @@ class Salarie extends Model
     {
         return $this->hasMany(Materiel::class);
     }
-
+    
     // One salarie can have multiple profils
     public function profils()
     {

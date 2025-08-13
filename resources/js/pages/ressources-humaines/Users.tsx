@@ -13,6 +13,15 @@ interface Projet {
   date_fin?: string
   salarie_ids?: number[]
 }
+interface Vehicule {
+  id: number
+  user_id: number
+  type: string
+  modele: string
+  immatriculation: string
+  created_at: string
+  updated_at: string
+}
 
 interface User {
   id: number
@@ -29,6 +38,8 @@ interface User {
   updated_at: string
   project: Projet
   projects_count: number
+  vehicule?: Vehicule | null
+
 }
 
 interface RessourcesHumainesUsersProps {
@@ -38,19 +49,64 @@ interface RessourcesHumainesUsersProps {
 
 const profilsPostes = [
   {
-    id: 2,
-    profil: "suivi et controle",
-    postes: ["Contrôleur technique", "Responsable HSE (Hygiène, Sécurité, Environnement)"],
+    value: "bureau_etudes",
+    label: "Bureau d'Études Techniques (BET)",
+    postes: [
+      "Ingénieur structure (béton, acier, bois)",
+      "Ingénieur génie civil",
+      "Ingénieur électricité / électricité industrielle",
+      "Ingénieur thermique / énergétique",
+      "Ingénieur fluides (HVAC, plomberie, CVC)",
+      "Ingénieur géotechnique",
+      "Dessinateur projeteur / DAO (Autocad, Revit, Tekla)",
+      "Technicien bureau d’études",
+      "Chargé d’études techniques",
+      "Ingénieur environnement / développement durable",
+      "Ingénieur calcul de structures",
+      "Architecte"
+    ],
   },
   {
-    id: 3,
-    profil: "gestion de projet",
-    postes: ["Chef de projet", "Coordinateur technique", "Responsable qualité"],
+    value: "construction",
+    label: "Construction",
+    postes: [
+      "Chef de chantier",
+      "Conducteur de travaux",
+      "Ingénieur travaux / Ingénieur chantier",
+      "Conducteur d’engins",
+      "Chef d’équipe",
+      "Technicien travaux",
+      "Manœuvre / Ouvrier spécialisé",
+      "Coordinateur sécurité chantier (SST, prévention)",
+      "Métreur / Économiste de la construction"
+    ],
   },
   {
-    id: 4,
-    profil: "administration",
-    postes: ["Responsable RH", "Comptable", "Assistant administratif"],
+    value: "suivi_controle",
+    label: "Suivi et Contrôle",
+    postes: [
+      "Contrôleur technique",
+      "Chargé de suivi qualité",
+      "Chargé de suivi sécurité",
+      "Inspecteur de chantier",
+      "Responsable HSE (Hygiène, Sécurité, Environnement)",
+      "Technicien contrôle qualité",
+      "Planificateur / Chargé de planning",
+      "Responsable logistique chantier"
+    ],
+  },
+  {
+    value: "support_gestion",
+    label: "Support et Gestion",
+    postes: [
+      "Responsable administratif chantier",
+      "Assistant de projet",
+      "Responsable achats / approvisionnement",
+      "Responsable qualité",
+      "Gestionnaire de contrats",
+      "Chargé de communication",
+      "Responsable financier / comptable chantier"
+    ],
   },
 ]
 
@@ -76,8 +132,8 @@ export default function RessourcesHumainesUsers({ users = [], projects = [] }: R
   const [addFormData, setAddFormData] = useState({
     nom: "",
     prenom: "",
-    profil: "",
-    poste: "",
+    nom_profil: "",
+    poste_profil: "",
     email: "",
     telephone: "",
     salaire_mensuel: "",
@@ -90,30 +146,44 @@ export default function RessourcesHumainesUsers({ users = [], projects = [] }: R
   })
 
   // Add user handlers
-  const handleAddSave = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    setIsSubmitting(true)
+const handleAddSave = async (e: React.FormEvent<HTMLFormElement>) => {
+  e.preventDefault()
+  setIsSubmitting(true)
 
-    router.post("/users", addFormData, {
-      onSuccess: () => {
-        handleAddCancel()
-      },
-      onError: (errors) => {
-        console.error("Error creating user:", errors)
-      },
-      onFinish: () => {
-        setIsSubmitting(false)
-      },
-    })
-  }
+  console.log('[CREATE USER] Payload:', addFormData)
+
+  router.post("/users", addFormData, {
+    onStart: () => {
+      console.log('[CREATE USER] Request started')
+    },
+    onSuccess: (page: any) => {
+      // Inertia returns the new page; flash messages live under page.props.flash
+      console.log('[CREATE USER] Success flash:', page?.props?.flash)
+      const created = page?.props?.flash?.created
+      if (created) {
+        console.log('[CREATE USER] Salarie:', created.salarie)
+        console.log('[CREATE USER] Profil:', created.profil)
+      }
+      handleAddCancel()
+    },
+    onError: (errors: any) => {
+      // Validation/other errors come here
+      console.error('[CREATE USER] Validation/Server errors:', errors)
+    },
+    onFinish: () => {
+      console.log('[CREATE USER] Request finished')
+      setIsSubmitting(false)
+    },
+  })
+}
 
   const handleAddCancel = () => {
     setShowAddPopup(false)
     setAddFormData({
       nom: "",
       prenom: "",
-      profil: "",
-      poste: "",
+      nom_profil: "",
+      poste_profil: "",
       email: "",
       telephone: "",
       salaire_mensuel: "",
@@ -163,6 +233,7 @@ export default function RessourcesHumainesUsers({ users = [], projects = [] }: R
       `/userPass/${selectedUser.id}`,
       {
         new_password: passwordFormData.newPassword,
+        new_password_confirmation: passwordFormData.confirmPassword, // ✅ match Laravel
       },
       {
         onSuccess: () => {
@@ -295,7 +366,9 @@ export default function RessourcesHumainesUsers({ users = [], projects = [] }: R
 
 
   const getSelectedProfilPostes = () => {
-    const selectedProfil = profilsPostes.find((p) => p.profil === addFormData.profil)
+    const selectedProfil = profilsPostes.find(
+      (p) => p.value === addFormData.nom_profil
+    )
     return selectedProfil ? selectedProfil.postes : []
   }
 
@@ -384,33 +457,20 @@ export default function RessourcesHumainesUsers({ users = [], projects = [] }: R
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden"> 
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">N°</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nom Complet
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Poste
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Statut
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Projets
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Salaire
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom Complet</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Poste</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Véhicules</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salaire</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Projets</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -418,15 +478,19 @@ export default function RessourcesHumainesUsers({ users = [], projects = [] }: R
                   <tr key={user.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{index + 1}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {user.nom} {user.prenom}
-                      </div>
+                      <div className="text-sm font-medium text-gray-900">{user.nom} {user.prenom}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500">{user.poste}</div>
+                      <div className="text-sm text-gray-500">{user.profil_string}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-500">{user.email}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-500">{user.vehicule ? `${user.vehicule.type} - ${user.vehicule.modele}` : "--"}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-500">{user.salaire_mensuel} DH</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(user.statut)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -436,32 +500,17 @@ export default function RessourcesHumainesUsers({ users = [], projects = [] }: R
                         title="Voir le projet"
                       >
                         <Eye className="w-3 h-3" />
-                       <span>{user.projects_count ?? 0}</span>
+                        <span>{user.projects_count ?? 0}</span>
                       </button>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500">{user.salaire_mensuel} DH</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex space-x-2">
                         <button
                           onClick={() => handleToggleUserStatus(user)}
-                          className={`inline-flex items-center space-x-1 px-3 py-1 text-white text-xs font-medium rounded transition-colors duration-200 ${
-                            user.statut === "actif" ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"
-                          }`}
+                          className={`inline-flex items-center space-x-1 px-3 py-1 text-white text-xs font-medium rounded transition-colors duration-200 ${user.statut === "actif" ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"}`}
                           title={user.statut === "actif" ? "Désactiver" : "Activer"}
                         >
-                          {user.statut === "actif" ? (
-                            <>
-                              <UserX className="w-3 h-3" />
-                              {/* <span>Désactiver</span> */}
-                            </>
-                          ) : (
-                            <>
-                              <UserCheck className="w-3 h-3" />
-                              {/* <span>Activer</span> */}
-                            </>
-                          )}
+                          {user.statut === "actif" ? <UserX className="w-3 h-3" /> : <UserCheck className="w-3 h-3" />}
                         </button>
                         <button
                           onClick={() => openPasswordPopup(user)}
@@ -469,7 +518,6 @@ export default function RessourcesHumainesUsers({ users = [], projects = [] }: R
                           title="Modifier le mot de passe"
                         >
                           <Lock className="w-3 h-3" />
-                          {/* <span>Pass</span> */}
                         </button>
                       </div>
                     </td>
@@ -489,6 +537,7 @@ export default function RessourcesHumainesUsers({ users = [], projects = [] }: R
             </div>
           )}
         </div>
+
 
         {/* Add User Popup Modal */}
         {showAddPopup && (
@@ -527,10 +576,10 @@ export default function RessourcesHumainesUsers({ users = [], projects = [] }: R
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Profil *</label>
                     <select
-                      value={addFormData.profil}
+                      value={addFormData.nom_profil}
                       onChange={(e) => {
-                        handleAddInputChange("profil", e.target.value)
-                        handleAddInputChange("poste", "") // Reset poste when profil changes
+                        handleAddInputChange("nom_profil", e.target.value)
+                        handleAddInputChange("poste_profil", "") // reset poste when profil changes
                       }}
                       className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                       required
@@ -538,24 +587,25 @@ export default function RessourcesHumainesUsers({ users = [], projects = [] }: R
                     >
                       <option value="">Sélectionner un profil</option>
                       {profilsPostes.map((profil) => (
-                        <option key={profil.id} value={profil.profil}>
-                          {profil.profil}
+                        <option key={profil.value} value={profil.value}>
+                          {profil.label}
                         </option>
                       ))}
                     </select>
+
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Poste *</label>
-                    <div className="mt-2 space-y-2">
+                   <div className="mt-2 space-y-2">
                       {getSelectedProfilPostes().map((poste, index) => (
                         <label key={index} className="flex items-center">
                           <input
                             type="radio"
-                            name="poste"
+                            name="poste_profil" // ✅ matches backend field
                             value={poste}
-                            checked={addFormData.poste === poste}
-                            onChange={(e) => handleAddInputChange("poste", e.target.value)}
+                            checked={addFormData.poste_profil === poste} // ✅ using poste_profil
+                            onChange={(e) => handleAddInputChange("poste_profil", e.target.value)} // ✅ save into poste_profil
                             className="mr-2 text-blue-600 focus:ring-blue-500"
                             disabled={isSubmitting}
                             required
@@ -563,10 +613,18 @@ export default function RessourcesHumainesUsers({ users = [], projects = [] }: R
                           <span className="text-sm text-gray-700">{poste}</span>
                         </label>
                       ))}
-                      {addFormData.profil && getSelectedProfilPostes().length === 0 && (
-                        <p className="text-sm text-gray-500">Aucun poste disponible pour ce profil</p>
+
+                      {addFormData.nom_profil && getSelectedProfilPostes().length === 0 && (
+                        <p className="text-sm text-gray-500">
+                          Aucun poste disponible pour ce profil
+                        </p>
                       )}
-                      {!addFormData.profil && <p className="text-sm text-gray-500">Sélectionnez d'abord un profil</p>}
+
+                      {!addFormData.nom_profil && (
+                        <p className="text-sm text-gray-500">
+                          Sélectionnez d'abord un profil
+                        </p>
+                      )}
                     </div>
                   </div>
 

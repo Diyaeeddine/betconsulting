@@ -47,7 +47,7 @@ export function AppSidebar() {
     'financier-comptabilite': '/financier-comptabilite/dashboard',
     'logistique-generaux': '/logistique-generaux/dashboard',
     'communication-digitale': '/communication-digitale/dashboard',
-    juridique: '/juridique/dashboard',
+    'juridique': '/juridique/dashboard',
     'fournisseurs-traitants': '/fournisseurs-traitants/dashboard',
   };
 
@@ -69,7 +69,7 @@ export function AppSidebar() {
       icon: LayoutGrid,
     },
     {
-      title: 'Projets',
+      title: 'Tracking',
       icon: FolderKanban,
       items: isProjectsMenuOpen ? projectsNavItems : [],
       // No href here to prevent navigation on toggle click

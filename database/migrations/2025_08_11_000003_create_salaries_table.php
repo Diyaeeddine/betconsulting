@@ -11,6 +11,7 @@ return new class extends Migration {
             $table->string('nom');
             $table->string('prenom');
             $table->string('email')->unique();
+            $table->string('password')->nullable();
             $table->string('telephone');
             $table->decimal('salaire_mensuel', 10, 2);
             $table->date('date_embauche')->nullable();
