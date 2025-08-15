@@ -203,10 +203,163 @@ class RessourcesHumainesController extends Controller
         }
     }
 
+    public function access()
+{
+    $users = User::role('salarie')
+        ->with('roles')
+        ->orderBy('created_at', 'desc')
+        ->get();
+    
+    $salaries = Salarie::with('user')->orderBy('created_at', 'desc')->get();
+
+    return Inertia::render('ressources-humaines/Access', [
+        'users' => $users,
+        'salaries' => $salaries,
+    ]);
+}
+
+public function storeAccess(Request $request)
+{
+    try {
+        $validated = $request->validate([
+            'nom' => 'required|string|max:255',
+            'prenom' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'telephone' => 'required|string|max:255',
+            'password' => 'required|string|min:6',
+            'poste' => 'nullable|string|max:255',
+            'salaire_mensuel' => 'nullable|numeric|min:0',
+            'date_embauche' => 'nullable|date',
+            'statut' => 'nullable|in:actif,inactif,conge,demission',
+            'projet_id' => 'nullable|exists:projets,id',
+        ]);
+
+        // Create User
+        $user = User::create([
+            'name' => $validated['prenom'] . ' ' . $validated['nom'],
+            'email' => $validated['email'],
+            'password' => bcrypt($validated['password']),
+        ]);
+
+        // Assign role
+        $user->assignRole('salarie');
+
+        // Create Salarie
+        $salarie = Salarie::create([
+            'nom' => $validated['nom'],
+            'prenom' => $validated['prenom'],
+            'email' => $validated['email'],
+            'telephone' => $validated['telephone'],
+            'poste' => $validated['poste'] ?? null,
+            'salaire_mensuel' => $validated['salaire_mensuel'] ?? null,
+            'date_embauche' => $validated['date_embauche'] ?? null,
+            'statut' => $validated['statut'] ?? 'actif',
+            'projet_id' => $validated['projet_id'] ?? null,
+            'user_id' => $user->id,
+        ]);
+
+        return redirect()->back()->with('success', 'Accès créé avec succès.');
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return redirect()->back()
+            ->withErrors($e->errors())
+            ->withInput();
+    } catch (\Exception $e) {
+        Log::error('Erreur création accès:', [
+            'message' => $e->getMessage(),
+            'data' => $request->all()
+        ]);
+        return redirect()->back()
+            ->with('error', 'Erreur lors de la création de l\'accès: ' . $e->getMessage())
+            ->withInput();
+    }
+}
+
+public function updateAccess(Request $request, User $user)
+{
+    try {
+        $validated = $request->validate([
+            'nom' => 'required|string|max:255',
+            'prenom' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email,' . $user->id,
+            'telephone' => 'required|string|max:255',
+            'password' => 'nullable|string|min:6',
+            'poste' => 'nullable|string|max:255',
+            'salaire_mensuel' => 'nullable|numeric|min:0',
+            'date_embauche' => 'nullable|date',
+            'statut' => 'nullable|in:actif,inactif,conge,demission',
+            'projet_id' => 'nullable|exists:projets,id',
+        ]);
+
+        // Update User
+        $userData = [
+            'name' => $validated['prenom'] . ' ' . $validated['nom'],
+            'email' => $validated['email'],
+        ];
+
+        if (!empty($validated['password'])) {
+            $userData['password'] = bcrypt($validated['password']);
+        }
+
+        $user->update($userData);
+
+        // Update or create Salarie
+        $salarie = Salarie::where('user_id', $user->id)->first();
+        
+        $salarieData = [
+            'nom' => $validated['nom'],
+            'prenom' => $validated['prenom'],
+            'email' => $validated['email'],
+            'telephone' => $validated['telephone'],
+            'poste' => $validated['poste'] ?? null,
+            'salaire_mensuel' => $validated['salaire_mensuel'] ?? null,
+            'date_embauche' => $validated['date_embauche'] ?? null,
+            'statut' => $validated['statut'] ?? 'actif',
+            'projet_id' => $validated['projet_id'] ?? null,
+            'user_id' => $user->id,
+        ];
+
+        if ($salarie) {
+            $salarie->update($salarieData);
+        } else {
+            Salarie::create($salarieData);
+        }
+
+        return redirect()->back()->with('success', 'Accès mis à jour avec succès.');
+
+    } catch (\Exception $e) {
+        Log::error('Erreur mise à jour accès:', [
+            'message' => $e->getMessage(),
+            'user_id' => $user->id
+        ]);
+        return redirect()->back()
+            ->with('error', 'Erreur lors de la mise à jour de l\'accès: ' . $e->getMessage());
+    }
+}
+
+public function destroyAccess(User $user)
+{
+    try {
+        // Delete related Salarie record
+        Salarie::where('user_id', $user->id)->delete();
+        
+        // Delete User
+        $user->delete();
+        
+        return redirect()->back()->with('success', 'Accès supprimé avec succès.');
+    } catch (\Exception $e) {
+        Log::error('Erreur suppression accès:', [
+            'message' => $e->getMessage(),
+            'user_id' => $user->id
+        ]);
+        return redirect()->back()->with('error', 'Erreur lors de la suppression de l\'accès.');
+    }
+}
+
     public function destroyProgression(Progression $progression)
     {
         try {
-            // Supprimer le fichier associé s'il existe
+            // Supprimer le fichier associé s'il existea
             if ($progression->progress && Storage::disk('public')->exists($progression->progress)) {
                 Storage::disk('public')->delete($progression->progress);
             }

@@ -1,12 +1,10 @@
 import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
 
-const breadcrumbs = [
-    {
-        title: 'Dashboard Ressources Humaines & Gestion des Compétences',
-        href: '/ressources-humaines/dashboard',
-    },
-];
+  const breadcrumbs = [
+    { title: '', href: '/ressources-humaines/Dashboard' },
+    { title: 'Dashboard', href: '/ressources-humaines/Dashboard' },
+  ]
 
 export default function RessourcesHumaines() {
     return (

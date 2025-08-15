@@ -16,6 +16,7 @@ use App\Http\Controllers\RessourcesHumainesController;
 use App\Http\Controllers\SuiviControleController;
 use App\Http\Controllers\ScreenshotController;
 
+
 Route::get('/', function () {
     return redirect()->route('login');
 })->name('home');
@@ -140,6 +141,12 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
         ->name('ressources-humaines.materiels.update');
     Route::delete('/ressources-humaines/materiels/{materiel}', [RessourcesHumainesController::class, 'destroyMateriel'])
         ->name('ressources-humaines.materiels.destroy');
+
+    // Access management routes
+    Route::get('/ressources-humaines/access', [RessourcesHumainesController::class, 'access'])->name('ressources-humaines.access');
+    Route::post('/ressources-humaines/access', [RessourcesHumainesController::class, 'storeAccess'])->name('ressources-humaines.access.store');
+    Route::put('/ressources-humaines/access/{user}', [RessourcesHumainesController::class, 'updateAccess'])->name('ressources-humaines.access.update');
+    Route::delete('/ressources-humaines/access/{user}', [RessourcesHumainesController::class, 'destroyAccess'])->name('ressources-humaines.access.destroy');
 });
 
 // Suivi & Contrôle

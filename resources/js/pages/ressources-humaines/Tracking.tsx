@@ -874,23 +874,27 @@ export default function TrackingPage() {
                       </div>
                     </div>
 
-                    <div className="relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 overflow-hidden border border-gray-200">
-                      <div className="relative z-10 flex items-center justify-center">
-                        <div className="text-center">
-                          <Truck className="w-16 h-16 text-gray-400 mx-auto mb-3" />
-                          <div className="text-3xl font-bold text-green-600 mb-1">{selectedPoint.currentVehicle.loadPercentage}%</div>
-                          <div className="text-sm text-gray-500 font-medium">Capacité utilisée</div>
-                        </div>
-                      </div>
-                      <div
-                        className="absolute bottom-0 left-0 bg-gradient-to-t from-green-500/30 via-emerald-500/20 to-transparent transition-all duration-1000 ease-out"
-                        style={{
-                          width: "100%",  
-                          height: `${selectedPoint.currentVehicle.loadPercentage}%`,
-                          borderRadius: "0 0 0.75rem 0.75rem",
-                        }}
-                      />
-                    </div>
+                        <div className="relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 overflow-hidden border border-gray-200">
+      <div className="relative z-10 flex items-center justify-center">
+        <div className="text-center">
+          <img
+            src="https://i.ibb.co/gF3BYRkp/dacia-duster-2013.png"
+            alt="Dacia Duster 2013"
+            className="w-40 h-20 mx-auto mb-3 object-contain"
+          />
+          <div className="text-3xl font-bold text-green-600 mb-1">{selectedPoint.currentVehicle.loadPercentage}%</div>
+          <div className="text-sm text-gray-500 font-medium">Capacité utilisée</div>
+        </div>
+      </div>
+      <div
+        className="absolute bottom-0 left-0 bg-gradient-to-t from-green-500/30 via-emerald-500/20 to-transparent transition-all duration-1000 ease-out"
+        style={{
+          width: "100%",
+          height: `${selectedPoint.currentVehicle.loadPercentage}%`,
+          borderRadius: "0 0 0.75rem 0.75rem",
+        }}
+      />
+    </div>
                   </CardContent>
                 </Card>
 
