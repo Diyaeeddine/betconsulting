@@ -12,12 +12,16 @@ class RessourcesHumainesController extends Controller
     public function index()
     {
         $projects = Projet::select('id', 'nom')->get();
+               $user = auth()->user();
+        // dd($user, gettype($user->id));
 
         return Inertia::render('ressources-humaines/Dashboard',[
             'projects' => $projects,
         ]);
 
     }
+
+
     public function Maps()
     {
         $projects = Projet::select('id', 'nom')->get();

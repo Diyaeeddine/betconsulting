@@ -72,7 +72,7 @@ export function NavMain({
     <NavItemRenderer
       key={item.title}
       item={item}
-      onToggle={item.title === 'Projets' ? onProjectsToggle : undefined}
+      onToggle={item.title === 'Tracking' ? onProjectsToggle : undefined}
     />
   ));
 

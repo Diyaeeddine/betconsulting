@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
-
+import { Notifications } from './ui/notifications';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 
 import { type NavItem, type SharedData } from '@/types';
@@ -17,6 +17,7 @@ import {
     DollarSign,
     FileText,
     FolderKanban,
+    Route,
     Globe,
     LayoutDashboard,
     Leaf,
@@ -36,13 +37,18 @@ import {
     Truck,
     Users,
     Wrench,
+    Bell,
 } from 'lucide-react';
 
 import BetconsultingDashLogo from './betconsulting-dash-logo';
-
+type Project = { id: number; nom: string };
 export function AppSidebar() {
+    
     const page = usePage<SharedData>();
-    const { auth, projects = [] } = page.props;
+    const { auth, projects = [] } = usePage().props as unknown as {
+        auth: any;
+        projects: Project[];
+    };
     const [isProjectsMenuOpen, setIsProjectsMenuOpen] = useState(false);
 
     useEffect(() => {
@@ -67,8 +73,9 @@ export function AppSidebar() {
     };
 
     const dashboardHref = roleDashboardMap[auth?.user?.role || ''] || '/dashboard';
-
-    const projectsNavItems: NavItem[] = projects.map((project: any) => ({
+    // let projects = '';
+    
+    const projectsNavItems: NavItem[] = projects.map((project) => ({
         title: project.nom,
         href: `/projects/${project.id}`,
         icon: FolderKanban,
@@ -77,8 +84,8 @@ export function AppSidebar() {
     const roleMenus: Record<string, NavItem[]> = {
         'ressources-humaines': [
             {
-                title: 'Projets',
-                icon: FolderKanban,
+                title: 'Tracking',
+                icon: Route,
                 items: isProjectsMenuOpen ? projectsNavItems : [],
             },
             {
@@ -237,16 +244,16 @@ export function AppSidebar() {
 
     return (
         <Sidebar collapsible="icon" variant="floating">
-            <SidebarHeader>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" asChild>
-                            <Link href={dashboardHref} prefetch className="flex w-full items-center justify-center">
-                                <BetconsultingDashLogo className="w-[140px]" />
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                </SidebarMenu>
+            <SidebarHeader className="relative z-10">
+                <div className="flex w-full items-center justify-between px-2">
+                    <SidebarMenuButton size="lg" asChild className="w-auto p-0">
+                        <Link href={dashboardHref} prefetch>
+                            <BetconsultingDashLogo className="w-[140px]" />
+                        </Link>
+                    </SidebarMenuButton>
+
+                    <Notifications />
+                </div>
             </SidebarHeader>
 
             <SidebarContent>
