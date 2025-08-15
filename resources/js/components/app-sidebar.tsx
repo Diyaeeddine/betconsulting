@@ -7,6 +7,15 @@ import { Link, usePage } from '@inertiajs/react';
 import { LayoutGrid } from 'lucide-react';
 import BetconsultingDashLogo from './betconsulting-dash-logo';
 
+
+const customStyles = `
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
+  
+  body {
+    font-weight: bold;
+  }
+`
+
 export function AppSidebar() {
     const { auth } = usePage<SharedData>().props;
 
@@ -29,17 +38,21 @@ export function AppSidebar() {
     const dashboardHref = auth?.user?.role && roleDashboardMap[auth.user.role] ? roleDashboardMap[auth.user.role] : '/dashboard';
 
     const mainNavItems: NavItem[] = [
-        {
-            title: 'Dashboard',
-            href: dashboardHref,
-            icon: LayoutGrid,
-        },
-        // {
-        //     title: 'Demandes',
-        //     href: dashboardHref,
-        //     icon: LayoutGrid,
-        // },
-    ];
+    {
+        title: 'Dashboard',
+        href: dashboardHref,
+        icon: LayoutGrid,
+    },
+    ...(auth?.user?.role === 'ressources-humaines'
+        ? [
+              {
+                  title: 'Tracking',
+                  href: '/ressources-humaines/tracking',
+                  icon: LayoutGrid, 
+              },
+          ]
+        : []),
+];
 
     return (
         <Sidebar collapsible="icon" variant="floating">

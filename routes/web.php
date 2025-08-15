@@ -16,7 +16,28 @@ use App\Http\Controllers\RessourcesHumainesController;
 use App\Http\Controllers\SuiviControleController;
 
 Route::get('/', function () {
-    return redirect()->route('login');
+    $user = auth()->user();
+
+    if (!$user) {
+        return redirect()->route('login');
+    }
+
+    return match (true) {
+        $user->hasRole('admin') => redirect()->route('dashboard.direction-generale'),
+        $user->hasRole('marches-marketing') => redirect()->route('dashboard.marches-marketing'),
+        $user->hasRole('direction-generale') => redirect()->route('dashboard.direction-generale'),
+        $user->hasRole('communication-digitale') => redirect()->route('dashboard.communication-digitale'),
+        $user->hasRole('etudes-techniques') => redirect()->route('dashboard.etudes-techniques'),
+        $user->hasRole('financier-comptabilite') => redirect()->route('dashboard.financier-comptabilite'),
+        $user->hasRole('fournisseurs-traitants') => redirect()->route('dashboard.fournisseurs-traitants'),
+        $user->hasRole('innovation-transition') => redirect()->route('dashboard.innovation-transition'),
+        $user->hasRole('juridique') => redirect()->route('dashboard.juridique'),
+        $user->hasRole('logistique-generaux') => redirect()->route('dashboard.logistique-generaux'),
+        $user->hasRole('qualite-audit') => redirect()->route('dashboard.qualite-audit'),
+        $user->hasRole('ressources-humaines') => redirect()->route('dashboard.ressources-humaines'),
+        $user->hasRole('suivi-controle') => redirect()->route('dashboard.suivi-controle'),
+        default => redirect()->route('login'),
+    };
 })->name('home');
 
 // Route::get('/dashboard', function () {
@@ -92,8 +113,12 @@ Route::middleware(['auth', 'verified', 'role:qualite-audit'])->group(function ()
 
 // Ressources Humaines
 Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(function () {
+    
     Route::get('/ressources-humaines/dashboard', [RessourcesHumainesController::class, 'index'])
         ->name('dashboard.ressources-humaines');
+
+    Route::get('/ressources-humaines/tracking', [RessourcesHumainesController::class, 'tracking'])
+        ->name('tracking.ressources-humaines');
 });
 
 // Suivi & Contrôle
@@ -105,26 +130,7 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
 
 
 
-// Route::get('/dashboard', function () {
-//     $user = auth()->user();
 
-//     return match (true) {
-//         $user->hasRole('admin') => redirect()->route('dashboard.direction-generale'),
-//         $user->hasRole('marches-marketing') => redirect()->route('dashboard.marches-marketing'),
-//         $user->hasRole('direction-generale') => redirect()->route('dashboard.direction-generale'),
-//         $user->hasRole('communication-digitale') => redirect()->route('dashboard.communication-digitale'),
-//         $user->hasRole('etudes-techniques') => redirect()->route('dashboard.etudes-techniques'),
-//         $user->hasRole('financier-comptabilite') => redirect()->route('dashboard.financier-comptabilite'),
-//         $user->hasRole('fournisseurs-traitants') => redirect()->route('dashboard.fournisseurs-traitants'),
-//         $user->hasRole('innovation-transition') => redirect()->route('dashboard.innovation-transition'),
-//         $user->hasRole('juridique') => redirect()->route('dashboard.juridique'),
-//         $user->hasRole('logistique-generaux') => redirect()->route('dashboard.logistique-generaux'),
-//         $user->hasRole('qualite-audit') => redirect()->route('dashboard.qualite-audit'),
-//         $user->hasRole('ressources-humaines') => redirect()->route('dashboard.ressources-humaines'),
-//         $user->hasRole('suivi-controle') => redirect()->route('dashboard.suivi-controle'),
-//         default => redirect('/'),
-//     };
-// })->middleware(['auth', 'verified'])->name('dashboard');
 
 
 

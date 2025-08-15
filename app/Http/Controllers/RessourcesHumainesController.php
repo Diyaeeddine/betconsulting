@@ -11,4 +11,10 @@ class RessourcesHumainesController extends Controller
         return Inertia::render('ressources-humaines/Dashboard');
 
     }
+
+        public function tracking()
+    {
+        return Inertia::render('ressources-humaines/Tracking');
+
+    }
 }
