@@ -50,7 +50,6 @@ interface Props {
     salaries: Salarie[];
 }
 
-// Types de matériels
 const TYPES_MATERIELS = [
     { value: 'electronique', label: 'Électronique' },
     { value: 'mecanique', label: 'Mécanique' },
@@ -64,26 +63,48 @@ export default function Materiels({ materiels, salaries }: Props) {
     const [editingMateriel, setEditingMateriel] = useState<Materiel | null>(null);
     const [deletingMateriel, setDeletingMateriel] = useState<Materiel | null>(null);
 
-    const { data, setData, post, put, processing, errors, reset } = useForm({
-        nom: '',
-        marque: '',
-        type: '',
-        etat: 'disponible' as const,
-        cout_location_jour: '',
-        date_acquisition: '',
-        duree_location: '',
-        salarie_id: '',
-        statut: '',
-        type_paiement: '',
-        montant_achat: '',
-        montant_credit_total: '',
-        montant_credit_mensuel: '',
-        duree_credit_mois: '',
-        date_debut_credit: '',
-        date_debut_location: '',
-        date_fin_location: '',
-        cout_location: '',
-    });
+type FormData = {
+    nom: string;
+    marque: string;
+    type: string;
+    etat: 'disponible' | 'en_panne' | 'en_mission'; 
+    cout_location_jour: string;
+    date_acquisition: string;
+    duree_location: string;
+    salarie_id: string;
+    statut: string;
+    type_paiement: string;
+    montant_achat: string;
+    montant_credit_total: string;
+    montant_credit_mensuel: string;
+    duree_credit_mois: string;
+    date_debut_credit: string;
+    date_debut_location: string;
+    date_fin_location: string;
+    cout_location: string;
+};
+
+const { data, setData, post, put, processing, errors, reset } = useForm<FormData>({
+    nom: '',
+    marque: '',
+    type: '',
+    etat: 'disponible', 
+    cout_location_jour: '',
+    date_acquisition: '',
+    duree_location: '',
+    salarie_id: '',
+    statut: '',
+    type_paiement: '',
+    montant_achat: '',
+    montant_credit_total: '',
+    montant_credit_mensuel: '',
+    duree_credit_mois: '',
+    date_debut_credit: '',
+    date_debut_location: '',
+    date_fin_location: '',
+    cout_location: '',
+});
+
 
     const openCreateModal = () => {
         reset();
@@ -124,7 +145,6 @@ export default function Materiels({ materiels, salaries }: Props) {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         
-        // Préparer les données en s'assurant que les valeurs vides sont null ou converties correctement
         const formData = {
             nom: data.nom.trim(),
             marque: data.marque.trim(),

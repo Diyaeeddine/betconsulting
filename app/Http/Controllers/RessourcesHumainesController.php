@@ -29,8 +29,172 @@ class RessourcesHumainesController extends Controller
 
     public function tracking()
     {
-        return Inertia::render('ressources-humaines/Tracking');
+        // Récupérer les projets avec leurs relations depuis la BDD
+        $projetsFromDB = Projet::with(['responsable', 'salaries'])
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->get();
 
+        // Transformer les projets de la BDD au format attendu par le frontend
+        $dynamicTrackingPoints = $projetsFromDB->map(function($projet, $index) {
+            return [
+                'id' => $projet->id,
+                'title' => $projet->nom,
+                'address' => $projet->lieu_realisation ?? 'Adresse non spécifiée',
+                'position' => [
+                    'lat' => (float)$projet->latitude,
+                    'lng' => (float)$projet->longitude
+                ],
+                'status' => $this->convertStatus($projet->statut),
+                'distance' => rand(15, 50) . 'km', // Distance calculée ou aléatoire
+                'estimatedTime' => $this->getEstimatedTime($projet),
+                'projectManager' => [
+                    'name' => $projet->responsable->name ?? 'Non assigné',
+                    'phone' => '+212 6 12 34 56 78', // Vous pouvez ajouter ce champ au model User
+                ],
+                'currentVehicle' => $this->generateVehicleInfo(),
+                'vehicles' => $this->generateVehiclesList(),
+                'employees' => $projet->salaries->map(function($salarie) {
+                    return [
+                        'name' => trim($salarie->nom . ' ' . $salarie->prenom),
+                        'role' => $salarie->fonction ?? 'Employé'
+                    ];
+                })->toArray(),
+                'fuel' => [
+                    'current' => rand(40, 90),
+                    'estimatedTime' => rand(1, 4) . 'h ' . rand(10, 59) . 'min',
+                ],
+                'timeline' => $this->generateTimeline($projet)
+            ];
+        });
+
+        return Inertia::render('ressources-humaines/Tracking', [
+            'dynamicTrackingPoints' => $dynamicTrackingPoints
+        ]);
+    }
+
+    private function convertStatus($status)
+    {
+        $statusMap = [
+            'en_cours' => 'execution',
+            'termine' => 'completed',
+            'en_attente' => 'preparation'
+        ];
+        
+        return $statusMap[$status] ?? 'preparation';
+    }
+
+    private function getEstimatedTime($projet)
+    {
+        if ($projet->date_debut && $projet->date_fin) {
+            $debut = new \DateTime($projet->date_debut);
+            $fin = new \DateTime($projet->date_fin);
+            $diff = $debut->diff($fin);
+            
+            if ($diff->days > 30) {
+                return ceil($diff->days / 30) . ' mois';
+            } else if ($diff->days > 7) {
+                return ceil($diff->days / 7) . ' semaines';
+            } else {
+                return $diff->days . ' jours';
+            }
+        }
+        
+        $durations = ['1 semaine', '2 semaines', '3 semaines', '1 mois', '2 mois'];
+        return $durations[array_rand($durations)];
+    }
+
+    private function generateVehicleInfo()
+    {
+        $vehicles = [
+            [
+                'type' => 'truck',
+                'name' => 'Camion Mercedes',
+                'loadPercentage' => rand(30, 90),
+                'capacity' => '2000 Kg',
+                'currentLoad' => rand(500, 1800) . ' Kg'
+            ],
+            [
+                'type' => 'car',
+                'name' => 'Toyota Hilux',
+                'loadPercentage' => rand(20, 70),
+                'capacity' => '500 Kg',
+                'currentLoad' => rand(100, 450) . ' Kg'
+            ],
+            [
+                'type' => 'machinery',
+                'name' => 'Caterpillar 320',
+                'loadPercentage' => rand(50, 100),
+                'capacity' => 'Excavatrice',
+                'currentLoad' => 'En service'
+            ]
+        ];
+
+        return $vehicles[array_rand($vehicles)];
+    }
+
+    private function generateVehiclesList()
+    {
+        return [
+            ['type' => 'Camion', 'count' => rand(1, 3), 'status' => 'active', 'model' => 'Mercedes Actros', 'capacity' => '2000 Kg'],
+            ['type' => 'Voiture', 'count' => rand(1, 2), 'status' => 'active', 'model' => 'Toyota Hilux', 'capacity' => '500 Kg'],
+            ['type' => 'Engin', 'count' => rand(0, 2), 'status' => 'active', 'model' => 'Caterpillar 320', 'capacity' => 'N/A'],
+        ];
+    }
+
+    private function generateTimeline($projet)
+    {
+        $currentStatus = $this->convertStatus($projet->statut);
+        
+        $timeline = [
+            [
+                'status' => 'Programmation',
+                'time' => $projet->date_debut ? date('d M, H:i', strtotime($projet->date_debut)) : 'Non défini',
+                'description' => 'Projet planifié et ressources allouées.',
+                'completed' => true,
+                'delay' => null,
+            ],
+            [
+                'status' => 'Confirmation',
+                'time' => $projet->date_debut ? date('d M, H:i', strtotime($projet->date_debut . ' +2 hours')) : 'Non défini',
+                'description' => 'Projet confirmé, équipe assignée.',
+                'completed' => true,
+                'delay' => null,
+            ],
+            [
+                'status' => 'Préparation',
+                'time' => $projet->date_debut ? date('d M, H:i', strtotime($projet->date_debut . ' +1 day')) : 'Non défini',
+                'description' => 'Matériaux et équipements préparés.',
+                'completed' => in_array($currentStatus, ['execution', 'completed']),
+                'current' => $currentStatus === 'preparation',
+                'delay' => null,
+            ],
+            [
+                'status' => 'En Route',
+                'time' => 'En cours',
+                'description' => 'Équipe en déplacement vers le site.',
+                'completed' => in_array($currentStatus, ['execution', 'completed']),
+                'current' => $currentStatus === 'en-route',
+                'delay' => null,
+            ],
+            [
+                'status' => 'Exécution',
+                'time' => $currentStatus === 'execution' ? 'Maintenant' : 'Planifié',
+                'description' => 'Travaux en cours d\'exécution.',
+                'completed' => $currentStatus === 'completed',
+                'current' => $currentStatus === 'execution',
+                'delay' => $currentStatus === 'execution' ? (rand(0, 1) ? rand(10, 60) . 'min en retard' : null) : null,
+            ],
+            [
+                'status' => 'Clôture',
+                'time' => $projet->date_fin ? date('d M, H:i', strtotime($projet->date_fin)) : 'À planifier',
+                'description' => 'Rapport final et archivage.',
+                'completed' => $currentStatus === 'completed',
+                'delay' => null,
+            ],
+        ];
+
+        return $timeline;
     }
 
     public function projets()

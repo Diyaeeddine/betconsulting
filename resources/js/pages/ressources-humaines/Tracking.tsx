@@ -1,4 +1,3 @@
-
 import AppLayout from "@/layouts/app-layout"
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -7,9 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Navigation, Truck, Phone, Package, Clock, MessageCircle, Send, User, Fuel, MapPinCheckInside, } from "lucide-react"
 
-
 const GOOGLE_MAPS_API_KEY = "AIzaSyBqaAsQ8r3L9quGIANXqYGlXm3RiJbHjYU"
 
+// Données statiques conservées comme fallback
 const trackingPoints = [
   {
     id: 1,
@@ -467,8 +466,16 @@ const descriptions = {
   completed: "Projet terminé avec succès.",
 }
 
-export default function TrackingPage() {
-  const [selectedPoint, setSelectedPoint] = useState<(typeof trackingPoints)[0] | null>(trackingPoints[1]) // Default to in-progress point
+// Interface props pour recevoir les données dynamiques
+interface TrackingPageProps {
+  dynamicTrackingPoints?: any[]
+}
+
+export default function TrackingPage({ dynamicTrackingPoints = [] }: TrackingPageProps) {
+  // Utiliser les données dynamiques si disponibles, sinon les données statiques
+  const activeTrackingPoints = dynamicTrackingPoints.length > 0 ? dynamicTrackingPoints : trackingPoints
+  
+  const [selectedPoint, setSelectedPoint] = useState<(typeof trackingPoints)[0] | null>(activeTrackingPoints[1] || activeTrackingPoints[0] || null)
   const [mapLoaded, setMapLoaded] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null)
@@ -476,9 +483,9 @@ export default function TrackingPage() {
   const googleMapRef = useRef<any | null>(null)
   const markersRef = useRef<any[]>([])
 
-  const enhancedTrackingPoints = trackingPoints.map((point) => ({
+  const enhancedTrackingPoints = activeTrackingPoints.map((point) => ({
     ...point,
-    employees: point.employees.map((emp, index) => ({
+    employees: point.employees.map((emp: any, index: number) => ({
       ...emp,
       id: index + 1,
       prenom: emp.name.split(" ")[0],
@@ -549,8 +556,8 @@ export default function TrackingPage() {
       markersRef.current.forEach((marker) => marker.setMap(null))
       markersRef.current = []
 
-      // Add markers for each tracking point
-      trackingPoints.forEach((point) => {
+      // Add markers for each tracking point (utilise activeTrackingPoints au lieu de trackingPoints statique)
+      activeTrackingPoints.forEach((point) => {
         if (!point.position || typeof point.position.lat !== "number" || typeof point.position.lng !== "number") {
           console.error("Invalid coordinates for point:", point)
           return
@@ -584,7 +591,7 @@ export default function TrackingPage() {
         markersRef.current.push(marker)
       })
 
-      const validPoints = trackingPoints.filter(
+      const validPoints = activeTrackingPoints.filter(
         (point) =>
           point.position &&
           typeof point.position.lat === "number" &&
@@ -609,7 +616,7 @@ export default function TrackingPage() {
     }
 
     loadGoogleMaps()
-  }, [])
+  }, [activeTrackingPoints]) // Ajout de la dépendance
 
   const getMarkerColor = (status: string) => {
     const colors = {
@@ -786,7 +793,7 @@ export default function TrackingPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {selectedPoint.timeline.map((event, index) => (
+                    {selectedPoint.timeline.map((event: any, index: number) => (
                       <div
                         key={index}
                         className="flex items-start gap-4 group hover:bg-gray-50/50 rounded-lg p-3 transition-all duration-200"
@@ -976,7 +983,7 @@ export default function TrackingPage() {
                         <div className="space-y-2 max-h-32 hide-scrollbar custom-scroll" style={{ overflowY: "auto" }}>
                           {enhancedTrackingPoints
                             .find((p) => p.id === selectedPoint.id)
-                            ?.employees.map((employee, index) => (
+                            ?.employees.map((employee: any, index: number) => (
                               <div
                                 key={index}
                                 className="flex justify-between items-center text-xs p-2 rounded-4 hover:bg-indigo-50 cursor-pointer transition-all duration-200 hover:scale-105"

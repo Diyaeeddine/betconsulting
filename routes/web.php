@@ -92,9 +92,9 @@ Route::middleware(['auth', 'verified', 'role:qualite-audit'])->group(function ()
 Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(function () {
     Route::get('/ressources-humaines/dashboard', [RessourcesHumainesController::class, 'index'])
         ->name('dashboard.ressources-humaines');
-
+    
     Route::get('/ressources-humaines/tracking', [RessourcesHumainesController::class, 'tracking'])
-        ->name('tracking.ressources-humaines');
+        ->name('tracking.ressources-humaines');    
 
     Route::get('/ressources-humaines/projets', [RessourcesHumainesController::class, 'projets'])
         ->name('ressources-humaines.projets');
@@ -108,6 +108,8 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
 
     Route::get('/ressources-humaines/materiels', [RessourcesHumainesController::class, 'materiels'])
         ->name('ressources-humaines.materiels');
+
+
 
 
     // Routes CRUD pour les projets

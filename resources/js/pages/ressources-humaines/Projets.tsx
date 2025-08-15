@@ -51,22 +51,40 @@ export default function Projets({ projets, users }: Props) {
     const [editingProjet, setEditingProjet] = useState<Projet | null>(null);
     const [deletingProjet, setDeletingProjet] = useState<Projet | null>(null);
 
-    const { data, setData, post, put, processing, errors, reset } = useForm({
-        nom: '',
-        description: '',
-        budget_total: '',
-        budget_utilise: '',
-        date_debut: '',
-        date_fin: '',
-        statut: 'en_attente' as const,
-        client: '',
-        lieu_realisation: '',
-        latitude: '',
-        longitude: '',
-        radius: '',
-        responsable_id: '',
-        type_projet: 'suivi' as const,
-    });
+ type FormData = {
+    nom: string;
+    description: string;
+    budget_total: string;
+    budget_utilise: string;
+    date_debut: string;
+    date_fin: string;
+    statut: 'en_attente' | 'en_cours' | 'termine';
+    client: string;
+    lieu_realisation: string;
+    latitude: string;
+    longitude: string;
+    radius: string;
+    responsable_id: string;
+    type_projet: 'suivi' | 'etude' | 'controle';
+};
+
+const { data, setData, post, put, processing, errors, reset } = useForm<FormData>({
+    nom: '',
+    description: '',
+    budget_total: '',
+    budget_utilise: '',
+    date_debut: '',
+    date_fin: '',
+    statut: 'en_attente', 
+    client: '',
+    lieu_realisation: '',
+    latitude: '',
+    longitude: '',
+    radius: '',
+    responsable_id: '',
+    type_projet: 'suivi', 
+});
+
 
     const openCreateModal = () => {
         reset();
