@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Head, useForm, router } from '@inertiajs/react';
 import { Plus, Edit, Trash2, Eye, MapPin, Calendar, DollarSign } from 'lucide-react';
@@ -50,6 +50,9 @@ export default function Projets({ projets, users }: Props) {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [editingProjet, setEditingProjet] = useState<Projet | null>(null);
     const [deletingProjet, setDeletingProjet] = useState<Projet | null>(null);
+    const mapRef = useRef<HTMLDivElement>(null);
+    const mapInstanceRef = useRef<any>(null);
+    const markerRef = useRef<any>(null);
 
  type FormData = {
     nom: string;
@@ -85,6 +88,90 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
     type_projet: 'suivi', 
 });
 
+    // Initialize map when modal opens
+    useEffect(() => {
+        if (showModal && mapRef.current && !mapInstanceRef.current) {
+            // Load Leaflet dynamically
+            const loadLeaflet = async () => {
+                const L = await import('leaflet');
+                
+                // Fix for default markers
+                delete (L.Icon.Default.prototype as any)._getIconUrl;
+                L.Icon.Default.mergeOptions({
+                    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+                    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+                });
+
+                // Default center (France)
+                const lat = data.latitude ? parseFloat(data.latitude) : 46.603354;
+                const lng = data.longitude ? parseFloat(data.longitude) : 1.888334;
+
+                mapInstanceRef.current = L.map(mapRef.current).setView([lat, lng], 6);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: ' &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(mapInstanceRef.current);
+
+                // Add marker if coordinates exist
+                if (data.latitude && data.longitude) {
+                    markerRef.current = L.marker([parseFloat(data.latitude), parseFloat(data.longitude)])
+                        .addTo(mapInstanceRef.current);
+                }
+
+                // Handle map clicks
+                mapInstanceRef.current.on('click', (e: any) => {
+                    const { lat, lng } = e.latlng;
+                    
+                    // Update form data
+                    setData('latitude', lat.toString());
+                    setData('longitude', lng.toString());
+
+                    // Remove existing marker
+                    if (markerRef.current) {
+                        mapInstanceRef.current.removeLayer(markerRef.current);
+                    }
+
+                    // Add new marker
+                    markerRef.current = L.marker([lat, lng]).addTo(mapInstanceRef.current);
+
+                    // Get address (reverse geocoding)
+                    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.display_name) {
+                                setData('lieu_realisation', data.display_name);
+                            }
+                        })
+                        .catch(console.error);
+                });
+            };
+
+            loadLeaflet();
+        }
+
+        // Cleanup map when modal closes
+        if (!showModal && mapInstanceRef.current) {
+            mapInstanceRef.current.remove();
+            mapInstanceRef.current = null;
+            markerRef.current = null;
+        }
+    }, [showModal]);
+
+    // Update marker when coordinates change
+    useEffect(() => {
+        if (mapInstanceRef.current && data.latitude && data.longitude) {
+            const lat = parseFloat(data.latitude);
+            const lng = parseFloat(data.longitude);
+
+            if (markerRef.current) {
+                mapInstanceRef.current.removeLayer(markerRef.current);
+            }
+
+            markerRef.current = (window as any).L?.marker([lat, lng]).addTo(mapInstanceRef.current);
+            mapInstanceRef.current.setView([lat, lng], 10);
+        }
+    }, [data.latitude, data.longitude]);
 
     const openCreateModal = () => {
         reset();
@@ -210,6 +297,14 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Gestion des Projets - Ressources Humaines" />
+            
+            {/* Load Leaflet CSS */}
+            <link
+                rel="stylesheet"
+                href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+                integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
+                crossOrigin=""
+            />
             
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-6">
                 {/* Header */}
@@ -581,32 +676,36 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                                         {errors.lieu_realisation && <div className="text-red-500 text-sm mt-1">{errors.lieu_realisation}</div>}
                                     </div>
 
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Latitude
+                                    {/* Localisation par carte */}
+                                    <div className="md:col-span-2">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Localisation du projet (cliquez sur la carte pour sélectionner)
                                         </label>
-                                        <input
-                                            type="number"
-                                            step="any"
-                                            value={data.latitude}
-                                            onChange={(e) => setData('latitude', e.target.value)}
-                                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                        <div
+                                            ref={mapRef}
+                                            className="w-full h-64 border-2 border-gray-300 rounded-md"
+                                            style={{ minHeight: '300px' }}
                                         />
-                                        {errors.latitude && <div className="text-red-500 text-sm mt-1">{errors.latitude}</div>}
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Longitude
-                                        </label>
-                                        <input
-                                            type="number"
-                                            step="any"
-                                            value={data.longitude}
-                                            onChange={(e) => setData('longitude', e.target.value)}
-                                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                        />
-                                        {errors.longitude && <div className="text-red-500 text-sm mt-1">{errors.longitude}</div>}
+                                        <div className="mt-2 grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs text-gray-500">Latitude</label>
+                                                <input
+                                                    type="text"
+                                                    value={data.latitude}
+                                                    readOnly
+                                                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-gray-500">Longitude</label>
+                                                <input
+                                                    type="text"
+                                                    value={data.longitude}
+                                                    readOnly
+                                                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm"
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div>
