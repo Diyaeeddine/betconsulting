@@ -9,6 +9,7 @@ use App\Models\Vehicule;
 use App\Models\Materiel;
 use App\Models\Salarie;
 use App\Models\Progression;
+use App\Models\Profil;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -31,13 +32,11 @@ class RessourcesHumainesController extends Controller
 
     public function tracking()
     {
-        // Récupérer les projets avec leurs relations depuis la BDD
         $projetsFromDB = Projet::with(['responsable', 'salaries'])
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->get();
 
-        // Transformer les projets de la BDD au format attendu par le frontend
         $dynamicTrackingPoints = $projetsFromDB->map(function($projet, $index) {
             return [
                 'id' => $projet->id,
@@ -48,11 +47,11 @@ class RessourcesHumainesController extends Controller
                     'lng' => (float)$projet->longitude
                 ],
                 'status' => $this->convertStatus($projet->statut),
-                'distance' => rand(15, 50) . 'km', // Distance calculée ou aléatoire
+                'distance' => rand(15, 50) . 'km', 
                 'estimatedTime' => $this->getEstimatedTime($projet),
                 'projectManager' => [
                     'name' => $projet->responsable->name ?? 'Non assigné',
-                    'phone' => '+212 6 12 34 56 78', // Vous pouvez ajouter ce champ au model User
+                    'phone' => '+212 6 12 34 56 78', 
                 ],
                 'currentVehicle' => $this->generateVehicleInfo(),
                 'vehicles' => $this->generateVehiclesList(),
@@ -218,7 +217,7 @@ class RessourcesHumainesController extends Controller
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($progression) {
-                // Ajouter valide_par_user pour correspondre au React
+
                 $progression->valide_par_user = $progression->validePar;
                 return $progression;
             });
@@ -239,33 +238,28 @@ class RessourcesHumainesController extends Controller
             $validated = $request->validate([
                 'projet_id' => 'required|exists:projets,id',
                 'description_progress' => 'required|string|max:1000',
-                'progress_file' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,gif,txt,xlsx,xls|max:10240', // Max 10MB
-                'statut' => 'required|in:valide,en_attente,rejete', // Correspond à la migration
+                'progress_file' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,gif,txt,xlsx,xls|max:10240', 
+                'statut' => 'required|in:valide,en_attente,rejete', 
                 'date_validation' => 'nullable|date',
                 'pourcentage' => 'required|numeric|min:0|max:100',
                 'commentaire' => 'nullable|string|max:1000',
                 'valide_par' => 'nullable|exists:users,id',
             ]);
 
-            // Gestion de l'upload du fichier
             if ($request->hasFile('progress_file')) {
                 $file = $request->file('progress_file');
                 
-                // Nettoyer le nom du fichier pour éviter les problèmes
                 $originalName = $file->getClientOriginalName();
                 $cleanName = preg_replace('/[^a-zA-Z0-9\-_\.]/', '_', $originalName);
                 $fileName = time() . '_' . $cleanName;
                 
-                // Stocker le fichier dans storage/app/public/progress-files
                 $filePath = $file->storeAs('progress-files', $fileName, 'public');
                 
                 $validated['progress'] = $filePath;
             }
 
-            // Supprimer progress_file des données validées
             unset($validated['progress_file']);
 
-            // Convertir les valeurs vides en null
             if (empty($validated['date_validation'])) {
                 $validated['date_validation'] = null;
             }
@@ -618,76 +612,57 @@ class RessourcesHumainesController extends Controller
 
 
    public function Users()
-{
-    // Auth + role checks
-    if (!Auth::check()) {
-        return redirect('/');
-    }
+    {
+        // Get all projects
+        $projects = Projet::select('id', 'nom')->get();
 
-    $user = Auth::user();
-    if (!$user->hasRole('ressources-humaines') && !$user->hasRole('admin')) {
-        abort(403, 'You do not have permission to view this page.');
-    }
+        // Get all users and eager load their profils and vehicules
+        $users = Salarie::with(['profils', 'vehicule'])->get();
 
-    // Get all projects
-    $projects = Projet::select('id', 'nom')->get();
-
-    // Get all users and eager load their profils and vehicules
-    $users = Salarie::with(['profils', 'vehicule'])->get();
-
-    // Add projects_count, profil_string, and attach vehicule
+        // Add projects_count, profil_string, and attach vehicule
         $users->transform(function ($user) {
-        // Projects
-        $projectIds = $user->projet_ids;
+            // Projects
+            $projectIds = $user->projet_ids;
 
-        if (is_string($projectIds)) {
-            $projectIds = json_decode($projectIds, true) ?? [];
-        } elseif (!is_array($projectIds)) {
-            $projectIds = [];
-        }
+            if (is_string($projectIds)) {
+                $projectIds = json_decode($projectIds, true) ?? [];
+            } elseif (!is_array($projectIds)) {
+                $projectIds = [];
+            }
 
-        $user->projects_count = count($projectIds);
+            $user->projects_count = count($projectIds);
 
-        // Profils
-        $profilStrings = $user->profils->map(function ($profil) {
-            return "{$profil->poste_profil} - {$profil->nom_profil}";
+            // Profils
+            $profilStrings = $user->profils->map(function ($profil) {
+                return "{$profil->poste_profil} - {$profil->nom_profil}";
+            });
+
+            $user->profil_string = $profilStrings->implode(', ');
+
+            // Add vehicule safely without modifying the relationship
+            $user->vehicule_data = $user->vehicule ?? null;
+
+            return $user;
         });
 
-        $user->profil_string = $profilStrings->implode(', ');
+        // Hide sensitive fields
+        $users->makeHidden(['password']);
 
-        // Add vehicule safely without modifying the relationship
-        $user->vehicule_data = $user->vehicule ?? null;
+        if (request()->wantsJson()) {
+            return response()->json([
+                'projects' => $projects,
+                'users'    => $users,
+            ]);
+        }
 
-        return $user;
-    });
-
-    // Hide sensitive fields
-    $users->makeHidden(['password']);
-
-    if (request()->wantsJson()) {
-        return response()->json([
+        return Inertia::render('ressources-humaines/Users', [
             'projects' => $projects,
             'users'    => $users,
         ]);
     }
 
-    return Inertia::render('ressources-humaines/Users', [
-        'projects' => $projects,
-        'users'    => $users,
-    ]);
-}
-
     public function getUserProjects(Salarie $salarie)
     {
-        // Auth + role checks...
-        if (!Auth::check()) {
-            return redirect('/');
-        }
-        $user = Auth::user();
-        if (!$user->hasRole('ressources-humaines') && !$user->hasRole('admin')) {
-            abort(403, 'You do not have permission to view this page.');
-        }
-
         $projetIds = $salarie->projet_ids ?? [];
 
         if (empty($projetIds)) {
@@ -701,15 +676,6 @@ class RessourcesHumainesController extends Controller
 
     public function getProjetSalaries(Projet $projet)
     {
-        // Auth + role checks...
-        if (!Auth::check()) {
-            return redirect('/');
-        }
-        $user = Auth::user();
-        if (!$user->hasRole('ressources-humaines') && !$user->hasRole('admin')) {
-            abort(403, 'You do not have permission to view this page.');
-        }
-
         $salarieIds = $projet->salarie_ids ?? [];
 
         if (empty($salarieIds)) {
@@ -723,15 +689,6 @@ class RessourcesHumainesController extends Controller
 
     public function getProjects()
     {
-        // Auth + role checks...
-        if (!Auth::check()) {
-            return redirect('/');
-        }
-        $user = Auth::user();
-        if (!$user->hasRole('ressources-humaines') && !$user->hasRole('admin')) {
-            abort(403, 'You do not have permission to view this page.');
-        }
-
         $projects = Projet::all();
 
         if (empty($projects)) {
@@ -742,60 +699,57 @@ class RessourcesHumainesController extends Controller
     }
 
     public function getUser(Salarie $user)
-    {   
+    {
         return response()->json($user);
     }
 
     public function storeUsers(Request $request)
-{
-    $validatedData = $request->validate([
-        'nom'            => 'required|string|max:255',
-        'prenom'         => 'required|string|max:255',
-        'email'          => 'required|string|email|max:255|unique:salaries',
-        'telephone'      => 'required|string|max:20',
-        'salaire_mensuel'=> 'required|numeric',
-        'date_embauche'  => 'nullable|date',
-        'nom_profil'     => 'required|in:bureau_etudes,construction,suivi_controle,support_gestion',
-        'poste_profil'   => 'required|string|max:255',
-    ]);
-
-    try {
-        $salarie = Salarie::create([
-            'nom'             => $validatedData['nom'],
-            'prenom'          => $validatedData['prenom'],
-            'email'           => $validatedData['email'],
-            'telephone'       => $validatedData['telephone'],
-            'salaire_mensuel' => $validatedData['salaire_mensuel'],
-            'date_embauche'   => $validatedData['date_embauche'] ?? null,
-            'statut'          => 'actif',
-            'projet_ids'      => json_encode([]),
+    {
+        $validatedData = $request->validate([
+            'nom'            => 'required|string|max:255',
+            'prenom'         => 'required|string|max:255',
+            'email'          => 'required|string|email|max:255|unique:salaries',
+            'telephone'      => 'required|string|max:20',
+            'salaire_mensuel'=> 'required|numeric',
+            'date_embauche'  => 'nullable|date',
+            'nom_profil'     => 'required|in:bureau_etudes,construction,suivi_controle,support_gestion',
+            'poste_profil'   => 'required|string|max:255',
         ]);
 
-        $profil = Profil::create([
-            'user_id'      => $salarie->id, // make sure FK name matches your migration/model
-            'nom_profil'   => $validatedData['nom_profil'],
-            'poste_profil' => $validatedData['poste_profil'],
-        ]);
+        try {
+            $salarie = Salarie::create([
+                'nom'             => $validatedData['nom'],
+                'prenom'          => $validatedData['prenom'],
+                'email'           => $validatedData['email'],
+                'telephone'       => $validatedData['telephone'],
+                'salaire_mensuel' => $validatedData['salaire_mensuel'],
+                'date_embauche'   => $validatedData['date_embauche'] ?? null,
+                'statut'          => 'actif',
+                'projet_ids'      => json_encode([]),
+            ]);
 
-        // Server-side logs
-        Log::info('Salarie created', ['salarie' => $salarie->toArray()]);
-        Log::info('Profil created',  ['profil'  => $profil->toArray()]);
+            $profil = Profil::create([
+                'user_id'      => $salarie->id,
+                'nom_profil'   => $validatedData['nom_profil'],
+                'poste_profil' => $validatedData['poste_profil'],
+            ]);
 
-        // Flash minimal, useful data back to Inertia
-        return redirect()->back()->with([
-            'success' => 'Employé créé avec succès.',
-            'created' => [
-                'salarie' => $salarie->only(['id','nom','prenom','email','telephone','statut']),
-                'profil'  => $profil->only(['id','user_id','nom_profil','poste_profil']),
-            ],
-        ]);
-    } catch (\Throwable $e) {
-        Log::error('Error creating user', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-        return redirect()->back()->with('error', 'Erreur lors de la création de l\'employé.');
+            Log::info('Salarie created', ['salarie' => $salarie->toArray()]);
+            Log::info('Profil created',  ['profil'  => $profil->toArray()]);
+
+            return redirect()->back()->with([
+                'success' => 'Employé créé avec succès.',
+                'created' => [
+                    'salarie' => $salarie->only(['id','nom','prenom','email','telephone','statut']),
+                    'profil'  => $profil->only(['id','user_id','nom_profil','poste_profil']),
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Error creating user', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return redirect()->back()->with('error', 'Erreur lors de la création de l\'employé.');
+        }
     }
-}
 
-    
     public function affecteGrantUser(Request $request, Salarie $salarie)
     {
         $request->validate([
@@ -806,14 +760,13 @@ class RessourcesHumainesController extends Controller
         try {
             $projet = Projet::findOrFail($request->projet_id);
 
-            // Get current arrays and ensure they are arrays
             $projetSalarieIds = $projet->salarie_ids ?? [];
             if (is_string($projetSalarieIds)) {
                 $projetSalarieIds = json_decode($projetSalarieIds, true) ?? [];
             } elseif (!is_array($projetSalarieIds)) {
                 $projetSalarieIds = [];
             }
-            
+
             $salarieProjetIds = $salarie->projet_ids ?? [];
             if (is_string($salarieProjetIds)) {
                 $salarieProjetIds = json_decode($salarieProjetIds, true) ?? [];
@@ -822,22 +775,17 @@ class RessourcesHumainesController extends Controller
             }
 
             if ($request->enable) {
-                // Add user to project if not present
                 if (!in_array($salarie->id, $projetSalarieIds)) {
                     $projetSalarieIds[] = $salarie->id;
                 }
-                // Add project to user if not present
                 if (!in_array($projet->id, $salarieProjetIds)) {
                     $salarieProjetIds[] = $projet->id;
                 }
             } else {
-                // Remove user from project
                 $projetSalarieIds = array_values(array_filter($projetSalarieIds, fn($id) => $id !== $salarie->id));
-                // Remove project from user
                 $salarieProjetIds = array_values(array_filter($salarieProjetIds, fn($id) => $id !== $projet->id));
             }
 
-            // Update both records (arrays will be automatically JSON encoded)
             $projet->salarie_ids = $projetSalarieIds;
             $projet->save();
 
@@ -853,23 +801,10 @@ class RessourcesHumainesController extends Controller
 
     public function enableDisableUser(Salarie $salarie)
     {
-        if (!Auth::check()) {
-            Log::warning('User not authenticated, redirecting to login');
-            return redirect('/');
-        }
-
-        $user = Auth::user();
-
-        if (!$user->hasRole('ressources-humaines') && !$user->hasRole('admin')) {
-            Log::warning("Access denied for user {$user->email} - insufficient role");
-            abort(403, 'You do not have permission to view this page.');
-        }
-
         try {
             if ($salarie->statut === 'actif') {
                 $salarie->statut = 'inactif';
 
-                // Remove user from all projects
                 $projets = Projet::whereJsonContains('salarie_ids', $salarie->id)->get();
 
                 foreach ($projets as $projet) {
@@ -879,7 +814,6 @@ class RessourcesHumainesController extends Controller
                     $projet->save();
                 }
 
-                // Clear user's project assignments
                 $salarie->projet_ids = json_encode([]);
             } else {
                 $salarie->statut = 'actif';
@@ -895,31 +829,19 @@ class RessourcesHumainesController extends Controller
     }
 
     public function updateUserPass(Request $request, Salarie $salarie)
-        {
-            // Auth check
-            $user = Auth::user();
-            if (!$user) {
-                return response()->json(['error' => 'Not authenticated'], 401);
-            }
+    {
+        $validated = $request->validate([
+            'new_password' => 'required|string|min:8|confirmed',
+        ]);
 
-            // Role check
-            if (!$user->hasRole('ressources-humaines') && !$user->hasRole('admin')) {
-                return response()->json(['error' => 'Forbidden'], 403);
-            }
+        try {
+            $salarie->password = Hash::make($validated['new_password']);
+            $salarie->save();
 
-            // Validation
-            $validated = $request->validate([
-                'new_password' => 'required|string|min:8|confirmed',
-            ]);
-
-            try {
-                $salarie->password = Hash::make($validated['new_password']);
-                $salarie->save();
-
-                return back()->with('success', 'Le password du salarié a été mis à jour.');
-            } catch (\Exception $e) {
-                Log::error('Error updating password: ' . $e->getMessage());
-                return back()->with('error', 'Erreur lors de la mise à jour du password.');
-            }
+            return back()->with('success', 'Le password du salarié a été mis à jour.');
+        } catch (\Exception $e) {
+            Log::error('Error updating password: ' . $e->getMessage());
+            return back()->with('error', 'Erreur lors de la mise à jour du password.');
         }
+    }
 }

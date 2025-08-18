@@ -103,11 +103,14 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
                 });
 
-                // Default center (France)
-                const lat = data.latitude ? parseFloat(data.latitude) : 46.603354;
-                const lng = data.longitude ? parseFloat(data.longitude) : 1.888334;
+                // Default center (Maroc : Rabat)
+                const lat = data.latitude ? parseFloat(data.latitude) : 31.7917;
+                const lng = data.longitude ? parseFloat(data.longitude) : -7.0926;
 
+                if (mapRef.current) {
                 mapInstanceRef.current = L.map(mapRef.current).setView([lat, lng], 6);
+                }
+
 
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: ' &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'

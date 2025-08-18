@@ -40,7 +40,7 @@ interface User {
   projects_count: number
   vehicule?: Vehicule | null
   profil: string
-
+  profil_string: string
 }
 
 interface RessourcesHumainesUsersProps {

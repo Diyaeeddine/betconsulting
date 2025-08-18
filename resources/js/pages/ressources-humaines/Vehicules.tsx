@@ -54,7 +54,6 @@ interface Props {
     salaries: Salarie[];
 }
 
-// Types de véhicules selon le modèle
 const TYPES_VEHICULES = [
     { value: 'camion', label: 'Camion' },
     { value: 'voiture', label: 'Voiture' },
@@ -73,7 +72,7 @@ export default function Vehicules({ vehicules, salaries }: Props) {
         matricule: '',
         marque: '',
         type: '',
-        etat: 'disponible' as const,
+        etat: 'disponible' ,
         cout_location_jour: '',
         date_affectation: '',
         date_disponibilite: '',
@@ -136,7 +135,6 @@ export default function Vehicules({ vehicules, salaries }: Props) {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         
-        // Préparer les données en s'assurant que les valeurs vides sont null ou converties correctement
         const formData = {
             modele: data.modele.trim(),
             matricule: data.matricule.trim(),
