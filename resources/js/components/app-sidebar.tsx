@@ -65,6 +65,11 @@ const mainNavItems: NavItem[] = [
                     href: '/ressources-humaines/progressions',
                     icon: Car,
                 },
+                    {
+      title: 'Users',
+      href: '/ressources-humaines/users',
+      icon: Users,
+    },
             ]
             : [])];
 

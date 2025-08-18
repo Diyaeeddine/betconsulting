@@ -142,6 +142,19 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
         ->name('ressources-humaines.materiels.update');
     Route::delete('/ressources-humaines/materiels/{materiel}', [RessourcesHumainesController::class, 'destroyMateriel'])
         ->name('ressources-humaines.materiels.destroy');
+
+    Route::get('/ressources-humaines/maps', [RessourcesHumainesController::class, 'Maps'])
+        ->name('maps.ressources-humaines');
+
+
+    Route::get('/ressources-humaines/users', [RessourcesHumainesController::class, 'Users'])
+        ->name('users.ressources-humaines');
+    Route::get('/users/projets', [RessourcesHumainesController::class, 'getProjects'])->name('user.projects.ressources-humaines');   
+    Route::get('/users/{user}', [RessourcesHumainesController::class, 'getUser'])->name('user.show.ressources-humaines');   
+    Route::post('/users', [RessourcesHumainesController::class, 'storeUsers'])->name('user.store.ressources-humaines');
+    Route::put('/users/{salarie}', [RessourcesHumainesController::class, 'enableDisableUser'])->name('user.update.ressources-humaines');   
+    Route::put('/userPass/{salarie}', [RessourcesHumainesController::class, 'updateUserPass'])->name('user.updatePass.ressources-humaines');   
+     Route::put('/userProjet/{salarie}', [RessourcesHumainesController::class, 'affecteGrantUser'])->name('user.updateProject.ressources-humaines');
 });
 
 // Suivi & Contrôle

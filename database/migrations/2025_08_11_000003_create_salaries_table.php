@@ -1,5 +1,4 @@
 <?php
-// database/migrations/2025_08_11_000003_create_salaries_table.php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -11,15 +10,16 @@ return new class extends Migration {
             $table->id();
             $table->string('nom');
             $table->string('prenom');
-            $table->string('poste');
             $table->string('email')->unique();
+            $table->string('password')->nullable();
             $table->string('telephone');
             $table->decimal('salaire_mensuel', 10, 2);
             $table->date('date_embauche')->nullable();
             $table->enum('statut', ['actif', 'inactif'])->default('actif');
-            $table->foreignId('projet_id')->nullable()->constrained('projets')->onDelete('set null');
+            $table->json('projet_ids')->default('[]');; // Stores related project IDs
             $table->timestamps();
         });
+
     }
 
     public function down(): void {
