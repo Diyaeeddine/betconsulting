@@ -32,6 +32,7 @@ interface User {
 }
 
 interface Salarie {
+  user: any
   id: number
   nom: string
   prenom: string
