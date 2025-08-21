@@ -10,10 +10,13 @@ import { Head } from '@inertiajs/react';
 import {
     AlertTriangle,
     BarChart3,
+    Calculator,
+    Calendar,
     CheckCircle,
     Clock,
     Download,
     Eye,
+    FileText,
     Plus,
     Search,
     Settings,
@@ -21,7 +24,9 @@ import {
     Target,
     TrendingDown,
     TrendingUp,
+    Users,
     XCircle,
+    Zap,
 } from 'lucide-react';
 import { CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
@@ -201,96 +206,91 @@ const qualityAlerts = [
 ];
 
 export default function EtudesTechniques() {
+    const kpiData = [
+        { title: 'Études en Cours', value: '28', change: '+4', icon: FileText, color: 'text-blue-600' },
+        { title: 'Taux de Validation', value: '94%', change: '+2%', icon: CheckCircle, color: 'text-green-600' },
+        { title: 'Délai Moyen', value: '18j', change: '-3j', icon: Clock, color: 'text-purple-600' },
+        { title: 'Charge Équipe', value: '87%', change: '+5%', icon: Users, color: 'text-orange-600' },
+    ];
+
+    const projectsStatus = [
+        { name: 'En Attente', value: 5, color: '#fbbf24' },
+        { name: 'En Cours', value: 18, color: '#3b82f6' },
+        { name: 'En Révision', value: 8, color: '#f59e0b' },
+        { name: 'Validées', value: 12, color: '#10b981' },
+        { name: 'Livrées', value: 7, color: '#6b7280' },
+    ];
+
+    const workloadData = [
+        { week: 'S22', structural: 85, hydraulic: 70, electrical: 90, geotechnical: 60 },
+        { week: 'S23', structural: 90, hydraulic: 75, electrical: 85, geotechnical: 65 },
+        { week: 'S24', structural: 88, hydraulic: 80, electrical: 92, geotechnical: 70 },
+        { week: 'S25', structural: 92, hydraulic: 85, electrical: 88, geotechnical: 75 },
+        { week: 'S26', structural: 87, hydraulic: 78, electrical: 95, geotechnical: 68 },
+    ];
+
+    const studyTypes = [
+        { type: 'Structure Béton', count: 12, avgDuration: 15, complexity: 'Élevée' },
+        { type: 'VRD', count: 8, avgDuration: 12, complexity: 'Moyenne' },
+        { name: 'Électricité', count: 6, avgDuration: 8, complexity: 'Faible' },
+        { type: 'Géotechnique', count: 4, avgDuration: 20, complexity: 'Élevée' },
+    ];
+
+    const urgentProjects = [
+        { name: 'Résidence Les Jardins', deadline: '2024-07-15', progress: 75, priority: 'Haute' },
+        { name: 'Centre Commercial Nord', deadline: '2024-07-20', progress: 60, priority: 'Moyenne' },
+        { name: 'Usine Pharmaceutique', deadline: '2024-07-25', progress: 85, priority: 'Haute' },
+    ];
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Dashboard Qualité & Audit Technique" />
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                {/* Header */}
-                <div className="mb-6 flex items-center justify-between">
+            <div className="min-h-screen space-y-6 bg-gray-50 p-6">
+                <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Dashboard Qualité & Audit Technique</h1>
-                        <p className="text-muted-foreground">Suivi des indicateurs qualité et gestion des audits</p>
+                        <h1 className="text-3xl font-bold text-gray-900">Études Techniques</h1>
+                        <p className="text-gray-600">Suivi des études et charge de travail</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm">
-                            <Download className="mr-2 h-4 w-4" />
-                            Rapport Qualité
-                        </Button>
-                        <Button size="sm">
-                            <Plus className="mr-2 h-4 w-4" />
-                            Nouvel Audit
-                        </Button>
-                    </div>
+                    <Badge variant="outline" className="px-3 py-1">
+                        <Zap className="mr-2 h-4 w-4" />
+                        Bureau d'Études
+                    </Badge>
                 </div>
 
-                {/* KPI Cards */}
-                <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    {qualityKpis.map((kpi, index) => (
-                        <Card key={index}>
+                {/* KPIs principaux */}
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+                    {kpiData.map((kpi, index) => (
+                        <Card key={index} className="transition-shadow hover:shadow-lg">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">{kpi.title}</CardTitle>
-                                <kpi.icon className="h-4 w-4 text-muted-foreground" />
+                                <CardTitle className="text-sm font-medium text-gray-600">{kpi.title}</CardTitle>
+                                <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
                             </CardHeader>
                             <CardContent>
                                 <div className="text-2xl font-bold">{kpi.value}</div>
-                                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                    <div className="flex items-center">
-                                        {kpi.trend === 'up' ? (
-                                            <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
-                                        ) : (
-                                            <TrendingDown className="mr-1 h-3 w-3 text-red-500" />
-                                        )}
-                                        <span className={kpi.trend === 'up' ? 'text-green-500' : 'text-red-500'}>{kpi.change}</span>
-                                        <span className="ml-1">{kpi.description}</span>
-                                    </div>
-                                    <span className="rounded bg-muted px-2 py-1 text-xs">Cible: {kpi.target}</span>
-                                </div>
+                                <p className={`text-xs ${kpi.color}`}>{kpi.change} vs période précédente</p>
                             </CardContent>
                         </Card>
                     ))}
                 </div>
 
-                {/* Charts Section */}
-                <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-                    <Card className="col-span-4">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    {/* Statut des Projets */}
+                    <Card>
                         <CardHeader>
-                            <CardTitle>Tendances Qualité</CardTitle>
-                            <CardDescription>Évolution des indicateurs qualité sur 6 mois</CardDescription>
-                        </CardHeader>
-                        <CardContent className="pl-2">
-                            <ResponsiveContainer width="100%" height={350}>
-                                <LineChart data={qualityTrends}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="month" />
-                                    <YAxis />
-                                    <Tooltip />
-                                    <Line type="monotone" dataKey="conformite" stroke="#22c55e" name="Conformité (%)" strokeWidth={2} />
-                                    <Line type="monotone" dataKey="defauts" stroke="#ef4444" name="Défauts" strokeWidth={2} />
-                                    <Line type="monotone" dataKey="audits" stroke="#3b82f6" name="Audits" strokeWidth={2} />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="col-span-3">
-                        <CardHeader>
-                            <CardTitle>Types d'Audits</CardTitle>
-                            <CardDescription>Répartition des audits par type</CardDescription>
+                            <CardTitle>Statut des Études</CardTitle>
+                            <CardDescription>Répartition par état d'avancement</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <ResponsiveContainer width="100%" height={350}>
+                            <ResponsiveContainer width="100%" height={300}>
                                 <PieChart>
                                     <Pie
-                                        data={auditTypes}
+                                        data={projectsStatus}
                                         cx="50%"
                                         cy="50%"
-                                        labelLine={false}
-                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                                         outerRadius={80}
                                         fill="#8884d8"
                                         dataKey="value"
+                                        label={({ name, value }) => `${name}: ${value}`}
                                     >
-                                        {auditTypes.map((entry, index) => (
+                                        {projectsStatus.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={entry.color} />
                                         ))}
                                     </Pie>
@@ -299,260 +299,96 @@ export default function EtudesTechniques() {
                             </ResponsiveContainer>
                         </CardContent>
                     </Card>
+
+                    {/* Charge de Travail par Spécialité */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Charge de Travail par Spécialité</CardTitle>
+                            <CardDescription>Pourcentage d'occupation par semaine</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <LineChart data={workloadData}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="week" />
+                                    <YAxis />
+                                    <Tooltip formatter={(value) => [`${value}%`, '']} />
+                                    <Line type="monotone" dataKey="structural" stroke="#2563eb" name="Structure" />
+                                    <Line type="monotone" dataKey="hydraulic" stroke="#059669" name="Hydraulique" />
+                                    <Line type="monotone" dataKey="electrical" stroke="#dc2626" name="Électricité" />
+                                    <Line type="monotone" dataKey="geotechnical" stroke="#7c3aed" name="Géotechnique" />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
                 </div>
 
-                {/* Tabs Section */}
-                <Tabs defaultValue="audits" className="space-y-4">
-                    <TabsList>
-                        <TabsTrigger value="audits">Audits</TabsTrigger>
-                        <TabsTrigger value="nonconformities">Non-Conformités</TabsTrigger>
-                        <TabsTrigger value="alerts">Alertes Qualité</TabsTrigger>
-                        <TabsTrigger value="performance">Performance</TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="audits" className="space-y-4">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Audits en Cours</CardTitle>
-                                <CardDescription>Suivi des audits planifiés et en cours d'exécution</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>ID</TableHead>
-                                            <TableHead>Audit</TableHead>
-                                            <TableHead>Type</TableHead>
-                                            <TableHead>Statut</TableHead>
-                                            <TableHead>Progression</TableHead>
-                                            <TableHead>Auditeur</TableHead>
-                                            <TableHead>Échéance</TableHead>
-                                            <TableHead>Priorité</TableHead>
-                                            <TableHead></TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {currentAudits.map((audit, index) => (
-                                            <TableRow key={index}>
-                                                <TableCell className="font-mono text-sm">{audit.id}</TableCell>
-                                                <TableCell className="font-medium">{audit.title}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant="outline">{audit.type}</Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge
-                                                        variant={
-                                                            audit.status === 'Terminé'
-                                                                ? 'default'
-                                                                : audit.status === 'En cours'
-                                                                  ? 'secondary'
-                                                                  : 'outline'
-                                                        }
-                                                    >
-                                                        {audit.status}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center space-x-2">
-                                                        <Progress value={audit.progress} className="w-[60px]" />
-                                                        <span className="text-sm text-muted-foreground">{audit.progress}%</span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>{audit.auditor}</TableCell>
-                                                <TableCell>{audit.endDate}</TableCell>
-                                                <TableCell>
-                                                    <Badge
-                                                        variant={
-                                                            audit.priority === 'Haute'
-                                                                ? 'destructive'
-                                                                : audit.priority === 'Moyenne'
-                                                                  ? 'secondary'
-                                                                  : 'outline'
-                                                        }
-                                                    >
-                                                        {audit.priority}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Button variant="ghost" size="sm">
-                                                        <Eye className="h-4 w-4" />
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
-
-                    <TabsContent value="nonconformities" className="space-y-4">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Non-Conformités</CardTitle>
-                                <CardDescription>Gestion des non-conformités et actions correctives</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>ID</TableHead>
-                                            <TableHead>Description</TableHead>
-                                            <TableHead>Sévérité</TableHead>
-                                            <TableHead>Département</TableHead>
-                                            <TableHead>Statut</TableHead>
-                                            <TableHead>Assigné à</TableHead>
-                                            <TableHead>Échéance</TableHead>
-                                            <TableHead></TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {nonConformities.map((nc, index) => (
-                                            <TableRow key={index}>
-                                                <TableCell className="font-mono text-sm">{nc.id}</TableCell>
-                                                <TableCell className="font-medium">{nc.title}</TableCell>
-                                                <TableCell>
-                                                    <Badge
-                                                        variant={
-                                                            nc.severity === 'Critique'
-                                                                ? 'destructive'
-                                                                : nc.severity === 'Majeure'
-                                                                  ? 'secondary'
-                                                                  : 'outline'
-                                                        }
-                                                    >
-                                                        {nc.severity}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>{nc.department}</TableCell>
-                                                <TableCell>
-                                                    <Badge
-                                                        variant={
-                                                            nc.status === 'Fermée'
-                                                                ? 'default'
-                                                                : nc.status === 'En cours'
-                                                                  ? 'secondary'
-                                                                  : 'destructive'
-                                                        }
-                                                    >
-                                                        {nc.status}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>{nc.assignee}</TableCell>
-                                                <TableCell>{nc.dueDate}</TableCell>
-                                                <TableCell>
-                                                    <Button variant="ghost" size="sm">
-                                                        <Settings className="h-4 w-4" />
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
-
-                    <TabsContent value="alerts" className="space-y-4">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Alertes Qualité</CardTitle>
-                                <CardDescription>Notifications importantes concernant la qualité</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {qualityAlerts.map((alert, index) => (
-                                    <div key={index} className="flex items-start space-x-4 rounded-lg border p-4">
-                                        {alert.type === 'critical' && <XCircle className="mt-0.5 h-5 w-5 text-red-500" />}
-                                        {alert.type === 'warning' && <AlertTriangle className="mt-0.5 h-5 w-5 text-yellow-500" />}
-                                        {alert.type === 'success' && <CheckCircle className="mt-0.5 h-5 w-5 text-green-500" />}
-                                        {alert.type === 'info' && <Clock className="mt-0.5 h-5 w-5 text-blue-500" />}
-                                        <div className="flex-1">
-                                            <div className="flex items-center justify-between">
-                                                <h4 className="font-medium">{alert.title}</h4>
-                                                <Badge variant="outline" className="text-xs">
-                                                    {alert.department}
-                                                </Badge>
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    {/* Types d'Études */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Types d'Études en Cours</CardTitle>
+                            <CardDescription>Répartition par spécialité technique</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-4">
+                                {studyTypes.map((study, index) => (
+                                    <div key={index} className="flex items-center justify-between rounded-lg bg-gray-50 p-3">
+                                        <div className="flex items-center space-x-3">
+                                            <Calculator className="h-6 w-6 text-blue-600" />
+                                            <div>
+                                                <h3 className="font-semibold">{study.type}</h3>
+                                                <p className="text-sm text-gray-600">{study.count} études actives</p>
                                             </div>
-                                            <p className="text-sm text-muted-foreground">{alert.description}</p>
-                                            <p className="mt-1 text-xs text-muted-foreground">{alert.time}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <Badge
+                                                variant={
+                                                    study.complexity === 'Élevée'
+                                                        ? 'destructive'
+                                                        : study.complexity === 'Moyenne'
+                                                          ? 'default'
+                                                          : 'secondary'
+                                                }
+                                            >
+                                                {study.complexity}
+                                            </Badge>
+                                            <p className="mt-1 text-sm text-gray-600">{study.avgDuration}j moyen</p>
                                         </div>
                                     </div>
                                 ))}
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
+                            </div>
+                        </CardContent>
+                    </Card>
 
-                    <TabsContent value="performance" className="space-y-4">
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Objectifs Qualité</CardTitle>
-                                    <CardDescription>Progression vers les objectifs qualité 2024</CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-sm font-medium">Taux de Conformité</span>
-                                            <span className="text-sm text-muted-foreground">94.2% / 95%</span>
+                    {/* Projets Urgents */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Projets Prioritaires</CardTitle>
+                            <CardDescription>Études nécessitant une attention particulière</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-4">
+                                {urgentProjects.map((project, index) => (
+                                    <div key={index} className="rounded-lg border p-4">
+                                        <div className="mb-2 flex items-center justify-between">
+                                            <h3 className="font-semibold">{project.name}</h3>
+                                            <Badge variant={project.priority === 'Haute' ? 'destructive' : 'default'}>{project.priority}</Badge>
                                         </div>
-                                        <Progress value={94.2} />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-sm font-medium">Audits Planifiés</span>
-                                            <span className="text-sm text-muted-foreground">47 / 60</span>
+                                        <div className="mb-2 flex items-center space-x-2 text-sm text-gray-600">
+                                            <Calendar className="h-4 w-4" />
+                                            <span>Échéance: {project.deadline}</span>
                                         </div>
-                                        <Progress value={78.3} />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-sm font-medium">Actions Correctives</span>
-                                            <span className="text-sm text-muted-foreground">89% / 90%</span>
+                                        <div className="flex items-center space-x-2">
+                                            <Progress value={project.progress} className="flex-1" />
+                                            <span className="text-sm font-medium">{project.progress}%</span>
                                         </div>
-                                        <Progress value={89} />
                                     </div>
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-sm font-medium">Satisfaction Client</span>
-                                            <span className="text-sm text-muted-foreground">4.2 / 4.5</span>
-                                        </div>
-                                        <Progress value={93.3} />
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Indicateurs Clés</CardTitle>
-                                    <CardDescription>Métriques importantes du mois</CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="flex items-center justify-between rounded border p-3">
-                                        <div>
-                                            <p className="text-sm font-medium">Temps moyen audit</p>
-                                            <p className="text-2xl font-bold text-blue-600">12.5j</p>
-                                        </div>
-                                        <BarChart3 className="h-8 w-8 text-blue-500" />
-                                    </div>
-                                    <div className="flex items-center justify-between rounded border p-3">
-                                        <div>
-                                            <p className="text-sm font-medium">Coût qualité</p>
-                                            <p className="text-2xl font-bold text-orange-600">2.1%</p>
-                                        </div>
-                                        <Target className="h-8 w-8 text-orange-500" />
-                                    </div>
-                                    <div className="flex items-center justify-between rounded border p-3">
-                                        <div>
-                                            <p className="text-sm font-medium">Réclamations clients</p>
-                                            <p className="text-2xl font-bold text-green-600">-15%</p>
-                                        </div>
-                                        <TrendingDown className="h-8 w-8 text-green-500" />
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </div>
-                    </TabsContent>
-                </Tabs>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
         </AppLayout>
     );

@@ -3,13 +3,11 @@ import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
-import { UserPlus } from "lucide-react"
-
+import { FolderKanban, LayoutDashboard, TrendingUp, UserPlus } from "lucide-react"
 import { Link, usePage } from '@inertiajs/react';
-import { LayoutGrid } from 'lucide-react';
 import BetconsultingDashLogo from './betconsulting-dash-logo';
-import {
-  Users, Route, Car, Wrench} from "lucide-react"
+import { Users, Route, Car, Wrench} from "lucide-react"
+import { Notifications } from './ui/notifications';
 
 export function AppSidebar() {
     const { auth } = usePage<SharedData>().props;
@@ -35,58 +33,58 @@ export function AppSidebar() {
         {
             title: 'Dashboard',
             href: dashboardHref,
-            icon: LayoutGrid,
+            icon: LayoutDashboard,
         },
 
         // Ressources Humaines
         ...(auth?.user?.role === 'ressources-humaines'
             ? [
-                {
-                    title: 'Tracking',
-                    href: '/ressources-humaines/tracking',
-                    icon: LayoutGrid, 
-                },
-                {
-                    title: 'Projets',
-                    href: '/ressources-humaines/projets',
-                    icon: Users,
-                },
-                {
-                    title: 'Véhicules',
-                    href: '/ressources-humaines/vehicules',
-                    icon: Car,
-                },
-                {
-                    title: 'Matériels',
-                    href: '/ressources-humaines/materiels',
-                    icon: Wrench,
-                },
-                {
-                    title: 'Progressions',
-                    href: '/ressources-humaines/progressions',
-                    icon: Route,
-                },
-                {
-                    title: 'Accès',
-                    href: '/ressources-humaines/access',
-                    icon: UserPlus,
-                },
-            ]
-            : [])
+                  {
+                      title: 'Tracking',
+                      href: '/ressources-humaines/tracking',
+                      icon: Route,
+                  },
+                  {
+                      title: 'Projets',
+                      href: '/ressources-humaines/projets',
+                      icon: FolderKanban,
+                  },
+                  {
+                      title: 'Véhicules',
+                      href: '/ressources-humaines/vehicules',
+                      icon: Car,
+                  },
+                  {
+                      title: 'Matériels',
+                      href: '/ressources-humaines/materiels',
+                      icon: Wrench,
+                  },
+                  {
+                      title: 'Progressions',
+                      href: '/ressources-humaines/progressions',
+                      icon: TrendingUp,
+                  },
+                  {
+                      title: 'Accès',
+                      href: '/ressources-humaines/access',
+                      icon: UserPlus,
+                  },
+              ]
+            : []),
     ];
 
     return (
         <Sidebar collapsible="icon" variant="floating">
-            <SidebarHeader>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" asChild>
-                            <Link href={dashboardHref} prefetch className="flex w-full items-center justify-center">
-                                <BetconsultingDashLogo className="w-[140px]" />
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                </SidebarMenu>
+            <SidebarHeader className="relative z-10">
+                <div className="flex w-full items-center justify-between px-2">
+                    <SidebarMenuButton size="lg" asChild className="w-auto p-0">
+                        <Link href={dashboardHref} prefetch>
+                            <BetconsultingDashLogo className="w-[140px]" />
+                        </Link>
+                    </SidebarMenuButton>
+
+                    <Notifications />
+                </div>
             </SidebarHeader>
 
             <SidebarContent>

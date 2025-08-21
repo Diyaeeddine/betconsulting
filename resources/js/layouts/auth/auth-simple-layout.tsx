@@ -1,4 +1,5 @@
-import BetconsultingLogo from '@/components/betconsulting-logo';
+// import BetconsultingLogo from '@/components/betconsulting-logo';
+import BtpconsultingDarkLogo from '@/components/btpconsulting-logo-dark';
 import { Link } from '@inertiajs/react';
 import { type PropsWithChildren } from 'react';
 
@@ -15,8 +16,10 @@ export default function AuthSimpleLayout({ children, title, description }: Props
                 <div className="flex flex-col gap-8">
                     <div className="flex flex-col items-center">
                         <Link href={route('home')} className="flex flex-col items-center">
-                            <div className="mb-1 flex h-[100px] w-[198px] items-center justify-center">
-                                <BetconsultingLogo />
+                            <div className="mb-1 mb-5 flex h-[100px] w-[198px] items-center justify-center">
+                                <BtpconsultingDarkLogo className="overflow-hidden rounded-tl-[0px] rounded-tr-[35px] rounded-br-[0px] rounded-bl-[35px]" />
+
+                                {/* <BtpconsultingDarkLogo className="overflow-hidden rounded-tl-[0px] rounded-tr-[50px] rounded-br-[0px] rounded-bl-[50px] border border-gray-200 shadow-lg" /> */}
                             </div>
                         </Link>
 

@@ -54,39 +54,39 @@ export default function Projets({ projets, users }: Props) {
     const mapInstanceRef = useRef<any>(null);
     const markerRef = useRef<any>(null);
 
- type FormData = {
-    nom: string;
-    description: string;
-    budget_total: string;
-    budget_utilise: string;
-    date_debut: string;
-    date_fin: string;
-    statut: 'en_attente' | 'en_cours' | 'termine';
-    client: string;
-    lieu_realisation: string;
-    latitude: string;
-    longitude: string;
-    radius: string;
-    responsable_id: string;
-    type_projet: 'suivi' | 'etude' | 'controle';
-};
+    type FormData = {
+        nom: string;
+        description: string;
+        budget_total: string;
+        budget_utilise: string;
+        date_debut: string;
+        date_fin: string;
+        statut: 'en_attente' | 'en_cours' | 'termine';
+        client: string;
+        lieu_realisation: string;
+        latitude: string;
+        longitude: string;
+        radius: string;
+        responsable_id: string;
+        type_projet: 'suivi' | 'etude' | 'controle';
+    };
 
-const { data, setData, post, put, processing, errors, reset } = useForm<FormData>({
-    nom: '',
-    description: '',
-    budget_total: '',
-    budget_utilise: '',
-    date_debut: '',
-    date_fin: '',
-    statut: 'en_attente', 
-    client: '',
-    lieu_realisation: '',
-    latitude: '',
-    longitude: '',
-    radius: '',
-    responsable_id: '',
-    type_projet: 'suivi', 
-});
+    const { data, setData, post, put, processing, errors, reset } = useForm<FormData>({
+        nom: '',
+        description: '',
+        budget_total: '',
+        budget_utilise: '',
+        date_debut: '',
+        date_fin: '',
+        statut: 'en_attente', 
+        client: '',
+        lieu_realisation: '',
+        latitude: '',
+        longitude: '',
+        radius: '',
+        responsable_id: '',
+        type_projet: 'suivi', 
+    });
 
     // Initialize map when modal opens
     useEffect(() => {
@@ -108,9 +108,8 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                 const lng = data.longitude ? parseFloat(data.longitude) : -7.0926;
 
                 if (mapRef.current) {
-                mapInstanceRef.current = L.map(mapRef.current).setView([lat, lng], 6);
+                    mapInstanceRef.current = L.map(mapRef.current).setView([lat, lng], 6);
                 }
-
 
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: ' &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -518,143 +517,163 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                             <form onSubmit={handleSubmit} className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">
+                                        <label htmlFor="nom" className="block text-sm font-medium text-gray-700">
                                             Nom du projet *
                                         </label>
                                         <input
+                                            id="nom"
                                             type="text"
                                             value={data.nom}
                                             onChange={(e) => setData('nom', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                                             required
+                                            aria-describedby={errors.nom ? "nom-error" : undefined}
                                         />
-                                        {errors.nom && <div className="text-red-500 text-sm mt-1">{errors.nom}</div>}
+                                        {errors.nom && <div id="nom-error" className="text-red-500 text-sm mt-1">{errors.nom}</div>}
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">
+                                        <label htmlFor="client" className="block text-sm font-medium text-gray-700">
                                             Client
                                         </label>
                                         <input
+                                            id="client"
                                             type="text"
                                             value={data.client}
                                             onChange={(e) => setData('client', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            aria-describedby={errors.client ? "client-error" : undefined}
                                         />
-                                        {errors.client && <div className="text-red-500 text-sm mt-1">{errors.client}</div>}
+                                        {errors.client && <div id="client-error" className="text-red-500 text-sm mt-1">{errors.client}</div>}
                                     </div>
 
                                     <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium text-gray-700">
+                                        <label htmlFor="description" className="block text-sm font-medium text-gray-700">
                                             Description
                                         </label>
                                         <textarea
+                                            id="description"
                                             value={data.description}
                                             onChange={(e) => setData('description', e.target.value)}
                                             rows={3}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            aria-describedby={errors.description ? "description-error" : undefined}
                                         />
-                                        {errors.description && <div className="text-red-500 text-sm mt-1">{errors.description}</div>}
+                                        {errors.description && <div id="description-error" className="text-red-500 text-sm mt-1">{errors.description}</div>}
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">
+                                        <label htmlFor="budget_total" className="block text-sm font-medium text-gray-700">
                                             Budget total *
                                         </label>
                                         <input
+                                            id="budget_total"
                                             type="number"
                                             step="0.01"
                                             value={data.budget_total}
                                             onChange={(e) => setData('budget_total', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                                             required
+                                            aria-describedby={errors.budget_total ? "budget-total-error" : undefined}
                                         />
-                                        {errors.budget_total && <div className="text-red-500 text-sm mt-1">{errors.budget_total}</div>}
+                                        {errors.budget_total && <div id="budget-total-error" className="text-red-500 text-sm mt-1">{errors.budget_total}</div>}
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">
+                                        <label htmlFor="budget_utilise" className="block text-sm font-medium text-gray-700">
                                             Budget utilisé
                                         </label>
                                         <input
+                                            id="budget_utilise"
                                             type="number"
                                             step="0.01"
                                             value={data.budget_utilise}
                                             onChange={(e) => setData('budget_utilise', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            aria-describedby={errors.budget_utilise ? "budget-utilise-error" : undefined}
                                         />
-                                        {errors.budget_utilise && <div className="text-red-500 text-sm mt-1">{errors.budget_utilise}</div>}
+                                        {errors.budget_utilise && <div id="budget-utilise-error" className="text-red-500 text-sm mt-1">{errors.budget_utilise}</div>}
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">
+                                        <label htmlFor="date_debut" className="block text-sm font-medium text-gray-700">
                                             Date de début
                                         </label>
                                         <input
+                                            id="date_debut"
                                             type="date"
                                             value={data.date_debut}
                                             onChange={(e) => setData('date_debut', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            aria-describedby={errors.date_debut ? "date-debut-error" : undefined}
                                         />
-                                        {errors.date_debut && <div className="text-red-500 text-sm mt-1">{errors.date_debut}</div>}
+                                        {errors.date_debut && <div id="date-debut-error" className="text-red-500 text-sm mt-1">{errors.date_debut}</div>}
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">
+                                        <label htmlFor="date_fin" className="block text-sm font-medium text-gray-700">
                                             Date de fin
                                         </label>
                                         <input
+                                            id="date_fin"
                                             type="date"
                                             value={data.date_fin}
                                             onChange={(e) => setData('date_fin', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            aria-describedby={errors.date_fin ? "date-fin-error" : undefined}
                                         />
-                                        {errors.date_fin && <div className="text-red-500 text-sm mt-1">{errors.date_fin}</div>}
+                                        {errors.date_fin && <div id="date-fin-error" className="text-red-500 text-sm mt-1">{errors.date_fin}</div>}
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">
+                                        <label htmlFor="statut" className="block text-sm font-medium text-gray-700">
                                             Statut *
                                         </label>
                                         <select
+                                            id="statut"
                                             value={data.statut}
                                             onChange={(e) => setData('statut', e.target.value as any)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                                             required
+                                            aria-describedby={errors.statut ? "statut-error" : undefined}
                                         >
                                             <option value="en_attente">En Attente</option>
                                             <option value="en_cours">En Cours</option>
                                             <option value="termine">Terminé</option>
                                         </select>
-                                        {errors.statut && <div className="text-red-500 text-sm mt-1">{errors.statut}</div>}
+                                        {errors.statut && <div id="statut-error" className="text-red-500 text-sm mt-1">{errors.statut}</div>}
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">
+                                        <label htmlFor="type_projet" className="block text-sm font-medium text-gray-700">
                                             Type de projet *
                                         </label>
                                         <select
+                                            id="type_projet"
                                             value={data.type_projet}
                                             onChange={(e) => setData('type_projet', e.target.value as any)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                                             required
+                                            aria-describedby={errors.type_projet ? "type-projet-error" : undefined}
                                         >
                                             <option value="suivi">Suivi</option>
                                             <option value="etude">Étude</option>
                                             <option value="controle">Contrôle</option>
                                         </select>
-                                        {errors.type_projet && <div className="text-red-500 text-sm mt-1">{errors.type_projet}</div>}
+                                        {errors.type_projet && <div id="type-projet-error" className="text-red-500 text-sm mt-1">{errors.type_projet}</div>}
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">
+                                        <label htmlFor="responsable_id" className="block text-sm font-medium text-gray-700">
                                             Responsable *
                                         </label>
                                         <select
+                                            id="responsable_id"
                                             value={data.responsable_id}
                                             onChange={(e) => setData('responsable_id', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                                             required
+                                            aria-describedby={errors.responsable_id ? "responsable-error" : undefined}
                                         >
                                             <option value="">Sélectionner un responsable</option>
                                             {users.map((user) => (
@@ -663,20 +682,22 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                                                 </option>
                                             ))}
                                         </select>
-                                        {errors.responsable_id && <div className="text-red-500 text-sm mt-1">{errors.responsable_id}</div>}
+                                        {errors.responsable_id && <div id="responsable-error" className="text-red-500 text-sm mt-1">{errors.responsable_id}</div>}
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">
+                                        <label htmlFor="lieu_realisation" className="block text-sm font-medium text-gray-700">
                                             Lieu de réalisation
                                         </label>
                                         <input
+                                            id="lieu_realisation"
                                             type="text"
                                             value={data.lieu_realisation}
                                             onChange={(e) => setData('lieu_realisation', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            aria-describedby={errors.lieu_realisation ? "lieu-error" : undefined}
                                         />
-                                        {errors.lieu_realisation && <div className="text-red-500 text-sm mt-1">{errors.lieu_realisation}</div>}
+                                        {errors.lieu_realisation && <div id="lieu-error" className="text-red-500 text-sm mt-1">{errors.lieu_realisation}</div>}
                                     </div>
 
                                     {/* Localisation par carte */}
@@ -688,41 +709,49 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                                             ref={mapRef}
                                             className="w-full h-64 border-2 border-gray-300 rounded-md"
                                             style={{ minHeight: '300px' }}
+                                            role="application"
+                                            aria-label="Carte interactive pour sélectionner la localisation du projet"
                                         />
                                         <div className="mt-2 grid grid-cols-2 gap-4">
                                             <div>
-                                                <label className="block text-xs text-gray-500">Latitude</label>
+                                                <label htmlFor="latitude" className="block text-xs text-gray-500">Latitude</label>
                                                 <input
+                                                    id="latitude"
                                                     type="text"
                                                     value={data.latitude}
                                                     readOnly
                                                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm"
+                                                    aria-label="Latitude sélectionnée"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-xs text-gray-500">Longitude</label>
+                                                <label htmlFor="longitude" className="block text-xs text-gray-500">Longitude</label>
                                                 <input
+                                                    id="longitude"
                                                     type="text"
                                                     value={data.longitude}
                                                     readOnly
                                                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm"
+                                                    aria-label="Longitude sélectionnée"
                                                 />
                                             </div>
                                         </div>
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">
+                                        <label htmlFor="radius" className="block text-sm font-medium text-gray-700">
                                             Rayon (km)
                                         </label>
                                         <input
+                                            id="radius"
                                             type="number"
                                             step="0.1"
                                             value={data.radius}
                                             onChange={(e) => setData('radius', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            aria-describedby={errors.radius ? "radius-error" : undefined}
                                         />
-                                        {errors.radius && <div className="text-red-500 text-sm mt-1">{errors.radius}</div>}
+                                        {errors.radius && <div id="radius-error" className="text-red-500 text-sm mt-1">{errors.radius}</div>}
                                     </div>
                                 </div>
 
@@ -742,9 +771,11 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                                         type="submit"
                                         disabled={processing}
                                         className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                        aria-describedby={processing ? "submit-status" : undefined}
                                     >
                                         {processing ? 'En cours...' : editingProjet ? 'Mettre à jour' : 'Créer'}
                                     </button>
+                                    {processing && <span id="submit-status" className="sr-only">Traitement en cours</span>}
                                 </div>
                             </form>
                         </div>
@@ -753,14 +784,14 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
 
                 {/* Delete Modal */}
                 {showDeleteModal && deletingProjet && (
-                    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-labelledby="delete-title">
                         <div className="bg-white rounded-lg p-6 w-full max-w-md m-4">
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                                    <Trash2 className="w-5 h-5 text-red-600" />
+                                    <Trash2 className="w-5 h-5 text-red-600" aria-hidden="true" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-medium text-gray-900">
+                                    <h3 id="delete-title" className="text-lg font-medium text-gray-900">
                                         Supprimer le projet
                                     </h3>
                                     <p className="text-sm text-gray-500">

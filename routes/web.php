@@ -16,8 +16,10 @@ use App\Http\Controllers\RessourcesHumainesController;
 use App\Http\Controllers\SuiviControleController;
 use App\Http\Controllers\SalarieController;
 use App\Http\Controllers\ScreenshotController;
-
-
+use App\Events\NewNotification;
+use App\Models\Notification;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Broadcast;
 
 
 Route::get('/', function () {
@@ -135,8 +137,7 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
     Route::get('/ressources-humaines/materiels', [RessourcesHumainesController::class, 'materiels'])
         ->name('ressources-humaines.materiels');
 
-
-    // Routes CRUD pour les projets
+        
     Route::post('/ressources-humaines/projets', [RessourcesHumainesController::class, 'store'])
         ->name('ressources-humaines.projets.store');
     Route::put('/ressources-humaines/projets/{projet}', [RessourcesHumainesController::class, 'update'])
@@ -285,6 +286,56 @@ Route::middleware(['auth'])->group(function () {
         ->name('admin.screenshots.destroy')
         ->middleware('role:admin|ressources-humaines');
 });
+
+
+
+Broadcast::routes(['middleware' => ['auth:web']]);
+
+
+Route::get('/test-pusher', function () {
+    $notif = Notification::create([
+        'user_id' => auth()->id() ?? 7,
+        'source_user_id' => auth()->id() ?? 7,
+        'titre' => 'Test Pusher',
+        'commentaire' => 'Ceci est un test temps réel',
+        'type' => 'remplir_champs',
+    ]);
+
+    event(new NewNotification($notif));
+
+    return 'Notification envoyée !';
+});
+
+
+
+
+// Broadcast::routes();
+
+
+
+// Route::get('/test-broadcast', function () {
+//     $data = [
+//         'id' => 7,
+//         'titre' => 'TEST DIRECT',
+//         'commentaire' => 'Ça vient de /test-broadcast',
+//         'created_at' => now()->toDateTimeString(),
+//     ];
+
+//     // Log pour vérifier que ça passe
+//     Log::info('Broadcasting NewNotification event', $data);
+
+//     broadcast(new NewNotification((object) $data));
+
+//     return 'Event broadcasted';
+// });
+
+
+
+
+
+
+
+
 
 require __DIR__ . '/settings.php';
 require __DIR__ . '/auth.php';
