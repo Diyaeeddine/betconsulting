@@ -9,8 +9,14 @@ use App\Models\Vehicule;
 use App\Models\Materiel;
 use App\Models\Salarie;
 use App\Models\Progression;
+use App\Models\Profil;
+use App\Mail\WelcomeEmployeeMail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\hash;
+use Illuminate\Support\Facades\Mail;
+
 
 use Inertia\Inertia;
 
@@ -29,9 +35,173 @@ class RessourcesHumainesController extends Controller
 
     public function tracking()
     {
-        return Inertia::render('ressources-humaines/Tracking');
+        $projetsFromDB = Projet::with(['responsable', 'salaries'])
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->get();
 
+        $dynamicTrackingPoints = $projetsFromDB->map(function($projet, $index) {
+            return [
+                'id' => $projet->id,
+                'title' => $projet->nom,
+                'address' => $projet->lieu_realisation ?? 'Adresse non spécifiée',
+                'position' => [
+                    'lat' => (float)$projet->latitude,
+                    'lng' => (float)$projet->longitude
+                ],
+                'status' => $this->convertStatus($projet->statut),
+                'distance' => rand(15, 50) . 'km', 
+                'estimatedTime' => $this->getEstimatedTime($projet),
+                'projectManager' => [
+                    'name' => $projet->responsable->name ?? 'Non assigné',
+                    'phone' => '+212 6 12 34 56 78', 
+                ],
+                'currentVehicle' => $this->generateVehicleInfo(),
+                'vehicles' => $this->generateVehiclesList(),
+                'employees' => $projet->salaries->map(function($salarie) {
+                    return [
+                        'name' => trim($salarie->nom . ' ' . $salarie->prenom),
+                        'role' => $salarie->fonction ?? 'Employé'
+                    ];
+                })->toArray(),
+                'fuel' => [
+                    'current' => rand(40, 90),
+                    'estimatedTime' => rand(1, 4) . 'h ' . rand(10, 59) . 'min',
+                ],
+                'timeline' => $this->generateTimeline($projet)
+            ];
+        });
+
+        return Inertia::render('ressources-humaines/Tracking', [
+            'dynamicTrackingPoints' => $dynamicTrackingPoints
+        ]);
     }
+
+    private function convertStatus($status)
+    {
+        $statusMap = [
+            'en_cours' => 'execution',
+            'termine' => 'completed',
+            'en_attente' => 'preparation'
+        ];
+        
+        return $statusMap[$status] ?? 'preparation';
+    }
+
+    private function getEstimatedTime($projet)
+    {
+        if ($projet->date_debut && $projet->date_fin) {
+            $debut = new \DateTime($projet->date_debut);
+            $fin = new \DateTime($projet->date_fin);
+            $diff = $debut->diff($fin);
+            
+            if ($diff->days > 30) {
+                return ceil($diff->days / 30) . ' mois';
+            } else if ($diff->days > 7) {
+                return ceil($diff->days / 7) . ' semaines';
+            } else {
+                return $diff->days . ' jours';
+            }
+        }
+        
+        $durations = ['1 semaine', '2 semaines', '3 semaines', '1 mois', '2 mois'];
+        return $durations[array_rand($durations)];
+    }
+
+    private function generateVehicleInfo()
+    {
+        $vehicles = [
+            [
+                'type' => 'truck',
+                'name' => 'Camion Mercedes',
+                'loadPercentage' => rand(30, 90),
+                'capacity' => '2000 Kg',
+                'currentLoad' => rand(500, 1800) . ' Kg'
+            ],
+            [
+                'type' => 'car',
+                'name' => 'Toyota Hilux',
+                'loadPercentage' => rand(20, 70),
+                'capacity' => '500 Kg',
+                'currentLoad' => rand(100, 450) . ' Kg'
+            ],
+            [
+                'type' => 'machinery',
+                'name' => 'Caterpillar 320',
+                'loadPercentage' => rand(50, 100),
+                'capacity' => 'Excavatrice',
+                'currentLoad' => 'En service'
+            ]
+        ];
+
+        return $vehicles[array_rand($vehicles)];
+    }
+
+    private function generateVehiclesList()
+    {
+        return [
+            ['type' => 'Camion', 'count' => rand(1, 3), 'status' => 'active', 'model' => 'Mercedes Actros', 'capacity' => '2000 Kg'],
+            ['type' => 'Voiture', 'count' => rand(1, 2), 'status' => 'active', 'model' => 'Toyota Hilux', 'capacity' => '500 Kg'],
+            ['type' => 'Engin', 'count' => rand(0, 2), 'status' => 'active', 'model' => 'Caterpillar 320', 'capacity' => 'N/A'],
+        ];
+    }
+
+    private function generateTimeline($projet)
+    {
+        $currentStatus = $this->convertStatus($projet->statut);
+        
+        $timeline = [
+            [
+                'status' => 'Programmation',
+                'time' => $projet->date_debut ? date('d M, H:i', strtotime($projet->date_debut)) : 'Non défini',
+                'description' => 'Projet planifié et ressources allouées.',
+                'completed' => true,
+                'delay' => null,
+            ],
+            [
+                'status' => 'Confirmation',
+                'time' => $projet->date_debut ? date('d M, H:i', strtotime($projet->date_debut . ' +2 hours')) : 'Non défini',
+                'description' => 'Projet confirmé, équipe assignée.',
+                'completed' => true,
+                'delay' => null,
+            ],
+            [
+                'status' => 'Préparation',
+                'time' => $projet->date_debut ? date('d M, H:i', strtotime($projet->date_debut . ' +1 day')) : 'Non défini',
+                'description' => 'Matériaux et équipements préparés.',
+                'completed' => in_array($currentStatus, ['execution', 'completed']),
+                'current' => $currentStatus === 'preparation',
+                'delay' => null,
+            ],
+            [
+                'status' => 'En Route',
+                'time' => 'En cours',
+                'description' => 'Équipe en déplacement vers le site.',
+                'completed' => in_array($currentStatus, ['execution', 'completed']),
+                'current' => $currentStatus === 'en-route',
+                'delay' => null,
+            ],
+            [
+                'status' => 'Exécution',
+                'time' => $currentStatus === 'execution' ? 'Maintenant' : 'Planifié',
+                'description' => 'Travaux en cours d\'exécution.',
+                'completed' => $currentStatus === 'completed',
+                'current' => $currentStatus === 'execution',
+                'delay' => $currentStatus === 'execution' ? (rand(0, 1) ? rand(10, 60) . 'min en retard' : null) : null,
+            ],
+            [
+                'status' => 'Clôture',
+                'time' => $projet->date_fin ? date('d M, H:i', strtotime($projet->date_fin)) : 'À planifier',
+                'description' => 'Rapport final et archivage.',
+                'completed' => $currentStatus === 'completed',
+                'delay' => null,
+            ],
+        ];
+
+        return $timeline;
+    }
+
+    
 
     public function projets()
     {
@@ -44,6 +214,52 @@ class RessourcesHumainesController extends Controller
         ]);
     }
 
+
+public function affecterProjets(Request $request, Salarie $salarie)
+{
+    try {
+        $validated = $request->validate([
+            'projet_ids' => 'required|array|min:1',
+            'projet_ids.*' => 'exists:projets,id'
+        ]);
+
+        $salarie->projets()->sync($validated['projet_ids']);
+
+        \Log::info('Projects assigned successfully', [
+            'salarie_id' => $salarie->id,
+            'salarie_name' => $salarie->user->name ?? 'Unknown',
+            'projet_ids' => $validated['projet_ids'],
+            'project_count' => count($validated['projet_ids'])
+        ]);
+
+        return redirect()->back()->with('success', 'Projets affectés avec succès');
+        
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        \Log::error('Validation error in affecterProjets', [
+            'errors' => $e->errors(),
+            'salarie_id' => $salarie->id,
+            'input' => $request->all()
+        ]);
+        
+        return redirect()->back()
+            ->withErrors($e->errors())
+            ->withInput();
+            
+    } catch (\Exception $e) {
+        \Log::error('Error assigning projects', [
+            'message' => $e->getMessage(),
+            'salarie_id' => $salarie->id,
+            'trace' => $e->getTraceAsString(),
+            'input' => $request->all()
+        ]);
+        
+        return redirect()->back()
+            ->with('error', 'Erreur lors de l\'affectation des projets: ' . $e->getMessage());
+    }
+}
+
+
+
     public function progressions()
     {
         $progressions = Progression::with(['projet', 'validePar' => function($query) {
@@ -52,7 +268,7 @@ class RessourcesHumainesController extends Controller
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($progression) {
-                // Ajouter valide_par_user pour correspondre au React
+
                 $progression->valide_par_user = $progression->validePar;
                 return $progression;
             });
@@ -73,33 +289,28 @@ class RessourcesHumainesController extends Controller
             $validated = $request->validate([
                 'projet_id' => 'required|exists:projets,id',
                 'description_progress' => 'required|string|max:1000',
-                'progress_file' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,gif,txt,xlsx,xls|max:10240', // Max 10MB
-                'statut' => 'required|in:valide,en_attente,rejete', // Correspond à la migration
+                'progress_file' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,gif,txt,xlsx,xls|max:10240', 
+                'statut' => 'required|in:valide,en_attente,rejete', 
                 'date_validation' => 'nullable|date',
                 'pourcentage' => 'required|numeric|min:0|max:100',
                 'commentaire' => 'nullable|string|max:1000',
                 'valide_par' => 'nullable|exists:users,id',
             ]);
 
-            // Gestion de l'upload du fichier
             if ($request->hasFile('progress_file')) {
                 $file = $request->file('progress_file');
                 
-                // Nettoyer le nom du fichier pour éviter les problèmes
                 $originalName = $file->getClientOriginalName();
                 $cleanName = preg_replace('/[^a-zA-Z0-9\-_\.]/', '_', $originalName);
                 $fileName = time() . '_' . $cleanName;
                 
-                // Stocker le fichier dans storage/app/public/progress-files
                 $filePath = $file->storeAs('progress-files', $fileName, 'public');
                 
                 $validated['progress'] = $filePath;
             }
 
-            // Supprimer progress_file des données validées
             unset($validated['progress_file']);
 
-            // Convertir les valeurs vides en null
             if (empty($validated['date_validation'])) {
                 $validated['date_validation'] = null;
             }
@@ -138,38 +349,32 @@ class RessourcesHumainesController extends Controller
             $validated = $request->validate([
                 'projet_id' => 'required|exists:projets,id',
                 'description_progress' => 'required|string|max:1000',
-                'progress_file' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,gif,txt,xlsx,xls|max:10240', // Max 10MB
-                'statut' => 'required|in:valide,en_attente,rejete', // Correspond à la migration
+                'progress_file' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,gif,txt,xlsx,xls|max:10240', 
+                'statut' => 'required|in:valide,en_attente,rejete', 
                 'date_validation' => 'nullable|date',
                 'pourcentage' => 'required|numeric|min:0|max:100',
                 'commentaire' => 'nullable|string|max:1000',
                 'valide_par' => 'nullable|exists:users,id',
             ]);
 
-            // Gestion de l'upload du fichier
             if ($request->hasFile('progress_file')) {
-                // Supprimer l'ancien fichier s'il existe
                 if ($progression->progress && Storage::disk('public')->exists($progression->progress)) {
                     Storage::disk('public')->delete($progression->progress);
                 }
                 
                 $file = $request->file('progress_file');
                 
-                // Nettoyer le nom du fichier pour éviter les problèmes
                 $originalName = $file->getClientOriginalName();
                 $cleanName = preg_replace('/[^a-zA-Z0-9\-_\.]/', '_', $originalName);
                 $fileName = time() . '_' . $cleanName;
                 
-                // Stocker le nouveau fichier
                 $filePath = $file->storeAs('progress-files', $fileName, 'public');
                 
                 $validated['progress'] = $filePath;
             }
 
-            // Supprimer progress_file des données validées
             unset($validated['progress_file']);
 
-            // Convertir les valeurs vides en null
             if (empty($validated['date_validation'])) {
                 $validated['date_validation'] = null;
             }
@@ -203,163 +408,9 @@ class RessourcesHumainesController extends Controller
         }
     }
 
-    public function access()
-{
-    $users = User::role('salarie')
-        ->with('roles')
-        ->orderBy('created_at', 'desc')
-        ->get();
-    
-    $salaries = Salarie::with('user')->orderBy('created_at', 'desc')->get();
-
-    return Inertia::render('ressources-humaines/Access', [
-        'users' => $users,
-        'salaries' => $salaries,
-    ]);
-}
-
-public function storeAccess(Request $request)
-{
-    try {
-        $validated = $request->validate([
-            'nom' => 'required|string|max:255',
-            'prenom' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
-            'telephone' => 'required|string|max:255',
-            'password' => 'required|string|min:6',
-            'poste' => 'nullable|string|max:255',
-            'salaire_mensuel' => 'nullable|numeric|min:0',
-            'date_embauche' => 'nullable|date',
-            'statut' => 'nullable|in:actif,inactif,conge,demission',
-            'projet_id' => 'nullable|exists:projets,id',
-        ]);
-
-        // Create User
-        $user = User::create([
-            'name' => $validated['prenom'] . ' ' . $validated['nom'],
-            'email' => $validated['email'],
-            'password' => bcrypt($validated['password']),
-        ]);
-
-        // Assign role
-        $user->assignRole('salarie');
-
-        // Create Salarie
-        $salarie = Salarie::create([
-            'nom' => $validated['nom'],
-            'prenom' => $validated['prenom'],
-            'email' => $validated['email'],
-            'telephone' => $validated['telephone'],
-            'poste' => $validated['poste'] ?? null,
-            'salaire_mensuel' => $validated['salaire_mensuel'] ?? null,
-            'date_embauche' => $validated['date_embauche'] ?? null,
-            'statut' => $validated['statut'] ?? 'actif',
-            'projet_id' => $validated['projet_id'] ?? null,
-            'user_id' => $user->id,
-        ]);
-
-        return redirect()->back()->with('success', 'Accès créé avec succès.');
-
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        return redirect()->back()
-            ->withErrors($e->errors())
-            ->withInput();
-    } catch (\Exception $e) {
-        Log::error('Erreur création accès:', [
-            'message' => $e->getMessage(),
-            'data' => $request->all()
-        ]);
-        return redirect()->back()
-            ->with('error', 'Erreur lors de la création de l\'accès: ' . $e->getMessage())
-            ->withInput();
-    }
-}
-
-public function updateAccess(Request $request, User $user)
-{
-    try {
-        $validated = $request->validate([
-            'nom' => 'required|string|max:255',
-            'prenom' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email,' . $user->id,
-            'telephone' => 'required|string|max:255',
-            'password' => 'nullable|string|min:6',
-            'poste' => 'nullable|string|max:255',
-            'salaire_mensuel' => 'nullable|numeric|min:0',
-            'date_embauche' => 'nullable|date',
-            'statut' => 'nullable|in:actif,inactif,conge,demission',
-            'projet_id' => 'nullable|exists:projets,id',
-        ]);
-
-        // Update User
-        $userData = [
-            'name' => $validated['prenom'] . ' ' . $validated['nom'],
-            'email' => $validated['email'],
-        ];
-
-        if (!empty($validated['password'])) {
-            $userData['password'] = bcrypt($validated['password']);
-        }
-
-        $user->update($userData);
-
-        // Update or create Salarie
-        $salarie = Salarie::where('user_id', $user->id)->first();
-        
-        $salarieData = [
-            'nom' => $validated['nom'],
-            'prenom' => $validated['prenom'],
-            'email' => $validated['email'],
-            'telephone' => $validated['telephone'],
-            'poste' => $validated['poste'] ?? null,
-            'salaire_mensuel' => $validated['salaire_mensuel'] ?? null,
-            'date_embauche' => $validated['date_embauche'] ?? null,
-            'statut' => $validated['statut'] ?? 'actif',
-            'projet_id' => $validated['projet_id'] ?? null,
-            'user_id' => $user->id,
-        ];
-
-        if ($salarie) {
-            $salarie->update($salarieData);
-        } else {
-            Salarie::create($salarieData);
-        }
-
-        return redirect()->back()->with('success', 'Accès mis à jour avec succès.');
-
-    } catch (\Exception $e) {
-        Log::error('Erreur mise à jour accès:', [
-            'message' => $e->getMessage(),
-            'user_id' => $user->id
-        ]);
-        return redirect()->back()
-            ->with('error', 'Erreur lors de la mise à jour de l\'accès: ' . $e->getMessage());
-    }
-}
-
-public function destroyAccess(User $user)
-{
-    try {
-        // Delete related Salarie record
-        Salarie::where('user_id', $user->id)->delete();
-        
-        // Delete User
-        $user->delete();
-        
-        return redirect()->back()->with('success', 'Accès supprimé avec succès.');
-    } catch (\Exception $e) {
-        Log::error('Erreur suppression accès:', [
-            'message' => $e->getMessage(),
-            'user_id' => $user->id
-        ]);
-        return redirect()->back()->with('error', 'Erreur lors de la suppression de l\'accès.');
-    }
-}
-
     public function destroyProgression(Progression $progression)
     {
         try {
-            // Supprimer le fichier associé s'il existea
             if ($progression->progress && Storage::disk('public')->exists($progression->progress)) {
                 Storage::disk('public')->delete($progression->progress);
             }
@@ -413,7 +464,6 @@ public function destroyAccess(User $user)
             'cout_location' => 'nullable|numeric|min:0',
         ]);
 
-        // Validation conditionnelle
         if ($validated['statut'] === 'achete' && empty($validated['montant_achat'])) {
             return back()->withErrors(['montant_achat' => 'Le montant d\'achat est requis pour un véhicule acheté.']);
         }
@@ -450,7 +500,6 @@ public function destroyAccess(User $user)
             'cout_location' => 'nullable|numeric|min:0',
         ]);
 
-        // Validation conditionnelle
         if ($validated['statut'] === 'achete' && empty($validated['montant_achat'])) {
             return back()->withErrors(['montant_achat' => 'Le montant d\'achat est requis pour un véhicule acheté.']);
         }
@@ -500,7 +549,6 @@ public function destroyAccess(User $user)
             'cout_location' => 'nullable|numeric|min:0',
         ]);
 
-        // Validation conditionnelle
         if ($validated['statut'] === 'achete' && empty($validated['montant_achat'])) {
             return back()->withErrors(['montant_achat' => 'Le montant d\'achat est requis pour un matériel acheté.']);
         }
@@ -533,7 +581,6 @@ public function destroyAccess(User $user)
             'cout_location' => 'nullable|numeric|min:0',
         ]);
 
-        // Validation conditionnelle
         if ($validated['statut'] === 'achete' && empty($validated['montant_achat'])) {
             return back()->withErrors(['montant_achat' => 'Le montant d\'achat est requis pour un matériel acheté.']);
         }
@@ -601,5 +648,302 @@ public function destroyAccess(User $user)
     {
         $projet->delete();
         return redirect()->back()->with('success', 'Projet supprimé avec succès.');
+    }
+
+
+   public function Users()
+    {
+        $projects = Projet::select('id', 'nom')->get();
+
+        $users = Salarie::with(['profils', 'vehicule'])->get();
+
+        $users->transform(function ($user) {
+            $projectIds = $user->projet_ids;
+
+            if (is_string($projectIds)) {
+                $projectIds = json_decode($projectIds, true) ?? [];
+            } elseif (!is_array($projectIds)) {
+                $projectIds = [];
+            }
+
+            $user->projects_count = count($projectIds);
+
+            $profilStrings = $user->profils->map(function ($profil) {
+                return "{$profil->poste_profil} - {$profil->nom_profil}";
+            });
+
+            $user->profil_string = $profilStrings->implode(', ');
+
+            $user->vehicule_data = $user->vehicule ?? null;
+
+            return $user;
+        });
+
+        $users->makeHidden(['password']);
+
+        if (request()->wantsJson()) {
+            return response()->json([
+                'projects' => $projects,
+                'users'    => $users,
+            ]);
+        }
+
+        return Inertia::render('ressources-humaines/Users', [
+            'projects' => $projects,
+            'users'    => $users,
+        ]);
+    }
+
+    public function getUserProjects(Salarie $salarie)
+    {
+        $projetIds = $salarie->projet_ids ?? [];
+
+        if (empty($projetIds)) {
+            return response()->json(['message' => 'No projects found for this salarie'], 404);
+        }
+
+        $projects = Projet::whereIn('id', $projetIds)->get();
+
+        return response()->json($projects);
+    }
+
+
+
+
+
+    public function getProjects()
+    {
+        $projects = Projet::all();
+
+        if (empty($projects)) {
+            return response()->json(['message' => 'No projects found for this salarie'], 404);
+        }
+
+        return response()->json($projects);
+    }
+
+    public function getUser(Salarie $user)
+    {
+        return response()->json($user);
+    }
+
+    public function storeUsers(Request $request)
+    {
+        $validatedData = $request->validate([
+            'nom'            => 'required|string|max:255',
+            'prenom'         => 'required|string|max:255',
+            'email'          => 'required|string|email|max:255|unique:salaries',
+            'telephone'      => 'required|string|max:20',
+            'salaire_mensuel'=> 'required|numeric',
+            'date_embauche'  => 'nullable|date',
+            'nom_profil'     => 'required|in:bureau_etudes,construction,suivi_controle,support_gestion',
+            'poste_profil'   => 'required|string|max:255',
+        ]);
+
+        try {
+            $salarie = Salarie::create([
+                'nom'             => $validatedData['nom'],
+                'prenom'          => $validatedData['prenom'],
+                'email'           => $validatedData['email'],
+                'telephone'       => $validatedData['telephone'],
+                'salaire_mensuel' => $validatedData['salaire_mensuel'],
+                'date_embauche'   => $validatedData['date_embauche'] ?? null,
+                'statut'          => 'actif',
+                'projet_ids'      => json_encode([]),
+            ]);
+
+            $profil = Profil::create([
+                'user_id'      => $salarie->id,
+                'nom_profil'   => $validatedData['nom_profil'],
+                'poste_profil' => $validatedData['poste_profil'],
+            ]);
+
+            Log::info('Salarie created', ['salarie' => $salarie->toArray()]);
+            Log::info('Profil created',  ['profil'  => $profil->toArray()]);
+
+            return redirect()->back()->with([
+                'success' => 'Employé créé avec succès.',
+                'created' => [
+                    'salarie' => $salarie->only(['id','nom','prenom','email','telephone','statut']),
+                    'profil'  => $profil->only(['id','user_id','nom_profil','poste_profil']),
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Error creating user', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return redirect()->back()->with('error', 'Erreur lors de la création de l\'employé.');
+        }
+    }
+
+
+public function access() 
+{
+    $users = User::role('salarie')
+        ->with('roles')
+        ->orderBy('created_at', 'desc')
+        ->get();
+
+    // Load salaries with their many-to-many projects relationship
+    $salaries = Salarie::with(['user', 'projets'])
+        ->orderBy('created_at', 'desc')
+        ->get();
+
+    // Get all projects for the assignment dialog
+    $projets = Projet::orderBy('nom', 'asc')->get();
+
+    return Inertia::render('ressources-humaines/Access', [
+        'users' => $users,
+        'salaries' => $salaries,
+        'projets' => $projets, // This was missing in your original method
+    ]);
+}
+
+public function storeAccess(Request $request)
+{
+    try {
+        $validated = $request->validate([
+            'nom' => 'required|string|max:255',
+            'prenom' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'telephone' => 'required|string|max:255',
+            'password' => 'required|string|min:6',
+            'poste' => 'nullable|string|max:255',
+            'salaire_mensuel' => 'nullable|numeric|min:0',
+            'date_embauche' => 'nullable|date',
+            'statut' => 'nullable|in:actif,inactif,conge,demission',
+        ]);
+
+        // Store the plain password before hashing
+        $plainPassword = $validated['password'];
+
+        $user = User::create([
+            'name' => $validated['prenom'] . ' ' . $validated['nom'],
+            'email' => $validated['email'],
+            'password' => bcrypt($validated['password']),
+        ]);
+
+        $user->assignRole('salarie');
+
+        $salarie = Salarie::create([
+            'nom' => $validated['nom'],
+            'prenom' => $validated['prenom'],
+            'email' => $validated['email'],
+            'telephone' => $validated['telephone'],
+            'poste' => $validated['poste'] ?? null,
+            'salaire_mensuel' => $validated['salaire_mensuel'] ?? null,
+            'date_embauche' => $validated['date_embauche'] ?? null,
+            'statut' => $validated['statut'] ?? 'actif',
+            'user_id' => $user->id,
+        ]);
+
+        return redirect()->back()->with('success', 'Accès créé avec succès.');
+
+    } catch (\Exception $e) {
+        \Log::error('Error storing access', [
+            'message' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+            'input' => $request->all()
+        ]);
+        
+        return redirect()->back()
+            ->with('error', 'Erreur lors de la création de l\'accès: ' . $e->getMessage());
+    }
+}
+
+public function updateAccess(Request $request, User $user)
+{
+    try {
+        $validated = $request->validate([
+            'nom' => 'required|string|max:255',
+            'prenom' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email,' . $user->id,
+            'telephone' => 'required|string|max:255',
+            'password' => 'nullable|string|min:6',
+            'poste' => 'nullable|string|max:255',
+            'salaire_mensuel' => 'nullable|numeric|min:0',
+            'date_embauche' => 'nullable|date',
+            'statut' => 'nullable|in:actif,inactif,conge,demission',
+        ]);
+
+        $userData = [
+            'name' => $validated['prenom'] . ' ' . $validated['nom'],
+            'email' => $validated['email'],
+        ];
+
+        if (!empty($validated['password'])) {
+            $userData['password'] = bcrypt($validated['password']);
+        }
+
+        $user->update($userData);
+
+        $salarie = Salarie::where('user_id', $user->id)->first();
+        
+        $salarieData = [
+            'nom' => $validated['nom'],
+            'prenom' => $validated['prenom'],
+            'email' => $validated['email'],
+            'telephone' => $validated['telephone'],
+            'poste' => $validated['poste'] ?? null,
+            'salaire_mensuel' => $validated['salaire_mensuel'] ?? null,
+            'date_embauche' => $validated['date_embauche'] ?? null,
+            'statut' => $validated['statut'] ?? 'actif',
+            'user_id' => $user->id,
+        ];
+
+        if ($salarie) {
+            $salarie->update($salarieData);
+        } else {
+            Salarie::create($salarieData);
+        }
+
+        return redirect()->back()->with('success', 'Accès mis à jour avec succès.');
+
+    } catch (\Exception $e) {
+        \Log::error('Error updating access', [
+            'message' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+            'input' => $request->all()
+        ]);
+        
+        return redirect()->back()
+            ->with('error', 'Erreur lors de la mise à jour de l\'accès: ' . $e->getMessage());
+    }
+}
+
+
+public function destroyAccess(User $user)
+{
+    try {
+        Salarie::where('user_id', $user->id)->delete();
+        
+        $user->delete();
+        
+        return redirect()->back()->with('success', 'Accès supprimé avec succès.');
+    } catch (\Exception $e) {
+        Log::error('Erreur suppression accès:', [
+            'message' => $e->getMessage(),
+            'user_id' => $user->id
+        ]);
+        return redirect()->back()->with('error', 'Erreur lors de la suppression de l\'accès.');
+    }
+}
+
+
+    
+
+    public function updateUserPass(Request $request, Salarie $salarie)
+    {
+        $validated = $request->validate([
+            'new_password' => 'required|string|min:8|confirmed',
+        ]);
+
+        try {
+            $salarie->password = Hash::make($validated['new_password']);
+            $salarie->save();
+
+            return back()->with('success', 'Le password du salarié a été mis à jour.');
+        } catch (\Exception $e) {
+            Log::error('Error updating password: ' . $e->getMessage());
+            return back()->with('error', 'Erreur lors de la mise à jour du password.');
+        }
     }
 }

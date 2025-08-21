@@ -11,14 +11,11 @@ class Salarie extends Model
 
     protected $fillable = [
         'nom', 'prenom', 'poste', 'email', 'telephone',
-        'salaire_mensuel', 'date_embauche', 'statut', 'projet_id',
-        'user_id' // Add this to link with User model
+        'salaire_mensuel', 'date_embauche', 'statut',
+        'user_id'
     ];
 
-    public function projet()
-    {
-        return $this->belongsTo(Projet::class);
-    }
+    // This was conflicting with the many-to-many relationship
 
     public function vehicule()
     {
@@ -30,9 +27,19 @@ class Salarie extends Model
         return $this->hasMany(Materiel::class);
     }
 
-    // Add relationship with User
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Many-to-many relationship with Projet
+     * This allows a salarie to be assigned to multiple projects
+     */
+    public function projets()
+    {
+        return $this->belongsToMany(Projet::class, 'projet_salarie')
+                    ->withTimestamps()
+                    ->withPivot('date_affectation');
     }
 }

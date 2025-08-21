@@ -17,8 +17,7 @@ return new class extends Migration
             $table->string('telephone');
             $table->decimal('salaire_mensuel', 10, 2);
             $table->date('date_embauche')->nullable();
-            $table->enum('statut', ['actif', 'inactif'])->default('actif');
-            $table->foreignId('projet_id')->nullable()->constrained('projets')->onDelete('set null');
+            $table->enum('statut', ['actif', 'inactif', 'conge', 'demission'])->default('actif');               
             $table->foreignId('user_id')->nullable()->constrained('users')->onDelete('cascade');
             $table->timestamps();
         });

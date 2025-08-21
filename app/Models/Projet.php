@@ -1,18 +1,31 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Projet extends Model {
+class Projet extends Model
+{
     use HasFactory;
 
     protected $fillable = [
-        'nom', 'description', 'budget_total', 'budget_utilise',
-        'date_debut', 'date_fin', 'statut', 'client',
-        'lieu_realisation', 'responsable_id', 'type_projet', 
-        'latitude', 'longitude', 'radius'
+        'nom',
+        'description',
+        'budget_total',
+        'budget_utilise',
+        'date_debut',
+        'date_fin',
+        'statut',
+        'client',
+        'lieu_realisation',
+        'responsable_id',
+        'type_projet',
+        'latitude',
+        'longitude',
+        'radius'
     ];
+
 
     public function responsable() {
         return $this->belongsTo(User::class, 'responsable_id');
@@ -23,6 +36,6 @@ class Projet extends Model {
     }
 
     public function salaries() {
-        return $this->hasMany(Salarie::class);
+        return $this->belongsToMany(Salarie::class, 'projet_salarie');
     }
 }

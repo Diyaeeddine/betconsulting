@@ -14,7 +14,10 @@ use App\Http\Controllers\MarchesMarketingController;
 use App\Http\Controllers\QualiteAuditController;
 use App\Http\Controllers\RessourcesHumainesController;
 use App\Http\Controllers\SuiviControleController;
+use App\Http\Controllers\SalarieController;
 use App\Http\Controllers\ScreenshotController;
+
+
 
 
 Route::get('/', function () {
@@ -147,7 +150,39 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
     Route::post('/ressources-humaines/access', [RessourcesHumainesController::class, 'storeAccess'])->name('ressources-humaines.access.store');
     Route::put('/ressources-humaines/access/{user}', [RessourcesHumainesController::class, 'updateAccess'])->name('ressources-humaines.access.update');
     Route::delete('/ressources-humaines/access/{user}', [RessourcesHumainesController::class, 'destroyAccess'])->name('ressources-humaines.access.destroy');
+
+    Route::post('/ressources-humaines/access/{salarie}/affecter-projets', [RessourcesHumainesController::class, 'affecterProjets'])->name('ressources-humaines.access.affecter-projets');
+
 });
+
+
+
+// Add this route temporarily to test mail
+Route::get('/test-mail', function () {
+    try {
+        $user = new \App\Models\User([
+            'name' => 'Test User',
+            'email' => 'bahaeeddineghazi@gmail.com'
+        ]);
+        
+        $salarie = new \App\Models\Salarie([
+            'nom' => 'Test',
+            'prenom' => 'User',
+            'poste' => 'Developer',
+            'statut' => 'actif',
+            'date_embauche' => now()
+        ]);
+        
+        $mail = new \App\Mail\WelcomeEmployeeMail($user, $salarie, 'testpassword123');
+        \Illuminate\Support\Facades\Mail::to('your-test-email@gmail.com')->send($mail);
+        
+        return 'Test email sent successfully!';
+        
+    } catch (\Exception $e) {
+        return 'Error: ' . $e->getMessage();
+    }
+});
+
 
 // Suivi & Contrôle
 Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function () {
@@ -155,24 +190,34 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
         ->name('dashboard.suivi-controle');
 });
 
-// Route::get('/dashboard', function () {
-//     $user = auth()->user();
-//     return match (true) {
-//         $user->hasRole('admin') => redirect()->route('dashboard.direction-generale'),
-//         $user->hasRole('marches-marketing') => redirect()->route('dashboard.marches-marketing'),
-//         $user->hasRole('direction-generale') => redirect()->route('dashboard.direction-generale'),
-//         $user->hasRole('communication-digitale') => redirect()->route('dashboard.communication-digitale'),
-//         $user->hasRole('etudes-techniques') => redirect()->route('dashboard.etudes-techniques'),
-//         $user->hasRole('fournisseurs-traitants') => redirect()->route('dashboard.fournisseurs-traitants'),
-//         $user->hasRole('innovation-transition') => redirect()->route('dashboard.innovation-transition'),
-//         $user->hasRole('juridique') => redirect()->route('dashboard.juridique'),
-//         $user->hasRole('logistique-generaux') => redirect()->route('dashboard.logistique-generaux'),
-//         $user->hasRole('qualite-audit') => redirect()->route('dashboard.qualite-audit'),
-//         $user->hasRole('ressources-humaines') => redirect()->route('dashboard.ressources-humaines'),
-//         $user->hasRole('suivi-controle') => redirect()->route('dashboard.suivi-controle'),
-//         default => redirect('/'),
-//     };
-// })->middleware(['auth', 'verified'])->name('dashboard');
+
+
+// Salarie
+Route::middleware(['auth', 'verified', 'role:salarie'])->group(function () {
+    Route::get('/salarie/dashboard', [SuiviControleController::class, 'index'])
+        ->name('dashboard.salarie');
+});
+
+Route::get('/dashboard', function () {
+    $user = auth()->user();
+    return match (true) {
+        $user->hasRole('admin') => redirect()->route('dashboard.direction-generale'),
+        $user->hasRole('marches-marketing') => redirect()->route('dashboard.marches-marketing'),
+        $user->hasRole('direction-generale') => redirect()->route('dashboard.direction-generale'),
+        $user->hasRole('communication-digitale') => redirect()->route('dashboard.communication-digitale'),
+        $user->hasRole('etudes-techniques') => redirect()->route('dashboard.etudes-techniques'),
+        $user->hasRole('fournisseurs-traitants') => redirect()->route('dashboard.fournisseurs-traitants'),
+        $user->hasRole('innovation-transition') => redirect()->route('dashboard.innovation-transition'),
+        $user->hasRole('juridique') => redirect()->route('dashboard.juridique'),
+        $user->hasRole('logistique-generaux') => redirect()->route('dashboard.logistique-generaux'),
+        $user->hasRole('qualite-audit') => redirect()->route('dashboard.qualite-audit'),
+        $user->hasRole('ressources-humaines') => redirect()->route('dashboard.ressources-humaines'),
+        $user->hasRole('suivi-controle') => redirect()->route('dashboard.suivi-controle'),
+        $user->hasRole('salarie') => redirect()->route('dashboard.salarie'),
+
+        default => redirect('/'),
+    };
+})->middleware(['auth', 'verified'])->name('dashboard');
 
 // ===== ROUTES SCREENSHOTS =====
 
