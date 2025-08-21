@@ -156,13 +156,12 @@ export default function Access() {
 
     // Project filter
     let projectMatch = true
-    if (projectFilter !== "all") {
-      if (projectFilter === "with_projects") {
-        projectMatch = salarie?.projets && salarie.projets.length > 0
-      } else if (projectFilter === "without_projects") {
-        projectMatch = !salarie?.projets || salarie.projets.length === 0
-      }
+    if (projectFilter === "with_projects") {
+      projectMatch = (salarie?.projets?.length ?? 0) > 0
+    } else if (projectFilter === "without_projects") {
+      projectMatch = (salarie?.projets?.length ?? 0) === 0
     }
+
 
     return searchMatch && statusMatch && dateMatch && projectMatch
   })

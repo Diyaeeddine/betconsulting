@@ -13,24 +13,3 @@
     "not ios_saf <= 16.7"
   ]
 }
-{
-  "extends": [
-    "development"
-  ],
-  "hints": {
-    "axe/forms": [
-      "default",
-      {
-        "label": "off",
-        "select-name": "off"
-      }
-    ],
-    "axe/name-role-value": [
-      "default",
-      {
-        "button-name": "off"
-      }
-    ],
-    "no-inline-styles": "off"
-  }
-}
