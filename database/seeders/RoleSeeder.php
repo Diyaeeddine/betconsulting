@@ -122,5 +122,10 @@ class RoleSeeder extends Seeder
             ['name' => 'Fournisseurs & Sous-Traitants', 'password' => bcrypt(env('DEFAULT_USER_PASSWORD', 'user1234'))]
         );
         $fst->assignRole($roleFST);
+
+        // ===== 13. Salarie (Employee role) =====
+        $roleSalarie = Role::firstOrCreate(['name' => 'salarie']);
+        // You can add specific permissions for salarie if needed
+        // $roleSalarie->givePermissionTo(['view own profile', 'update own data']);
     }
 }
