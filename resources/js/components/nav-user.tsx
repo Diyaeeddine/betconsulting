@@ -1,0 +1,39 @@
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/components/ui/sidebar';
+import { UserInfo } from '@/components/user-info';
+import { UserMenuContent } from '@/components/user-menu-content';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { cn } from '@/lib/utils'; // make sure you have this
+import { type SharedData } from '@/types';
+import { usePage } from '@inertiajs/react';
+import { ChevronsUpDown } from 'lucide-react';
+import { useState } from 'react';
+
+export function NavUser() {
+    const { auth } = usePage<SharedData>().props;
+    const { state } = useSidebar();
+    const isMobile = useIsMobile();
+    const [open, setOpen] = useState(false); // ✅ add state
+
+    return (
+        <SidebarMenu>
+            <SidebarMenuItem>
+                <DropdownMenu open={open} onOpenChange={setOpen}>
+                    <DropdownMenuTrigger asChild>
+                        <SidebarMenuButton size="lg" className={cn('group text-white', open && 'bg-[#4F5866]')}>
+                            <UserInfo user={auth.user} />
+                            <ChevronsUpDown className="ml-auto size-4" />
+                        </SidebarMenuButton>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                        className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+                        align="end"
+                        side={isMobile ? 'bottom' : state === 'collapsed' ? 'left' : 'bottom'}
+                    >
+                        <UserMenuContent user={auth.user} />
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </SidebarMenuItem>
+        </SidebarMenu>
+    );
+}
