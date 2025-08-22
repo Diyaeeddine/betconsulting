@@ -20,7 +20,7 @@ export function NavUser() {
             <SidebarMenuItem>
                 <DropdownMenu open={open} onOpenChange={setOpen}>
                     <DropdownMenuTrigger asChild>
-                        <SidebarMenuButton size="lg" className={cn('group text-white', open && 'bg-[#4F5866]')}>
+                        <SidebarMenuButton size="lg" className={cn('group text-black', open && 'bg-white')}>
                             <UserInfo user={auth.user} />
                             <ChevronsUpDown className="ml-auto size-4" />
                         </SidebarMenuButton>

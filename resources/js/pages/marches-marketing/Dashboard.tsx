@@ -1,10 +1,9 @@
 import AppLayout from '@/layouts/app-layout';
+
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
+import { TrendingUp, Target, Award, Clock, MapPin, FileText } from 'lucide-react';
+
 import { Head } from '@inertiajs/react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { TrendingUp, Target, Users, Euro, FileText, Calendar, Award } from 'lucide-react';
 
 const breadcrumbs = [
     {
@@ -14,147 +13,176 @@ const breadcrumbs = [
 ];
 
 export default function MarchesMarketing() {
-    const kpiData = [
-        { title: "Chiffre d'Affaires", value: '2.4M€', change: '+12%', icon: Euro, color: 'text-green-600' },
-        { title: 'Prospects Actifs', value: '47', change: '+8', icon: Users, color: 'text-blue-600' },
-        { title: 'Taux de Conversion', value: '23%', change: '+5%', icon: Target, color: 'text-purple-600' },
-        { title: "Appels d'Offres", value: '12', change: '+3', icon: FileText, color: 'text-orange-600' },
-    ];
+const kpiData = {
+    appelsDoffres: 45,
+    tauxParticipation: 78,
+    tauxReussite: 32,
+    montantTotal: 2450000,
+    delaiMoyen: 8.5,
+    marchesGagnes: 14,
+};
 
-    const pipelineData = [
-        { name: 'Prospection', value: 15, color: '#8884d8' },
-        { name: 'Qualification', value: 12, color: '#82ca9d' },
-        { name: 'Proposition', value: 8, color: '#ffc658' },
-        { name: 'Négociation', value: 5, color: '#ff7300' },
-        { name: 'Signature', value: 3, color: '#00ff00' },
-    ];
+const tendanceAppelsOffres = [
+    { mois: 'Jan', identifies: 38, participes: 28, gagnes: 9 },
+    { mois: 'Fév', identifies: 42, participes: 31, gagnes: 11 },
+    { mois: 'Mar', identifies: 45, participes: 35, gagnes: 14 },
+    { mois: 'Avr', identifies: 41, participes: 33, gagnes: 12 },
+    { mois: 'Mai', identifies: 48, participes: 37, gagnes: 15 },
+    { mois: 'Jun', identifies: 45, participes: 35, gagnes: 14 },
+];
 
-    const monthlyRevenue = [
-        { month: 'Jan', revenue: 180000, target: 200000 },
-        { month: 'Fév', revenue: 220000, target: 200000 },
-        { month: 'Mar', revenue: 195000, target: 200000 },
-        { month: 'Avr', revenue: 240000, target: 200000 },
-        { month: 'Mai', revenue: 210000, target: 200000 },
-        { month: 'Jun', revenue: 260000, target: 200000 },
-    ];
+const segmentationMarchesData = [
+    { name: 'Infrastructure', value: 35, color: '#3b82f6' },
+    { name: 'Bâtiment', value: 28, color: '#60a5fa' },
+    { name: 'Génie Civil', value: 22, color: '#93c5fd' },
+    { name: 'Réhabilitation', value: 15, color: '#dbeafe' },
+];
 
-    const sectorsData = [
-        { sector: 'Bâtiment', projects: 15, revenue: 850000 },
-        { sector: 'Infrastructure', projects: 8, revenue: 920000 },
-        { sector: 'Industriel', projects: 6, revenue: 630000 },
-        { sector: 'Environnement', projects: 4, revenue: 280000 },
-    ];
+const performanceRegions = [
+    { region: 'Casablanca', marches: 6, montant: 980000 },
+    { region: 'Rabat', marches: 4, montant: 720000 },
+    { region: 'Marrakech', marches: 2, montant: 450000 },
+    { region: 'Tanger', marches: 2, montant: 300000 },
+];
 
+const KPICard = ({ title, value, subtitle, icon: Icon, trend }) => (
+    <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+            <div>
+                <p className="text-sm font-medium text-gray-600">{title}</p>
+                <p className="text-2xl font-bold text-gray-900">{value}</p>
+                {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
+            </div>
+            <div className="rounded-lg bg-blue-50 p-3">
+                <Icon className="h-6 w-6 text-blue-500" />
+            </div>
+        </div>
+        {trend && (
+            <div className="mt-4 flex items-center">
+                <TrendingUp className="mr-1 h-4 w-4 text-green-500" />
+                <span className="text-sm text-green-500">{trend}</span>
+            </div>
+        )}
+    </div>
+);
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Dashboard Qualité & Audit Technique" />
-            <div className="min-h-screen space-y-6 bg-gray-50 p-6">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-bold text-gray-900">Marchés & Marketing</h1>
-                        <p className="text-gray-600">Tableau de bord commercial et développement</p>
+            <div className="min-h-screen bg-gray-50 p-6">
+                <div className="mx-auto max-w-7xl">
+                    <div className="mb-8">
+                        <h1 className="text-3xl font-bold text-gray-900">Dashboard Marchés & Marketing</h1>
+                        <p className="mt-2 text-gray-600">Suivi de la performance commerciale et du positionnement</p>
                     </div>
-                    <Badge variant="outline" className="px-3 py-1">
-                        <Calendar className="mr-2 h-4 w-4" />
-                        Juin 2024
-                    </Badge>
-                </div>
 
-                {/* KPIs principaux */}
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-                    {kpiData.map((kpi, index) => (
-                        <Card key={index} className="transition-shadow hover:shadow-lg">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-gray-600">{kpi.title}</CardTitle>
-                                <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{kpi.value}</div>
-                                <p className={`text-xs ${kpi.color}`}>
-                                    <TrendingUp className="mr-1 inline h-3 w-3" />
-                                    {kpi.change} vs mois dernier
-                                </p>
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
+                    {/* KPIs principaux */}
+                    <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                        <KPICard
+                            title="Appels d'offres identifiés"
+                            value={kpiData.appelsDoffres}
+                            subtitle="Ce mois-ci"
+                            icon={FileText}
+                            trend="+12% vs mois précédent"
+                        />
+                        <KPICard
+                            title="Taux de participation"
+                            value={`${kpiData.tauxParticipation}%`}
+                            subtitle="Appels d'offres traités"
+                            icon={Target} trend={undefined}                        />
+                        <KPICard
+                            title="Taux de réussite"
+                            value={`${kpiData.tauxReussite}%`}
+                            subtitle="Marchés gagnés/soumis"
+                            icon={Award}
+                            trend="+5% vs moyenne"
+                        />
+                        <KPICard
+                            title="Montant total remporté"
+                            value={`${(kpiData.montantTotal / 1000000).toFixed(1)}M MAD`}
+                            subtitle="Sur les 6 derniers mois"
+                            icon={TrendingUp} trend={undefined}                        />
+                        <KPICard title="Délai moyen de réponse" value={`${kpiData.delaiMoyen} jours`} subtitle="Temps de traitement" icon={Clock} trend={undefined} />
+                        <KPICard title="Marchés gagnés" value={kpiData.marchesGagnes} subtitle="En cours d'exécution" icon={MapPin} trend={undefined} />
+                    </div>
 
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                    {/* Pipeline Commercial */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Pipeline Commercial</CardTitle>
-                            <CardDescription>Répartition des prospects par étape</CardDescription>
-                        </CardHeader>
-                        <CardContent>
+                    <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+                        {/* Tendance des appels d'offres */}
+                        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+                            <h3 className="mb-4 text-lg font-semibold text-gray-900">Évolution des appels d'offres</h3>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <BarChart data={tendanceAppelsOffres}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="mois" />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Bar dataKey="identifies" fill="#dbeafe" name="Identifiés" />
+                                    <Bar dataKey="participes" fill="#60a5fa" name="Participés" />
+                                    <Bar dataKey="gagnes" fill="#3b82f6" name="Gagnés" />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        {/* Segmentation des marchés */}
+                        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+                            <h3 className="mb-4 text-lg font-semibold text-gray-900">Répartition des marchés gagnés</h3>
                             <ResponsiveContainer width="100%" height={300}>
                                 <PieChart>
                                     <Pie
-                                        data={pipelineData}
+                                        data={segmentationMarchesData}
                                         cx="50%"
                                         cy="50%"
-                                        outerRadius={80}
+                                        outerRadius={100}
                                         fill="#8884d8"
                                         dataKey="value"
-                                        label={({ name, value }) => `${name}: ${value}`}
+                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                                     >
-                                        {pipelineData.map((entry, index) => (
+                                        {segmentationMarchesData.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={entry.color} />
                                         ))}
                                     </Pie>
                                     <Tooltip />
                                 </PieChart>
                             </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-
-                    {/* Évolution CA */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Évolution du Chiffre d'Affaires</CardTitle>
-                            <CardDescription>Réalisé vs Objectif (en €)</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <LineChart data={monthlyRevenue}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="month" />
-                                    <YAxis />
-                                    <Tooltip formatter={(value) => [`${value.toLocaleString()}€`, '']} />
-                                    <Line type="monotone" dataKey="revenue" stroke="#2563eb" strokeWidth={3} name="Réalisé" />
-                                    <Line type="monotone" dataKey="target" stroke="#dc2626" strokeDasharray="5 5" name="Objectif" />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Secteurs d'activité */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Performance par Secteur</CardTitle>
-                        <CardDescription>Projets et revenus par domaine d'activité</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            {sectorsData.map((sector, index) => (
-                                <div key={index} className="flex items-center justify-between rounded-lg bg-gray-50 p-4">
-                                    <div className="flex items-center space-x-4">
-                                        <Award className="h-8 w-8 text-blue-600" />
-                                        <div>
-                                            <h3 className="font-semibold">{sector.sector}</h3>
-                                            <p className="text-sm text-gray-600">{sector.projects} projets actifs</p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-lg font-bold text-green-600">{sector.revenue.toLocaleString()}€</p>
-                                        <Progress value={(sector.revenue / 1000000) * 100} className="mt-1 w-24" />
-                                    </div>
-                                </div>
-                            ))}
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+
+                    {/* Performance par région */}
+                    <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+                        <h3 className="mb-4 text-lg font-semibold text-gray-900">Performance par région</h3>
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Région</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
+                                            Nombre de marchés
+                                        </th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
+                                            Montant total
+                                        </th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
+                                            Montant moyen
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 bg-white">
+                                    {performanceRegions.map((region, index) => (
+                                        <tr key={index} className="hover:bg-gray-50">
+                                            <td className="px-6 py-4 text-sm font-medium whitespace-nowrap text-gray-900">{region.region}</td>
+                                            <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-500">{region.marches}</td>
+                                            <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-500">
+                                                {(region.montant / 1000).toFixed(0)}K MAD
+                                            </td>
+                                            <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-500">
+                                                {(region.montant / region.marches / 1000).toFixed(0)}K MAD
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
         </AppLayout>
     );
