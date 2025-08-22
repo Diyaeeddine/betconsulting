@@ -10,6 +10,7 @@ use App\Models\Materiel;
 use App\Models\Salarie;
 use App\Models\Progression;
 use App\Models\Profil;
+use App\Models\Formation;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -37,7 +38,7 @@ class RessourcesHumainesController extends Controller
             ->whereNotNull('longitude')
             ->get();
 
-        $dynamicTrackingPoints = $projetsFromDB->map(function($projet, $index) {
+        $dynamicTrackingPoints = $projetsFromDB->map(function ($projet, $index) {
             return [
                 'id' => $projet->id,
                 'title' => $projet->nom,
@@ -47,15 +48,15 @@ class RessourcesHumainesController extends Controller
                     'lng' => (float)$projet->longitude
                 ],
                 'status' => $this->convertStatus($projet->statut),
-                'distance' => rand(15, 50) . 'km', 
+                'distance' => rand(15, 50) . 'km',
                 'estimatedTime' => $this->getEstimatedTime($projet),
                 'projectManager' => [
                     'name' => $projet->responsable->name ?? 'Non assigné',
-                    'phone' => '+212 6 12 34 56 78', 
+                    'phone' => '+212 6 12 34 56 78',
                 ],
                 'currentVehicle' => $this->generateVehicleInfo(),
                 'vehicles' => $this->generateVehiclesList(),
-                'employees' => $projet->salaries->map(function($salarie) {
+                'employees' => $projet->salaries->map(function ($salarie) {
                     return [
                         'name' => trim($salarie->nom . ' ' . $salarie->prenom),
                         'role' => $salarie->fonction ?? 'Employé'
@@ -81,7 +82,7 @@ class RessourcesHumainesController extends Controller
             'termine' => 'completed',
             'en_attente' => 'preparation'
         ];
-        
+
         return $statusMap[$status] ?? 'preparation';
     }
 
@@ -91,7 +92,7 @@ class RessourcesHumainesController extends Controller
             $debut = new \DateTime($projet->date_debut);
             $fin = new \DateTime($projet->date_fin);
             $diff = $debut->diff($fin);
-            
+
             if ($diff->days > 30) {
                 return ceil($diff->days / 30) . ' mois';
             } else if ($diff->days > 7) {
@@ -100,7 +101,7 @@ class RessourcesHumainesController extends Controller
                 return $diff->days . ' jours';
             }
         }
-        
+
         $durations = ['1 semaine', '2 semaines', '3 semaines', '1 mois', '2 mois'];
         return $durations[array_rand($durations)];
     }
@@ -146,7 +147,7 @@ class RessourcesHumainesController extends Controller
     private function generateTimeline($projet)
     {
         $currentStatus = $this->convertStatus($projet->statut);
-        
+
         $timeline = [
             [
                 'status' => 'Programmation',
@@ -211,7 +212,7 @@ class RessourcesHumainesController extends Controller
 
     public function progressions()
     {
-        $progressions = Progression::with(['projet', 'validePar' => function($query) {
+        $progressions = Progression::with(['projet', 'validePar' => function ($query) {
             $query->select('id', 'name');
         }])
             ->orderBy('created_at', 'desc')
@@ -221,7 +222,7 @@ class RessourcesHumainesController extends Controller
                 $progression->valide_par_user = $progression->validePar;
                 return $progression;
             });
-        
+
         $projets = Projet::orderBy('nom')->get();
         $users = User::orderBy('name')->get();
 
@@ -238,8 +239,8 @@ class RessourcesHumainesController extends Controller
             $validated = $request->validate([
                 'projet_id' => 'required|exists:projets,id',
                 'description_progress' => 'required|string|max:1000',
-                'progress_file' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,gif,txt,xlsx,xls|max:10240', 
-                'statut' => 'required|in:valide,en_attente,rejete', 
+                'progress_file' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,gif,txt,xlsx,xls|max:10240',
+                'statut' => 'required|in:valide,en_attente,rejete',
                 'date_validation' => 'nullable|date',
                 'pourcentage' => 'required|numeric|min:0|max:100',
                 'commentaire' => 'nullable|string|max:1000',
@@ -248,13 +249,13 @@ class RessourcesHumainesController extends Controller
 
             if ($request->hasFile('progress_file')) {
                 $file = $request->file('progress_file');
-                
+
                 $originalName = $file->getClientOriginalName();
                 $cleanName = preg_replace('/[^a-zA-Z0-9\-_\.]/', '_', $originalName);
                 $fileName = time() . '_' . $cleanName;
-                
+
                 $filePath = $file->storeAs('progress-files', $fileName, 'public');
-                
+
                 $validated['progress'] = $filePath;
             }
 
@@ -263,11 +264,11 @@ class RessourcesHumainesController extends Controller
             if (empty($validated['date_validation'])) {
                 $validated['date_validation'] = null;
             }
-            
+
             if (empty($validated['commentaire'])) {
                 $validated['commentaire'] = null;
             }
-            
+
             if (empty($validated['valide_par'])) {
                 $validated['valide_par'] = null;
             }
@@ -275,7 +276,6 @@ class RessourcesHumainesController extends Controller
             $progression = Progression::create($validated);
 
             return redirect()->back()->with('success', 'Progression ajoutée avec succès.');
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::error('Erreur de validation progression:', $e->errors());
             return redirect()->back()
@@ -312,17 +312,17 @@ class RessourcesHumainesController extends Controller
                 if ($progression->progress && Storage::disk('public')->exists($progression->progress)) {
                     Storage::disk('public')->delete($progression->progress);
                 }
-                
+
                 $file = $request->file('progress_file');
-                
+
                 // Nettoyer le nom du fichier pour éviter les problèmes
                 $originalName = $file->getClientOriginalName();
                 $cleanName = preg_replace('/[^a-zA-Z0-9\-_\.]/', '_', $originalName);
                 $fileName = time() . '_' . $cleanName;
-                
+
                 // Stocker le nouveau fichier
                 $filePath = $file->storeAs('progress-files', $fileName, 'public');
-                
+
                 $validated['progress'] = $filePath;
             }
 
@@ -333,11 +333,11 @@ class RessourcesHumainesController extends Controller
             if (empty($validated['date_validation'])) {
                 $validated['date_validation'] = null;
             }
-            
+
             if (empty($validated['commentaire'])) {
                 $validated['commentaire'] = null;
             }
-            
+
             if (empty($validated['valide_par'])) {
                 $validated['valide_par'] = null;
             }
@@ -345,7 +345,6 @@ class RessourcesHumainesController extends Controller
             $progression->update($validated);
 
             return redirect()->back()->with('success', 'Progression mise à jour avec succès.');
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::error('Erreur de validation mise à jour progression:', $e->errors());
             return redirect()->back()
@@ -370,7 +369,7 @@ class RessourcesHumainesController extends Controller
             if ($progression->progress && Storage::disk('public')->exists($progression->progress)) {
                 Storage::disk('public')->delete($progression->progress);
             }
-            
+
             $progression->delete();
             return redirect()->back()->with('success', 'Progression supprimée avec succès.');
         } catch (\Exception $e) {
@@ -611,7 +610,7 @@ class RessourcesHumainesController extends Controller
     }
 
 
-   public function Users()
+    public function Users()
     {
         // Get all projects
         $projects = Projet::select('id', 'nom')->get();
@@ -710,7 +709,7 @@ class RessourcesHumainesController extends Controller
             'prenom'         => 'required|string|max:255',
             'email'          => 'required|string|email|max:255|unique:salaries',
             'telephone'      => 'required|string|max:20',
-            'salaire_mensuel'=> 'required|numeric',
+            'salaire_mensuel' => 'required|numeric',
             'date_embauche'  => 'nullable|date',
             'nom_profil'     => 'required|in:bureau_etudes,construction,suivi_controle,support_gestion',
             'poste_profil'   => 'required|string|max:255',
@@ -740,8 +739,8 @@ class RessourcesHumainesController extends Controller
             return redirect()->back()->with([
                 'success' => 'Employé créé avec succès.',
                 'created' => [
-                    'salarie' => $salarie->only(['id','nom','prenom','email','telephone','statut']),
-                    'profil'  => $profil->only(['id','user_id','nom_profil','poste_profil']),
+                    'salarie' => $salarie->only(['id', 'nom', 'prenom', 'email', 'telephone', 'statut']),
+                    'profil'  => $profil->only(['id', 'user_id', 'nom_profil', 'poste_profil']),
                 ],
             ]);
         } catch (\Throwable $e) {
@@ -843,5 +842,82 @@ class RessourcesHumainesController extends Controller
             Log::error('Error updating password: ' . $e->getMessage());
             return back()->with('error', 'Erreur lors de la mise à jour du password.');
         }
+    }
+
+    // Méthode pour afficher la page des formations
+    public function formations()
+    {
+        $formations = Formation::with('responsable')
+            ->withCount('participants')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $users = User::all();
+
+        return Inertia::render('ressources-humaines/Formations', [
+            'formations' => $formations,
+            'users' => $users,
+        ]);
+    }
+
+    // Méthode pour créer une formation
+public function storeFormation(Request $request)
+{
+    $validated = $request->validate([
+        'titre' => 'required|string|max:255',
+        'description' => 'nullable|string',
+        'type' => 'required|in:en_ligne,presentiel',
+        'date_debut' => 'nullable|date',
+        'date_fin' => 'nullable|date|after_or_equal:date_debut',
+        'duree' => 'nullable|string|max:100',
+        'statut' => 'required|in:planifiée,en cours,terminée',
+        'responsable_id' => 'required|exists:users,id',
+        'competences' => 'nullable|string', // Changé de 'array' à 'string'
+        'lien_meet' => 'nullable|url',
+    ]);
+
+    // Vérifier si la formation est en ligne et le lien est fourni
+    if ($validated['type'] === 'en_ligne' && empty($validated['lien_meet'])) {
+        return redirect()->back()->withErrors(['lien_meet' => 'Le lien Meet est requis pour une formation en ligne.']);
+    }
+
+    Formation::create($validated);
+
+    return redirect()->back()->with('success', 'Formation créée avec succès.');
+}
+
+// Méthode pour mettre à jour une formation
+public function updateFormation(Request $request, Formation $formation)
+{
+    $validated = $request->validate([
+        'titre' => 'required|string|max:255',
+        'description' => 'nullable|string',
+        'type' => 'required|in:en_ligne,presentiel',
+        'date_debut' => 'nullable|date',
+        'date_fin' => 'nullable|date|after_or_equal:date_debut',
+        'duree' => 'nullable|string|max:100',
+        'statut' => 'required|in:planifiée,en cours,terminée',
+        'responsable_id' => 'required|exists:users,id',
+        'competences' => 'nullable|string', // Changé de 'array' à 'string'
+        'lien_meet' => 'nullable|url',
+    ]);
+
+    // Vérifier si la formation est en ligne et le lien est fourni
+    if ($validated['type'] === 'en_ligne' && empty($validated['lien_meet'])) {
+        return redirect()->back()->withErrors(['lien_meet' => 'Le lien Meet est requis pour une formation en ligne.']);
+    }
+
+    $formation->update($validated);
+
+    return redirect()->back()->with('success', 'Formation mise à jour avec succès.');
+}
+
+
+    // Méthode pour supprimer une formation
+    public function destroyFormation(Formation $formation)
+    {
+        $formation->delete();
+
+        return redirect()->back()->with('success', 'Formation supprimée avec succès.');
     }
 }

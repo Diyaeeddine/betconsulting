@@ -217,6 +217,7 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                     setShowModal(false);
                     setEditingProjet(null);
                     reset();
+                    window.location.reload(); // Force page reload
                 }
             });
         } else {
@@ -224,6 +225,7 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                 onSuccess: () => {
                     setShowModal(false);
                     reset();
+                    window.location.reload(); // Force page reload
                 }
             });
         }
@@ -235,6 +237,7 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                 onSuccess: () => {
                     setShowDeleteModal(false);
                     setDeletingProjet(null);
+                    window.location.reload(); // Force page reload
                 }
             });
         }
@@ -359,7 +362,7 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                             <div>
                                 <p className="text-sm font-medium text-gray-600">Budget Total</p>
                                 <p className="text-2xl font-bold text-gray-900">
-                                    {formatCurrency(projets.reduce((sum, p) => sum + p.budget_total, 0))}
+                                    {formatCurrency(projets.reduce((sum, p) => sum + (Number(p.budget_total) || 0), 0))}
                                 </p>
                             </div>
                         </div>

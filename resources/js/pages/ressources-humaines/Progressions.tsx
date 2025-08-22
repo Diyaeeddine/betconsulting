@@ -51,8 +51,11 @@ users: User[];
 export default function Progressions({ progressions, projets, users }: Props) {
 const [showModal, setShowModal] = useState(false);
 const [showDeleteModal, setShowDeleteModal] = useState(false);
+const [showProgressionsModal, setShowProgressionsModal] = useState(false);
 const [editingProgression, setEditingProgression] = useState<Progression | null>(null);
 const [deletingProgression, setDeletingProgression] = useState<Progression | null>(null);
+const [selectedProject, setSelectedProject] = useState<Projet | null>(null);
+const [projectProgressions, setProjectProgressions] = useState<Progression[]>([]);
 const [selectedFile, setSelectedFile] = useState<File | null>(null);
 const [filePreview, setFilePreview] = useState<string | null>(null);
 const [uploadError, setUploadError] = useState<string | null>(null);
@@ -80,6 +83,47 @@ const { data, setData, post, processing, errors, reset } = useForm<FormData>({
     valide_par: '',
     _method: 'POST'
 });
+
+// Grouper les progressions par projet
+const groupProgressionsByProject = () => {
+    const grouped = progressions.reduce((acc, progression) => {
+        const projetId = progression.projet_id;
+        if (!acc[projetId]) {
+            acc[projetId] = {
+                projet: progression.projet,
+                progressions: [],
+                totalProgressions: 0,
+                progressionMoyenne: 0,
+                derniereMiseAJour: null,
+            };
+        }
+        acc[projetId].progressions.push(progression);
+        acc[projetId].totalProgressions++;
+        return acc;
+    }, {} as Record<number, any>);
+
+    // Calculer les statistiques pour chaque projet
+    Object.values(grouped).forEach((group: any) => {
+        const progressions = group.progressions;
+        group.progressionMoyenne = Math.round(
+            progressions.reduce((sum: number, p: Progression) => sum + p.pourcentage, 0) / progressions.length
+        );
+        group.derniereMiseAJour = progressions.reduce((latest: string, p: Progression) => 
+            p.updated_at > latest ? p.updated_at : latest, progressions[0].updated_at
+        );
+    });
+
+    return grouped;
+};
+
+const groupedProgressions = groupProgressionsByProject();
+
+const showProjectProgressions = (projet: Projet) => {
+    const projetProgressions = progressions.filter(p => p.projet_id === projet.id);
+    setSelectedProject(projet);
+    setProjectProgressions(projetProgressions);
+    setShowProgressionsModal(true);
+};
 
 const openCreateModal = () => {
     reset();
@@ -273,6 +317,16 @@ const handleDelete = () => {
     }
 };
 
+const editProgressionFromModal = (progression: Progression) => {
+    setShowProgressionsModal(false);
+    openEditModal(progression);
+};
+
+const deleteProgressionFromModal = (progression: Progression) => {
+    setShowProgressionsModal(false);
+    openDeleteModal(progression);
+};
+
 const getStatutBadge = (statut: string) => {
     const statutClasses = {
         en_attente: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -411,7 +465,7 @@ return (
                 </div>
             </div>
 
-            {/* Table */}
+            {/* Table des projets */}
             <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
@@ -424,22 +478,16 @@ return (
                                     Projet
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Description
+                                    Nombre de Progressions
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Fichier Joint
+                                    Progression Moyenne
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Pourcentage
+                                    Dernière Mise à Jour
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Statut
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Validé par
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Ajouté le
+                                    Statut du Projet
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     Actions
@@ -447,89 +495,56 @@ return (
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {progressions && progressions.length > 0 ? (
-                                progressions.map((progression, index) => (
-                                    <tr key={progression.id} className="hover:bg-gray-50 transition-colors">
+                            {Object.values(groupedProgressions).length > 0 ? (
+                                Object.values(groupedProgressions).map((group: any, index: number) => (
+                                    <tr key={group.projet.id} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                             {index + 1}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div>
                                                 <div className="text-sm font-medium text-gray-900">
-                                                    {progression.projet?.nom || 'N/A'}
+                                                    {group.projet.nom || 'N/A'}
                                                 </div>
-                                                {progression.projet?.client && (
+                                                {group.projet.client && (
                                                     <div className="text-sm text-gray-500">
-                                                        Client: {progression.projet.client}
+                                                        Client: {group.projet.client}
                                                     </div>
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-gray-900 max-w-xs">
-                                            <div className="truncate" title={progression.description_progress}>
-                                                {progression.description_progress}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            {progression.progress ? (
-                                                <div className="flex items-center gap-2">
-                                                    {getFileIcon(getFileName(progression.progress))}
-                                                    <div className="text-xs">
-                                                        <div className="text-gray-900 truncate max-w-24" title={getFileName(progression.progress)}>
-                                                            {getFileName(progression.progress)}
-                                                        </div>
-                                                    </div>
-                                                    <a
-                                                        href={`/storage/${progression.progress}`}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-100 transition-colors"
-                                                        title="Télécharger"
-                                                    >
-                                                        <Download className="w-4 h-4" />
-                                                    </a>
-                                                </div>
-                                            ) : (
-                                                <span className="text-gray-400 text-xs">Aucun fichier</span>
-                                            )}
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                            {group.totalProgressions} progression{group.totalProgressions > 1 ? 's' : ''}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex items-center gap-2">
                                                 <div className="w-16 bg-gray-200 rounded-full h-2">
                                                     <div
-                                                        className={`h-2 rounded-full ${getProgressColor(progression.pourcentage)}`}
-                                                        style={{ width: `${Math.min(progression.pourcentage, 100)}%` }}
+                                                        className={`h-2 rounded-full ${getProgressColor(group.progressionMoyenne)}`}
+                                                        style={{ width: `${Math.min(group.progressionMoyenne, 100)}%` }}
                                                     ></div>
                                                 </div>
                                                 <span className="text-sm font-medium text-gray-900">
-                                                    {progression.pourcentage}%
+                                                    {group.progressionMoyenne}%
                                                 </span>
                                             </div>
                                         </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            {formatDate(group.derniereMiseAJour)}
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            {getStatutBadge(progression.statut)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {progression.valide_par_user?.name || '-'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {formatDate(progression.created_at)}
+                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                {group.projet.statut || 'En cours'}
+                                            </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                             <div className="flex items-center gap-2">
                                                 <button
-                                                    onClick={() => openEditModal(progression)}
+                                                    onClick={() => showProjectProgressions(group.projet)}
                                                     className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-100 transition-colors"
-                                                    title="Modifier"
+                                                    title="Voir les progressions"
                                                 >
-                                                    <Edit className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => openDeleteModal(progression)}
-                                                    className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-100 transition-colors"
-                                                    title="Supprimer"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
+                                                    <Eye className="w-4 h-4" />
                                                 </button>
                                             </div>
                                         </td>
@@ -537,10 +552,10 @@ return (
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={9} className="px-6 py-4 text-center text-gray-500">
+                                    <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
                                         <div className="flex flex-col items-center py-8">
                                             <TrendingUp className="w-12 h-12 text-gray-400 mb-4" />
-                                            <h3 className="text-sm font-medium text-gray-900">Aucune progression trouvée</h3>
+                                            <h3 className="text-sm font-medium text-gray-900">Aucun projet avec progressions trouvé</h3>
                                             <p className="text-sm text-gray-500 mt-1">Commencez par ajouter une nouvelle progression.</p>
                                         </div>
                                     </td>
@@ -550,6 +565,158 @@ return (
                     </table>
                 </div>
             </div>
+
+            {/* Modal Progressions du Projet */}
+            {showProgressionsModal && selectedProject && (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-7xl max-h-[90vh] overflow-y-auto m-4">
+                        <div className="flex justify-between items-center mb-6">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-blue-100 text-blue-800 rounded-full flex items-center justify-center">
+                                    <FileText className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-semibold text-gray-900">
+                                        Progressions du projet : {selectedProject.nom}
+                                    </h2>
+                                    <p className="text-gray-600">
+                                        {selectedProject.client && `Client: ${selectedProject.client} • `}
+                                        {projectProgressions.length} progression{projectProgressions.length > 1 ? 's' : ''}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowProgressionsModal(false)}
+                                className="text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                                <Trash2 className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            {projectProgressions.length === 0 ? (
+                                <div className="text-center py-8 text-gray-500">
+                                    <TrendingUp className="w-12 h-12 text-gray-400 mb-4 mx-auto" />
+                                    <h3 className="text-lg font-medium text-gray-900">Aucune progression trouvée</h3>
+                                    <p className="text-sm text-gray-500 mt-1">
+                                        Aucune progression n'a été enregistrée pour ce projet.
+                                    </p>
+                                </div>
+                            ) : (
+                                // Organiser les progressions en groupes de 3
+                                (() => {
+                                    const groups = [];
+                                    for (let i = 0; i < projectProgressions.length; i += 3) {
+                                        groups.push(projectProgressions.slice(i, i + 3));
+                                    }
+                                    return groups.map((group, groupIndex) => (
+                                        <div key={groupIndex} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                            {group.map((progression, index) => (
+                                                <div
+                                                    key={progression.id}
+                                                    className="border border-gray-200 rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+                                                >
+                                                    <div className="flex justify-between items-start mb-3">
+                                                        <h4 className="font-medium text-gray-900">
+                                                            Progression #{groupIndex * 3 + index + 1}
+                                                        </h4>
+                                                        {getStatutBadge(progression.statut)}
+                                                    </div>
+                                                    
+                                                    <div className="space-y-2">
+                                                        <div className="flex justify-between">
+                                                            <span className="text-sm text-gray-600">Pourcentage:</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-12 bg-gray-200 rounded-full h-1.5">
+                                                                    <div
+                                                                        className={`h-1.5 rounded-full ${getProgressColor(progression.pourcentage)}`}
+                                                                        style={{ width: `${Math.min(progression.pourcentage, 100)}%` }}
+                                                                    ></div>
+                                                                </div>
+                                                                <span className="text-sm font-medium text-gray-900">
+                                                                    {progression.pourcentage}%
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <div className="flex justify-between">
+                                                            <span className="text-sm text-gray-600">Date:</span>
+                                                            <span className="text-sm text-gray-900">
+                                                                {formatDate(progression.created_at)}
+                                                            </span>
+                                                        </div>
+                                                        
+                                                        <div className="flex justify-between">
+                                                            <span className="text-sm text-gray-600">Validé par:</span>
+                                                            <span className="text-sm text-gray-900">
+                                                                {progression.valide_par_user?.name || '-'}
+                                                            </span>
+                                                        </div>
+
+                                                        <div>
+                                                            <span className="text-sm text-gray-600 block mb-1">Description:</span>
+                                                            <p className="text-xs text-gray-900 break-words">
+                                                                {progression.description_progress}
+                                                            </p>
+                                                        </div>
+
+                                                        {progression.progress && (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-sm text-gray-600">Fichier:</span>
+                                                                <div className="flex items-center gap-1">
+                                                                    {getFileIcon(getFileName(progression.progress))}
+                                                                    <span className="text-xs text-gray-900 truncate max-w-20">
+                                                                        {getFileName(progression.progress)}
+                                                                    </span>
+                                                                    <a
+                                                                        href={`/storage/${progression.progress}`}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-100 transition-colors"
+                                                                        title="Télécharger"
+                                                                    >
+                                                                        <Download className="w-3 h-3" />
+                                                                    </a>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        <div className="flex justify-end space-x-2 mt-3 pt-2 border-t border-gray-200">
+                                                            <button
+                                                                onClick={() => editProgressionFromModal(progression)}
+                                                                className="text-blue-600 hover:text-blue-800 transition-colors p-1 rounded hover:bg-blue-100"
+                                                                title="Modifier"
+                                                            >
+                                                                <Edit className="w-3 h-3" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => deleteProgressionFromModal(progression)}
+                                                                className="text-red-600 hover:text-red-800 transition-colors p-1 rounded hover:bg-red-100"
+                                                                title="Supprimer"
+                                                            >
+                                                                <Trash2 className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ));
+                                })()
+                            )}
+                        </div>
+
+                        <div className="flex justify-end pt-4 mt-6 border-t">
+                            <button
+                                onClick={() => setShowProgressionsModal(false)}
+                                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                            >
+                                Fermer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modal Créer/Modifier Progression */}
             {showModal && (

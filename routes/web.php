@@ -92,9 +92,9 @@ Route::middleware(['auth', 'verified', 'role:qualite-audit'])->group(function ()
 Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(function () {
     Route::get('/ressources-humaines/dashboard', [RessourcesHumainesController::class, 'index'])
         ->name('dashboard.ressources-humaines');
-    
+
     Route::get('/ressources-humaines/tracking', [RessourcesHumainesController::class, 'tracking'])
-        ->name('tracking.ressources-humaines');    
+        ->name('tracking.ressources-humaines');
 
     Route::get('/ressources-humaines/projets', [RessourcesHumainesController::class, 'projets'])
         ->name('ressources-humaines.projets');
@@ -109,7 +109,8 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
     Route::get('/ressources-humaines/materiels', [RessourcesHumainesController::class, 'materiels'])
         ->name('ressources-humaines.materiels');
 
-
+    Route::get('/ressources-humaines/formations', [RessourcesHumainesController::class, 'formations'])
+        ->name('ressources-humaines.formations');
 
 
     // Routes CRUD pour les projets
@@ -149,12 +150,20 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
 
     Route::get('/ressources-humaines/users', [RessourcesHumainesController::class, 'Users'])
         ->name('users.ressources-humaines');
-    Route::get('/users/projets', [RessourcesHumainesController::class, 'getProjects'])->name('user.projects.ressources-humaines');   
-    Route::get('/users/{user}', [RessourcesHumainesController::class, 'getUser'])->name('user.show.ressources-humaines');   
+    Route::get('/users/projets', [RessourcesHumainesController::class, 'getProjects'])->name('user.projects.ressources-humaines');
+    Route::get('/users/{user}', [RessourcesHumainesController::class, 'getUser'])->name('user.show.ressources-humaines');
     Route::post('/users', [RessourcesHumainesController::class, 'storeUsers'])->name('user.store.ressources-humaines');
-    Route::put('/users/{salarie}', [RessourcesHumainesController::class, 'enableDisableUser'])->name('user.update.ressources-humaines');   
-    Route::put('/userPass/{salarie}', [RessourcesHumainesController::class, 'updateUserPass'])->name('user.updatePass.ressources-humaines');   
-     Route::put('/userProjet/{salarie}', [RessourcesHumainesController::class, 'affecteGrantUser'])->name('user.updateProject.ressources-humaines');
+    Route::put('/users/{salarie}', [RessourcesHumainesController::class, 'enableDisableUser'])->name('user.update.ressources-humaines');
+    Route::put('/userPass/{salarie}', [RessourcesHumainesController::class, 'updateUserPass'])->name('user.updatePass.ressources-humaines');
+    Route::put('/userProjet/{salarie}', [RessourcesHumainesController::class, 'affecteGrantUser'])->name('user.updateProject.ressources-humaines');
+
+    // Routes CRUD pour les formations
+    Route::post('/ressources-humaines/formations', [RessourcesHumainesController::class, 'storeFormation'])
+        ->name('ressources-humaines.formations.store');
+    Route::put('/ressources-humaines/formations/{formation}', [RessourcesHumainesController::class, 'updateFormation'])
+        ->name('ressources-humaines.formations.update');
+    Route::delete('/ressources-humaines/formations/{formation}', [RessourcesHumainesController::class, 'destroyFormation'])
+        ->name('ressources-humaines.formations.destroy');
 });
 
 // Suivi & Contrôle

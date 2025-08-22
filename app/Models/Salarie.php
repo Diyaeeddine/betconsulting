@@ -45,4 +45,12 @@ class Salarie extends Model
     public function projets() {
         return $this->belongsToMany(Projet::class, 'projet_salarie');
     }
+
+    public function formations()
+{
+    return $this->belongsToMany(Formation::class, 'formation_salarie')
+        ->withPivot(['statut', 'progression', 'note'])
+        ->withTimestamps();
+}
+
 }
