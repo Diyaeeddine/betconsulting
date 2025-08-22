@@ -44,8 +44,15 @@ const performanceRegions = [
     { region: 'Marrakech', marches: 2, montant: 450000 },
     { region: 'Tanger', marches: 2, montant: 300000 },
 ];
+interface KPICardProps {
+    title: string;
+    value: string | number;
+    subtitle?: string;
+    icon: React.ComponentType<{ className?: string }>;
+    trend?: string;
+}
 
-const KPICard = ({ title, value, subtitle, icon: Icon, trend }) => (
+const KPICard = ({ title, value, subtitle, icon: Icon, trend }: KPICardProps) => (
     <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between">
             <div>

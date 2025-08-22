@@ -207,7 +207,12 @@ export default function EtudesTechniques() {
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="projet" />
                                     <YAxis tickFormatter={(value) => `${(value / 1000).toFixed(0)}k€`} />
-                                    <Tooltip formatter={(value) => [`${(value / 1000).toFixed(0)}k€`, '']} />
+                                    <Tooltip
+                                        formatter={(value: number | string) => {
+                                            const num = Number(value); // cast en number
+                                            return [`${(num / 1000).toFixed(0)}k€`, ''];
+                                        }}
+                                    />
                                     <Legend />
                                     <Bar dataKey="previsionnel" name="Prévisionnel" fill="#8884d8" />
                                     <Bar dataKey="estime" name="Estimé" fill="#82ca9d" />
