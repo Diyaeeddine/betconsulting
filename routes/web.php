@@ -112,6 +112,11 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
     Route::get('/ressources-humaines/formations', [RessourcesHumainesController::class, 'formations'])
         ->name('ressources-humaines.formations');
 
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/fetch-projets-direct',
+        [RessourcesHumainesController::class, 'fetchProjetsDirect']
+    )->name('ressources-humaines.fetch-projets-direct');
+
 
     // Routes CRUD pour les projets
     Route::post('/ressources-humaines/projets', [RessourcesHumainesController::class, 'store'])
@@ -147,6 +152,7 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
     Route::get('/ressources-humaines/maps', [RessourcesHumainesController::class, 'Maps'])
         ->name('maps.ressources-humaines');
 
+    Route::get('/ressources-humaines/projets-csv', [RessourcesHumainesController::class, 'getProjetsCsv'])->name('ressources-humaines.projets-csv');
 
     Route::get('/ressources-humaines/users', [RessourcesHumainesController::class, 'Users'])
         ->name('users.ressources-humaines');

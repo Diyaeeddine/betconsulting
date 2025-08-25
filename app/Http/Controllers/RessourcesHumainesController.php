@@ -164,35 +164,35 @@ class RessourcesHumainesController extends Controller
         ];
     }
 
-private function generateTimeline($projet)
-{
-    // Récupérer les progressions associées au projet
-    $progressions = $projet->progressions()->orderBy('date_validation', 'asc')->get();
+    private function generateTimeline($projet)
+    {
+        // Récupérer les progressions associées au projet
+        $progressions = $projet->progressions()->orderBy('date_validation', 'asc')->get();
 
-    // Si aucune progression, on retourne un tableau vide
-    if ($progressions->isEmpty()) {
-        return [];
+        // Si aucune progression, on retourne un tableau vide
+        if ($progressions->isEmpty()) {
+            return [];
+        }
+
+        $timeline = [];
+
+        foreach ($progressions as $progression) {
+            $timeline[] = [
+                'status' => ucfirst($progression->statut), // statut : ex. 'en route', 'exécution'
+                'time' => $progression->date_validation
+                    ? date('d M, H:i', strtotime($progression->date_validation))
+                    : 'Non défini',
+                'description' => $progression->description_progress ?? 'Aucune description',
+                'completed' => $progression->pourcentage == 100,
+                'current' => $progression->pourcentage < 100 && $progression->pourcentage > 0,
+                'pourcentage' => $progression->pourcentage,
+                'commentaire' => $progression->commentaire,
+                'valide_par' => $progression->validePar ? $progression->validePar->name : 'Non validé',
+            ];
+        }
+
+        return $timeline;
     }
-
-    $timeline = [];
-
-    foreach ($progressions as $progression) {
-        $timeline[] = [
-            'status' => ucfirst($progression->statut), // statut : ex. 'en route', 'exécution'
-            'time' => $progression->date_validation 
-                ? date('d M, H:i', strtotime($progression->date_validation)) 
-                : 'Non défini',
-            'description' => $progression->description_progress ?? 'Aucune description',
-            'completed' => $progression->pourcentage == 100,
-            'current' => $progression->pourcentage < 100 && $progression->pourcentage > 0,
-            'pourcentage' => $progression->pourcentage,
-            'commentaire' => $progression->commentaire,
-            'valide_par' => $progression->validePar ? $progression->validePar->name : 'Non validé',
-        ];
-    }
-
-    return $timeline;
-}
 
     public function projets()
     {
@@ -972,4 +972,37 @@ private function generateTimeline($projet)
             'salaries' => $salaries,
         ]);
     }
-}
+
+    
+    public function fetchProjetsDirect()
+    {
+        $pythonScript = base_path('selenium_scripts/scraping_global_marches.py');
+
+        // Exécuter le script Python
+        $output = [];
+        $returnVar = null;
+        exec("python3 $pythonScript", $output, $returnVar);
+
+        if ($returnVar === 0) {
+            $csvSource = base_path('selenium_scripts/projets.csv');
+            $jsonSource = base_path('selenium_scripts/projets.json');
+
+            if (file_exists($csvSource) && file_exists($jsonSource)) {
+                // Copier directement dans storage/app/public
+                Storage::disk('public')->put('projets.csv', file_get_contents($csvSource));
+                Storage::disk('public')->put('projets.json', file_get_contents($jsonSource));
+
+                return redirect()->route('ressources-humaines.projets')
+                    ->with('success', 'Projets mis à jour automatiquement !');
+            } else {
+                return redirect()->route('ressources-humaines.projets')
+                    ->with('error', 'Fichiers CSV/JSON introuvables après exécution du script.');
+            }
+        }
+
+        return redirect()->route('ressources-humaines.projets')
+            ->with('error', 'Erreur lors de l\'exécution du script Selenium.');
+    }
+
+
+ }
