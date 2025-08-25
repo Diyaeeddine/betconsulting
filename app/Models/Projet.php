@@ -30,15 +30,22 @@ class Projet extends Model
         'salarie_ids' => 'array',
     ];
 
-    public function responsable() {
+    public function responsable()
+    {
         return $this->belongsTo(User::class, 'responsable_id');
     }
 
-    public function depenses() {
+    public function depenses()
+    {
         return $this->hasMany(Depense::class);
     }
 
-    public function salaries() {
+    public function salaries()
+    {
         return $this->belongsToMany(Salarie::class, 'projet_salarie');
+    }
+    public function progressions()
+    {
+        return $this->hasMany(Progression::class);
     }
 }

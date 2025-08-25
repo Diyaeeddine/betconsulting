@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Head, useForm, router } from '@inertiajs/react';
 import { Plus, Edit, Trash2, Eye, Calendar, Users, BookOpen, Monitor, User } from 'lucide-react';
@@ -19,6 +19,25 @@ interface User {
     name: string;
 }
 
+interface Salarie {
+    id: number;
+    nom: string;
+    prenom: string;
+    email: string;
+    statut: string;
+}
+
+interface Participant {
+    id: number;
+    nom: string;
+    prenom: string;
+    pivot: {
+        statut: string;
+        progression: number;
+        note?: number;
+    };
+}
+
 interface Formation {
     id: number;
     titre: string;
@@ -26,13 +45,14 @@ interface Formation {
     type: 'en_ligne' | 'presentiel';
     date_debut: string;
     date_fin: string;
-    duree: number; // Changé en number car c'est un integer en base
-    statut: 'planifiée' | 'en cours' | 'terminée'; // Corrigé selon la migration
+    duree: number;
+    statut: 'planifiée' | 'en cours' | 'terminée';
     responsable_id: number;
-    competences?: string[];
+    competences?: string;
     lien_meet?: string;
     responsable: User;
     participants_count?: number;
+    participants?: Participant[];
     created_at: string;
     updated_at: string;
 }
@@ -40,13 +60,15 @@ interface Formation {
 interface Props {
     formations: Formation[];
     users: User[];
+    salaries: Salarie[];
 }
 
-export default function Formations({ formations, users }: Props) {
+export default function Formations({ formations, users, salaries }: Props) {
     const [showModal, setShowModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [editingFormation, setEditingFormation] = useState<Formation | null>(null);
     const [deletingFormation, setDeletingFormation] = useState<Formation | null>(null);
+    const [selectedParticipants, setSelectedParticipants] = useState<number[]>([]);
 
     type FormData = {
         titre: string;
@@ -54,11 +76,12 @@ export default function Formations({ formations, users }: Props) {
         type: 'en_ligne' | 'presentiel';
         date_debut: string;
         date_fin: string;
-        duree: string; // Gardé en string pour l'input, sera converti côté serveur
+        duree: string;
         statut: 'planifiée' | 'en cours' | 'terminée';
         responsable_id: string;
         competences: string;
         lien_meet: string;
+        participants: number[];
     };
 
     const { data, setData, post, put, processing, errors, reset } = useForm<FormData>({
@@ -72,11 +95,21 @@ export default function Formations({ formations, users }: Props) {
         responsable_id: '',
         competences: '',
         lien_meet: '',
+        participants: [],
     });
+
+    // Fonction utilitaire pour convertir la chaîne de compétences en tableau
+    const parseCompetences = (competencesStr: string | undefined): string[] => {
+        if (!competencesStr || competencesStr.trim() === '') {
+            return [];
+        }
+        return competencesStr.split(',').map(c => c.trim()).filter(c => c.length > 0);
+    };
 
     const openCreateModal = () => {
         reset();
         setEditingFormation(null);
+        setSelectedParticipants([]);
         setShowModal(true);
     };
 
@@ -103,10 +136,16 @@ export default function Formations({ formations, users }: Props) {
             duree: formation.duree ? formation.duree.toString() : '',
             statut: formation.statut,
             responsable_id: formation.responsable_id.toString(),
-            competences: formation.competences ? formation.competences.join(', ') : '',
+            competences: formation.competences || '',
             lien_meet: formation.lien_meet || '',
+            participants: [],
         });
         setEditingFormation(formation);
+        
+        // Charger les participants existants
+        const existingParticipants = formation.participants?.map(p => p.id) || [];
+        setSelectedParticipants(existingParticipants);
+        
         setShowModal(true);
     };
 
@@ -114,6 +153,21 @@ export default function Formations({ formations, users }: Props) {
         setDeletingFormation(formation);
         setShowDeleteModal(true);
     };
+
+    const toggleParticipant = (salarieId: number) => {
+        setSelectedParticipants(prev => {
+            if (prev.includes(salarieId)) {
+                return prev.filter(id => id !== salarieId);
+            } else {
+                return [...prev, salarieId];
+            }
+        });
+    };
+
+    // Synchroniser les participants sélectionnés avec le form data
+    useEffect(() => {
+        setData('participants', selectedParticipants);
+    }, [selectedParticipants, setData]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -125,13 +179,14 @@ export default function Formations({ formations, users }: Props) {
             type: data.type,
             date_debut: data.date_debut || null,
             date_fin: data.date_fin || null,
-            duree: data.duree ? parseInt(data.duree, 10) : null, // Conversion en entier
+            duree: data.duree ? parseInt(data.duree, 10) : null,
             statut: data.statut,
             responsable_id: parseInt(data.responsable_id, 10),
             competences: data.competences 
                 ? data.competences.split(',').map(c => c.trim()).filter(c => c.length > 0).join(',')
                 : null,
             lien_meet: data.lien_meet.trim() || null,
+            participants: selectedParticipants,
         };
 
         // Validation côté client
@@ -144,13 +199,24 @@ export default function Formations({ formations, users }: Props) {
             alert('La durée doit être un nombre positif d\'heures.');
             return;
         }
+
+        // Validation des dates
+        if (formData.date_debut && formData.date_fin) {
+            const dateDebut = new Date(formData.date_debut);
+            const dateFin = new Date(formData.date_fin);
+            if (dateFin <= dateDebut) {
+                alert('La date de fin doit être postérieure à la date de début.');
+                return;
+            }
+        }
         
         if (editingFormation) {
             put(`/ressources-humaines/formations/${editingFormation.id}`, {
-                data: formData,
+                //data: formData,
                 onSuccess: () => {
                     setShowModal(false);
                     setEditingFormation(null);
+                    setSelectedParticipants([]);
                     reset();
                 },
                 onError: (errors) => {
@@ -159,9 +225,10 @@ export default function Formations({ formations, users }: Props) {
             });
         } else {
             post('/ressources-humaines/formations', {
-                data: formData,
+                //data: formData,
                 onSuccess: () => {
                     setShowModal(false);
+                    setSelectedParticipants([]);
                     reset();
                 },
                 onError: (errors) => {
@@ -351,92 +418,96 @@ export default function Formations({ formations, users }: Props) {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {formations.map((formation) => (
-                                    <tr key={formation.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div>
-                                                <div className="text-sm font-medium text-gray-900">{formation.titre}</div>
-                                                {formation.description && (
-                                                    <div className="text-sm text-gray-500 truncate max-w-xs">
-                                                        {formation.description}
-                                                    </div>
-                                                )}
-                                                {formation.competences && formation.competences.length > 0 && (
-                                                    <div className="flex flex-wrap gap-1 mt-1">
-                                                        {formation.competences.slice(0, 2).map((competence, index) => (
-                                                            <span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                                                                {competence}
-                                                            </span>
-                                                        ))}
-                                                        {formation.competences.length > 2 && (
-                                                            <span className="text-xs text-gray-500">+{formation.competences.length - 2}</span>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex flex-col gap-1">
-                                                {getTypeBadge(formation.type)}
-                                                {formation.type === 'en_ligne' && formation.lien_meet && (
-                                                    <a 
-                                                        href={formation.lien_meet}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-xs text-blue-600 hover:text-blue-800 truncate max-w-24"
-                                                        title={formation.lien_meet}
+                                {formations.map((formation) => {
+                                    const competencesArray = parseCompetences(formation.competences);
+                                    
+                                    return (
+                                        <tr key={formation.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div>
+                                                    <div className="text-sm font-medium text-gray-900">{formation.titre}</div>
+                                                    {formation.description && (
+                                                        <div className="text-sm text-gray-500 truncate max-w-xs">
+                                                            {formation.description}
+                                                        </div>
+                                                    )}
+                                                    {competencesArray.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1 mt-1">
+                                                            {competencesArray.slice(0, 2).map((competence, index) => (
+                                                                <span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                                                    {competence}
+                                                                </span>
+                                                            ))}
+                                                            {competencesArray.length > 2 && (
+                                                                <span className="text-xs text-gray-500">+{competencesArray.length - 2}</span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex flex-col gap-1">
+                                                    {getTypeBadge(formation.type)}
+                                                    {formation.type === 'en_ligne' && formation.lien_meet && (
+                                                        <a 
+                                                            href={formation.lien_meet}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-xs text-blue-600 hover:text-blue-800 truncate max-w-24"
+                                                            title={formation.lien_meet}
+                                                        >
+                                                            Lien Meet
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex items-center gap-2">
+                                                    <User className="w-4 h-4 text-gray-400" />
+                                                    <span className="text-sm text-gray-900">{formation.responsable?.name}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                {getStatusBadge(formation.statut)}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                {formatDuration(formation.duree)}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                <div>
+                                                    <div>Début: {formatDateTime(formation.date_debut)}</div>
+                                                    <div>Fin: {formatDateTime(formation.date_fin)}</div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex items-center gap-2">
+                                                    <Users className="w-4 h-4 text-gray-400" />
+                                                    <span className="text-sm text-gray-900">
+                                                        {formation.participants_count || 0}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => openEditModal(formation)}
+                                                        className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-100 transition-colors"
+                                                        title="Modifier"
                                                     >
-                                                        Lien Meet
-                                                    </a>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center gap-2">
-                                                <User className="w-4 h-4 text-gray-400" />
-                                                <span className="text-sm text-gray-900">{formation.responsable?.name}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            {getStatusBadge(formation.statut)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {formatDuration(formation.duree)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            <div>
-                                                <div>Début: {formatDateTime(formation.date_debut)}</div>
-                                                <div>Fin: {formatDateTime(formation.date_fin)}</div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center gap-2">
-                                                <Users className="w-4 h-4 text-gray-400" />
-                                                <span className="text-sm text-gray-900">
-                                                    {formation.participants_count || 0}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            <div className="flex items-center gap-2">
-                                                <button
-                                                    onClick={() => openEditModal(formation)}
-                                                    className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-100 transition-colors"
-                                                    title="Modifier"
-                                                >
-                                                    <Edit className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => openDeleteModal(formation)}
-                                                    className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-100 transition-colors"
-                                                    title="Supprimer"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                                        <Edit className="w-4 h-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => openDeleteModal(formation)}
+                                                        className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-100 transition-colors"
+                                                        title="Supprimer"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -527,6 +598,7 @@ export default function Formations({ formations, users }: Props) {
                                             type="datetime-local"
                                             value={data.date_fin}
                                             onChange={(e) => setData('date_fin', e.target.value)}
+                                            min={data.date_debut}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                                             required
                                         />
@@ -625,12 +697,52 @@ export default function Formations({ formations, users }: Props) {
                                     )}
                                 </div>
 
+                                {/* Section Participants */}
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                                        Sélectionner les participants
+                                    </label>
+                                    <div className="border border-gray-300 rounded-md p-4 max-h-60 overflow-y-auto">
+                                        {salaries.filter(salarie => salarie.statut === 'actif').length === 0 ? (
+                                            <p className="text-gray-500 text-sm">Aucun salarié actif disponible</p>
+                                        ) : (
+                                            <div className="grid grid-cols-5 gap-2">
+                                                {salaries
+                                                    .filter(salarie => salarie.statut === 'actif')
+                                                    .map((salarie) => (
+                                                        <button
+                                                            key={salarie.id}
+                                                            type="button"
+                                                            onClick={() => toggleParticipant(salarie.id)}
+                                                            className={`p-2 text-xs rounded-md border transition-colors text-center ${
+                                                                selectedParticipants.includes(salarie.id)
+                                                                    ? 'bg-green-100 text-green-800 border-green-300'
+                                                                    : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
+                                                            }`}
+                                                        >
+                                                            {salarie.nom} {salarie.prenom}
+                                                        </button>
+                                                    ))
+                                                }
+                                            </div>
+                                        )}
+                                        {selectedParticipants.length > 0 && (
+                                            <div className="mt-3 pt-3 border-t border-gray-200">
+                                                <p className="text-sm text-gray-600">
+                                                    {selectedParticipants.length} participant{selectedParticipants.length > 1 ? 's' : ''} sélectionné{selectedParticipants.length > 1 ? 's' : ''}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
                                 <div className="flex justify-end gap-3 pt-4 border-t">
                                     <button
                                         type="button"
                                         onClick={() => {
                                             setShowModal(false);
                                             setEditingFormation(null);
+                                            setSelectedParticipants([]);
                                             reset();
                                         }}
                                         className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"

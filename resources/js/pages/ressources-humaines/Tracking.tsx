@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Navigation, Truck, Phone, Package, Clock, MessageCircle, Send, User, Fuel, MapPinCheckInside, } from "lucide-react"
+import { Navigation, Truck, Phone, Package, Clock, MessageCircle, Send, User, Fuel, LucideMapPin as MapPinCheckInside } from "lucide-react"
 
 const GOOGLE_MAPS_API_KEY = "AIzaSyBqaAsQ8r3L9quGIANXqYGlXm3RiJbHjYU"
 
@@ -51,6 +51,8 @@ const trackingPoints = [
         description: "Projet planifié et ressources allouées.",
         completed: true,
         delay: undefined,
+        pourcentage: 100,
+        valide_par: "Ahmed Benali",
       },
       {
         status: "Confirmation",
@@ -58,6 +60,8 @@ const trackingPoints = [
         description: "Projet confirmé, équipe assignée.",
         completed: true,
         delay: undefined,
+        pourcentage: 100,
+        valide_par: "Youssef Tazi",
       },
       {
         status: "Préparation",
@@ -65,6 +69,8 @@ const trackingPoints = [
         description: "Matériaux et équipements préparés.",
         completed: true,
         delay: undefined,
+        pourcentage: 100,
+        valide_par: "Omar Fassi",
       },
       {
         status: "En Route",
@@ -72,6 +78,8 @@ const trackingPoints = [
         description: "Équipe en déplacement vers le site.",
         completed: true,
         delay: undefined,
+        pourcentage: 100,
+        valide_par: "Hassan Alami",
       },
       {
         status: "Pause Technique",
@@ -79,6 +87,8 @@ const trackingPoints = [
         description: "Pause technique pour vérifications.",
         completed: true,
         delay: undefined,
+        pourcentage: 100,
+        valide_par: "Ahmed Benali",
       },
       {
         status: "Arrivée sur Site",
@@ -86,6 +96,8 @@ const trackingPoints = [
         description: "Équipe arrivée sur le site de travail.",
         completed: true,
         delay: undefined,
+        pourcentage: 100,
+        valide_par: "Youssef Tazi",
       },
       {
         status: "Exécution",
@@ -94,6 +106,8 @@ const trackingPoints = [
         completed: false,
         current: true,
         delay: "1h en retard",
+        pourcentage: 50,
+        valide_par: "Non validé",
       },
       {
         status: "Retour",
@@ -101,6 +115,8 @@ const trackingPoints = [
         description: "Retour de l'équipe à la base.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
       {
         status: "Clôture",
@@ -108,6 +124,8 @@ const trackingPoints = [
         description: "Rapport final et archivage.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
     ],
   },
@@ -150,6 +168,8 @@ const trackingPoints = [
         description: "Projet planifié.",
         completed: true,
         delay: undefined,
+        pourcentage: 100,
+        valide_par: "Ahmed Benali",
       },
       {
         status: "Confirmation",
@@ -157,6 +177,8 @@ const trackingPoints = [
         description: "Projet confirmé.",
         completed: true,
         delay: undefined,
+        pourcentage: 100,
+        valide_par: "Youssef Alami",
       },
       {
         status: "Préparation",
@@ -164,6 +186,8 @@ const trackingPoints = [
         description: "Préparation terminée.",
         completed: true,
         delay: undefined,
+        pourcentage: 100,
+        valide_par: "Omar Fassi",
       },
       {
         status: "En Route",
@@ -172,6 +196,8 @@ const trackingPoints = [
         completed: false,
         current: true,
         delay: "20min en retard",
+        pourcentage: 30,
+        valide_par: "En cours",
       },
       {
         status: "Pause Technique",
@@ -179,6 +205,8 @@ const trackingPoints = [
         description: "Pause technique prévue.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
       {
         status: "Arrivée sur Site",
@@ -186,6 +214,8 @@ const trackingPoints = [
         description: "Arrivée prévue sur site.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
       {
         status: "Exécution",
@@ -193,6 +223,8 @@ const trackingPoints = [
         description: "Début des travaux prévu.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
       {
         status: "Retour",
@@ -200,6 +232,8 @@ const trackingPoints = [
         description: "Retour prévu.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
       {
         status: "Clôture",
@@ -207,6 +241,8 @@ const trackingPoints = [
         description: "Clôture prévue.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
     ],
   },
@@ -248,6 +284,8 @@ const trackingPoints = [
         description: "Projet en cours de planification.",
         completed: true,
         delay: undefined,
+        pourcentage: 100,
+        valide_par: "Omar Fassi",
       },
       {
         status: "Confirmation",
@@ -255,6 +293,8 @@ const trackingPoints = [
         description: "Projet confirmé par le client.",
         completed: true,
         delay: undefined,
+        pourcentage: 100,
+        valide_par: "Laila Bennani",
       },
       {
         status: "Préparation",
@@ -263,6 +303,8 @@ const trackingPoints = [
         completed: false,
         current: true,
         delay: undefined,
+        pourcentage: 60,
+        valide_par: "En cours",
       },
       {
         status: "En Route",
@@ -270,6 +312,8 @@ const trackingPoints = [
         description: "Départ prévu vers le site.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
       {
         status: "Pause Technique",
@@ -277,6 +321,8 @@ const trackingPoints = [
         description: "Pause technique prévue.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
       {
         status: "Arrivée sur Site",
@@ -284,6 +330,8 @@ const trackingPoints = [
         description: "Arrivée prévue sur site.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
       {
         status: "Exécution",
@@ -291,6 +339,8 @@ const trackingPoints = [
         description: "Début des travaux prévu.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
       {
         status: "Retour",
@@ -298,6 +348,8 @@ const trackingPoints = [
         description: "Retour prévu.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
       {
         status: "Clôture",
@@ -305,6 +357,8 @@ const trackingPoints = [
         description: "Clôture prévue.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
     ],
   },
@@ -346,6 +400,8 @@ const trackingPoints = [
         description: "Maintenance programmée.",
         completed: true,
         delay: undefined,
+        pourcentage: 100,
+        valide_par: "Hassan Tazi",
       },
       {
         status: "Confirmation",
@@ -353,6 +409,8 @@ const trackingPoints = [
         description: "Intervention confirmée.",
         completed: true,
         delay: undefined,
+        pourcentage: 100,
+        valide_par: "Nadia Alaoui",
       },
       {
         status: "Préparation",
@@ -360,6 +418,8 @@ const trackingPoints = [
         description: "Outils et pièces préparés.",
         completed: true,
         delay: undefined,
+        pourcentage: 100,
+        valide_par: "Khalid Bennani",
       },
       {
         status: "En Route",
@@ -367,6 +427,8 @@ const trackingPoints = [
         description: "Équipe en route vers le site.",
         completed: true,
         delay: undefined,
+        pourcentage: 100,
+        valide_par: "Hassan Tazi",
       },
       {
         status: "Pause Technique",
@@ -375,6 +437,8 @@ const trackingPoints = [
         completed: false,
         current: true,
         delay: undefined,
+        pourcentage: 25,
+        valide_par: "En cours",
       },
       {
         status: "Arrivée sur Site",
@@ -382,6 +446,8 @@ const trackingPoints = [
         description: "Arrivée prévue sur site.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
       {
         status: "Exécution",
@@ -389,6 +455,8 @@ const trackingPoints = [
         description: "Début de la maintenance.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
       {
         status: "Retour",
@@ -396,6 +464,8 @@ const trackingPoints = [
         description: "Retour prévu.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
       {
         status: "Clôture",
@@ -403,6 +473,8 @@ const trackingPoints = [
         description: "Clôture de l'intervention.",
         completed: false,
         delay: undefined,
+        pourcentage: 0,
+        valide_par: "En attente",
       },
     ],
   },
@@ -482,18 +554,6 @@ export default function TrackingPage({ dynamicTrackingPoints = [] }: TrackingPag
   const mapRef = useRef<HTMLDivElement>(null)
   const googleMapRef = useRef<any | null>(null)
   const markersRef = useRef<any[]>([])
-
-  const enhancedTrackingPoints = activeTrackingPoints.map((point) => ({
-    ...point,
-    employees: point.employees.map((emp: any, index: number) => ({
-      ...emp,
-      id: index + 1,
-      prenom: emp.name.split(" ")[0],
-      nom: emp.name.split(" ")[1] || "",
-      email: `${emp.name.toLowerCase().replace(" ", ".")}@company.ma`,
-      tel: `+212 6 ${Math.floor(Math.random() * 90 + 10)} ${Math.floor(Math.random() * 90 + 10)} ${Math.floor(Math.random() * 90 + 10)} ${Math.floor(Math.random() * 90 + 10)}`,
-    })),
-  }))
 
   useEffect(() => {
     if (selectedPoint) {
@@ -642,6 +702,20 @@ export default function TrackingPage({ dynamicTrackingPoints = [] }: TrackingPag
 
   const getStatusDescription = (status: string): string => {
     return descriptions[status as keyof typeof descriptions] || "Statut inconnu"
+  }
+
+  // Fonction pour déterminer la couleur du point selon le statut et le pourcentage
+  const getTimelinePointColor = (event: any) => {
+    if (event.pourcentage === 100) {
+      // Validé (pourcentage = 100) -> vert
+      return "bg-gradient-to-br from-green-400 to-emerald-600 shadow-lg shadow-green-200"
+    } else if (event.pourcentage > 0 && event.pourcentage < 100) {
+      // En attente/en cours (0 < pourcentage < 100) -> jaune
+      return "bg-gradient-to-br from-yellow-400 to-amber-500 animate-pulse shadow-lg shadow-yellow-200"
+    } else {
+      // Rejeté ou pas commencé (pourcentage = 0) -> gris
+      return "bg-gray-200 border-gray-300"
+    }
   }
 
   const VehicleVisualization = ({ vehicle }: { vehicle: any }) => {
@@ -800,25 +874,29 @@ export default function TrackingPage({ dynamicTrackingPoints = [] }: TrackingPag
                       >
                         <div className="flex flex-col items-center">
                           <div
-                            className={`w-4 h-4 rounded-full border-2 transition-all duration-1500 group-hover:scale-125 ${
-                              event.completed
-                                ? "bg-gradient-to-br from-green-400 to-emerald-600 shadow-lg shadow-green-200"
-                                : event.current
-                                  ? "bg-gradient-to-br from-blue-500 to-indigo-600 animate-pulse shadow-lg shadow-blue-200"
-                                  : "bg-gray-200 border-gray-300"
-                            }`}
+                            className={`w-4 h-4 rounded-full border-2 transition-all duration-1500 group-hover:scale-125 ${getTimelinePointColor(event)}`}
                           />
                           {index < selectedPoint.timeline.length - 1 && (
                             <div
                               className={`w-0.5 h-10 mt-2 transition-all duration-300 ${
-                                event.completed ? "bg-green-300" : "bg-gray-200"
+                                event.pourcentage === 100 ? "bg-green-300" : "bg-gray-200"
                               }`}
                             />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
+                          {/* Description en gras en premier */}
+                          <p className="font-bold text-gray-900 text-base mb-2">{event.description}</p>
+                          
+                          {/* Date de validation */}
+                          <p className="text-sm font-medium text-gray-700 mb-1">Date: {event.time}</p>
+                          
+                          {/* Validé par qui */}
+                          <p className="text-sm font-medium text-blue-600 mb-2">Validé par: {event.valide_par}</p>
+                          
+                          {/* Status */}
                           <div className="flex items-center gap-3 mb-2">
-                            <p className="font-semibold text-gray-900 text-base">{event.status}</p>
+                            <p className="font-semibold text-gray-900 text-sm">{event.status}</p>
                             {event.delay && (
                               <Badge
                                 variant="secondary"
@@ -828,8 +906,13 @@ export default function TrackingPage({ dynamicTrackingPoints = [] }: TrackingPag
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-gray-600 leading-relaxed">{event.description}</p>
-                          <p className="text-xs text-gray-500 mt-2 font-medium">{event.time}</p>
+                          
+                          {/* Pourcentage si disponible */}
+                          {event.pourcentage !== undefined && (
+                            <p className="text-xs text-gray-500 mt-1 font-medium">
+                              Progression: {event.pourcentage}%
+                            </p>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -977,24 +1060,21 @@ export default function TrackingPage({ dynamicTrackingPoints = [] }: TrackingPag
 
                       <div className="pt-4 border-t border-gray-200">
                         <p className="text-sm font-semibold text-gray-900 mb-3">
-                          Salariés affectés au projet (
-                          {enhancedTrackingPoints.find((p) => p.id === selectedPoint.id)?.employees.length})
+                          Salariés affectés au projet ({selectedPoint.employees?.length || 0})
                         </p>
                         <div className="space-y-2 max-h-32 hide-scrollbar custom-scroll" style={{ overflowY: "auto" }}>
-                          {enhancedTrackingPoints
-                            .find((p) => p.id === selectedPoint.id)
-                            ?.employees.map((employee: any, index: number) => (
-                              <div
-                                key={index}
-                                className="flex justify-between items-center text-xs p-2 rounded-4 hover:bg-indigo-50 cursor-pointer transition-all duration-200 hover:scale-105"
-                                onClick={() => setSelectedEmployee(employee)}
-                              >
-                                <span className="font-medium text-gray-900">
-                                  {employee.prenom} {employee.nom}
-                                </span>
-                                <span className="text-gray-600">{employee.role}</span>
-                              </div>
-                            ))}
+                          {selectedPoint.employees?.map((employee: any, index: number) => (
+                            <div
+                              key={index}
+                              className="flex justify-between items-center text-xs p-2 rounded-4 hover:bg-indigo-50 cursor-pointer transition-all duration-200 hover:scale-105"
+                              onClick={() => setSelectedEmployee(employee)}
+                            >
+                              <span className="font-medium text-gray-900">
+                                {employee.prenom || employee.name?.split(' ')[0]} {employee.nom || employee.name?.split(' ')[1] || ''}
+                              </span>
+                              <span className="text-gray-600">{employee.role}</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
@@ -1054,12 +1134,12 @@ export default function TrackingPage({ dynamicTrackingPoints = [] }: TrackingPag
                 <CardTitle className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                      {selectedEmployee.prenom[0]}
-                      {selectedEmployee.nom[0]}
+                      {selectedEmployee.prenom?.[0] || selectedEmployee.name?.split(' ')[0]?.[0]}
+                      {selectedEmployee.nom?.[0] || selectedEmployee.name?.split(' ')[1]?.[0] || ''}
                     </div>
                     <div>
                       <p className="text-lg font-bold text-gray-900">
-                        {selectedEmployee.prenom} {selectedEmployee.nom}
+                        {selectedEmployee.prenom || selectedEmployee.name?.split(' ')[0]} {selectedEmployee.nom || selectedEmployee.name?.split(' ')[1] || ''}
                       </p>
                       <p className="text-sm text-gray-600">{selectedEmployee.role}</p>
                     </div>
@@ -1079,7 +1159,7 @@ export default function TrackingPage({ dynamicTrackingPoints = [] }: TrackingPag
                   <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                     <span className="font-medium text-gray-700">Nom complet</span>
                     <span className="text-gray-900">
-                      {selectedEmployee.prenom} {selectedEmployee.nom}
+                      {selectedEmployee.prenom || selectedEmployee.name?.split(' ')[0]} {selectedEmployee.nom || selectedEmployee.name?.split(' ')[1] || ''}
                     </span>
                   </div>
                   <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
@@ -1092,8 +1172,28 @@ export default function TrackingPage({ dynamicTrackingPoints = [] }: TrackingPag
                   </div>
                   <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                     <span className="font-medium text-gray-700">Téléphone</span>
-                    <span className="text-gray-900">{selectedEmployee.tel}</span>
+                    <span className="text-gray-900">{selectedEmployee.telephone}</span>
                   </div>
+                  {selectedEmployee.salaire_mensuel && (
+                    <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                      <span className="font-medium text-gray-700">Salaire mensuel</span>
+                      <span className="text-gray-900">{selectedEmployee.salaire_mensuel} MAD</span>
+                    </div>
+                  )}
+                  {selectedEmployee.date_embauche && (
+                    <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                      <span className="font-medium text-gray-700">Date d'embauche</span>
+                      <span className="text-gray-900">{new Date(selectedEmployee.date_embauche).toLocaleDateString('fr-FR')}</span>
+                    </div>
+                  )}
+                  {selectedEmployee.statut && (
+                    <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                      <span className="font-medium text-gray-700">Statut</span>
+                      <Badge variant={selectedEmployee.statut === 'actif' ? 'default' : 'secondary'}>
+                        {selectedEmployee.statut}
+                      </Badge>
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2 pt-4">
                   <Button className="flex-1 bg-gradient-to-br from-green-500 to-emerald-600 hover:bg-green-600 text-white">

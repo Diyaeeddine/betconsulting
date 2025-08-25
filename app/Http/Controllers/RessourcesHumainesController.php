@@ -33,12 +33,37 @@ class RessourcesHumainesController extends Controller
 
     public function tracking()
     {
-        $projetsFromDB = Projet::with(['responsable', 'salaries'])
+        $projetsFromDB = Projet::with(['responsable'])
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->get();
 
         $dynamicTrackingPoints = $projetsFromDB->map(function ($projet, $index) {
+            // Récupérer les salariés basés sur salarie_ids du projet
+            $salarieIds = $projet->salarie_ids ?? [];
+            if (is_string($salarieIds)) {
+                $salarieIds = json_decode($salarieIds, true) ?? [];
+            }
+
+            $employees = [];
+            if (!empty($salarieIds)) {
+                $salaries = Salarie::whereIn('id', $salarieIds)->get();
+                $employees = $salaries->map(function ($salarie) {
+                    return [
+                        'id' => $salarie->id,
+                        'name' => trim($salarie->nom . ' ' . $salarie->prenom),
+                        'nom' => $salarie->nom,
+                        'prenom' => $salarie->prenom,
+                        'role' => $salarie->poste ?? 'Employé',
+                        'email' => $salarie->email,
+                        'telephone' => $salarie->telephone,
+                        'salaire_mensuel' => $salarie->salaire_mensuel,
+                        'date_embauche' => $salarie->date_embauche,
+                        'statut' => $salarie->statut
+                    ];
+                })->toArray();
+            }
+
             return [
                 'id' => $projet->id,
                 'title' => $projet->nom,
@@ -56,12 +81,7 @@ class RessourcesHumainesController extends Controller
                 ],
                 'currentVehicle' => $this->generateVehicleInfo(),
                 'vehicles' => $this->generateVehiclesList(),
-                'employees' => $projet->salaries->map(function ($salarie) {
-                    return [
-                        'name' => trim($salarie->nom . ' ' . $salarie->prenom),
-                        'role' => $salarie->fonction ?? 'Employé'
-                    ];
-                })->toArray(),
+                'employees' => $employees,
                 'fuel' => [
                     'current' => rand(40, 90),
                     'estimatedTime' => rand(1, 4) . 'h ' . rand(10, 59) . 'min',
@@ -144,60 +164,35 @@ class RessourcesHumainesController extends Controller
         ];
     }
 
-    private function generateTimeline($projet)
-    {
-        $currentStatus = $this->convertStatus($projet->statut);
+private function generateTimeline($projet)
+{
+    // Récupérer les progressions associées au projet
+    $progressions = $projet->progressions()->orderBy('date_validation', 'asc')->get();
 
-        $timeline = [
-            [
-                'status' => 'Programmation',
-                'time' => $projet->date_debut ? date('d M, H:i', strtotime($projet->date_debut)) : 'Non défini',
-                'description' => 'Projet planifié et ressources allouées.',
-                'completed' => true,
-                'delay' => null,
-            ],
-            [
-                'status' => 'Confirmation',
-                'time' => $projet->date_debut ? date('d M, H:i', strtotime($projet->date_debut . ' +2 hours')) : 'Non défini',
-                'description' => 'Projet confirmé, équipe assignée.',
-                'completed' => true,
-                'delay' => null,
-            ],
-            [
-                'status' => 'Préparation',
-                'time' => $projet->date_debut ? date('d M, H:i', strtotime($projet->date_debut . ' +1 day')) : 'Non défini',
-                'description' => 'Matériaux et équipements préparés.',
-                'completed' => in_array($currentStatus, ['execution', 'completed']),
-                'current' => $currentStatus === 'preparation',
-                'delay' => null,
-            ],
-            [
-                'status' => 'En Route',
-                'time' => 'En cours',
-                'description' => 'Équipe en déplacement vers le site.',
-                'completed' => in_array($currentStatus, ['execution', 'completed']),
-                'current' => $currentStatus === 'en-route',
-                'delay' => null,
-            ],
-            [
-                'status' => 'Exécution',
-                'time' => $currentStatus === 'execution' ? 'Maintenant' : 'Planifié',
-                'description' => 'Travaux en cours d\'exécution.',
-                'completed' => $currentStatus === 'completed',
-                'current' => $currentStatus === 'execution',
-                'delay' => $currentStatus === 'execution' ? (rand(0, 1) ? rand(10, 60) . 'min en retard' : null) : null,
-            ],
-            [
-                'status' => 'Clôture',
-                'time' => $projet->date_fin ? date('d M, H:i', strtotime($projet->date_fin)) : 'À planifier',
-                'description' => 'Rapport final et archivage.',
-                'completed' => $currentStatus === 'completed',
-                'delay' => null,
-            ],
-        ];
-
-        return $timeline;
+    // Si aucune progression, on retourne un tableau vide
+    if ($progressions->isEmpty()) {
+        return [];
     }
+
+    $timeline = [];
+
+    foreach ($progressions as $progression) {
+        $timeline[] = [
+            'status' => ucfirst($progression->statut), // statut : ex. 'en route', 'exécution'
+            'time' => $progression->date_validation 
+                ? date('d M, H:i', strtotime($progression->date_validation)) 
+                : 'Non défini',
+            'description' => $progression->description_progress ?? 'Aucune description',
+            'completed' => $progression->pourcentage == 100,
+            'current' => $progression->pourcentage < 100 && $progression->pourcentage > 0,
+            'pourcentage' => $progression->pourcentage,
+            'commentaire' => $progression->commentaire,
+            'valide_par' => $progression->validePar ? $progression->validePar->name : 'Non validé',
+        ];
+    }
+
+    return $timeline;
+}
 
     public function projets()
     {
@@ -847,77 +842,134 @@ class RessourcesHumainesController extends Controller
     // Méthode pour afficher la page des formations
     public function formations()
     {
-        $formations = Formation::with('responsable')
+        $formations = Formation::with(['responsable', 'participants'])
             ->withCount('participants')
             ->orderBy('created_at', 'desc')
             ->get();
 
         $users = User::all();
+        $salaries = Salarie::where('statut', 'actif')->get(['id', 'nom', 'prenom', 'email', 'statut']);
 
         return Inertia::render('ressources-humaines/Formations', [
             'formations' => $formations,
             'users' => $users,
+            'salaries' => $salaries,
         ]);
     }
 
-    // Méthode pour créer une formation
-public function storeFormation(Request $request)
-{
-    $validated = $request->validate([
-        'titre' => 'required|string|max:255',
-        'description' => 'nullable|string',
-        'type' => 'required|in:en_ligne,presentiel',
-        'date_debut' => 'nullable|date',
-        'date_fin' => 'nullable|date|after_or_equal:date_debut',
-        'duree' => 'nullable|string|max:100',
-        'statut' => 'required|in:planifiée,en cours,terminée',
-        'responsable_id' => 'required|exists:users,id',
-        'competences' => 'nullable|string', // Changé de 'array' à 'string'
-        'lien_meet' => 'nullable|url',
-    ]);
+    // Méthode pour créer une formation 
+    public function storeFormation(Request $request)
+    {
+        $validated = $request->validate([
+            'titre' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'type' => 'required|in:en_ligne,presentiel',
+            'date_debut' => 'nullable|date',
+            'date_fin' => 'nullable|date|after_or_equal:date_debut',
+            'duree' => 'nullable|integer|min:1',
+            'statut' => 'required|in:planifiée,en cours,terminée',
+            'responsable_id' => 'required|exists:users,id',
+            'competences' => 'nullable|string',
+            'lien_meet' => 'nullable|url',
+            'participants' => 'nullable|array',
+            'participants.*' => 'exists:salaries,id',
+        ]);
 
-    // Vérifier si la formation est en ligne et le lien est fourni
-    if ($validated['type'] === 'en_ligne' && empty($validated['lien_meet'])) {
-        return redirect()->back()->withErrors(['lien_meet' => 'Le lien Meet est requis pour une formation en ligne.']);
+        // Vérifier si la formation est en ligne et le lien est fourni
+        if ($validated['type'] === 'en_ligne' && empty($validated['lien_meet'])) {
+            return redirect()->back()->withErrors(['lien_meet' => 'Le lien Meet est requis pour une formation en ligne.']);
+        }
+
+        // Extraire les participants avant de créer la formation
+        $participants = $validated['participants'] ?? [];
+        unset($validated['participants']);
+
+        $formation = Formation::create($validated);
+
+        // Attacher les participants à la formation
+        if (!empty($participants)) {
+            $participantsData = [];
+            foreach ($participants as $participantId) {
+                $participantsData[$participantId] = [
+                    'statut' => 'inscrit',
+                    'progression' => 0,
+                ];
+            }
+            $formation->participants()->attach($participantsData);
+        }
+
+        return redirect()->back()->with('success', 'Formation créée avec succès.');
     }
 
-    Formation::create($validated);
+    // Méthode pour mettre à jour une formation
+    public function updateFormation(Request $request, Formation $formation)
+    {
+        $validated = $request->validate([
+            'titre' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'type' => 'required|in:en_ligne,presentiel',
+            'date_debut' => 'nullable|date',
+            'date_fin' => 'nullable|date|after_or_equal:date_debut',
+            'duree' => 'nullable|integer|min:1',
+            'statut' => 'required|in:planifiée,en cours,terminée',
+            'responsable_id' => 'required|exists:users,id',
+            'competences' => 'nullable|string',
+            'lien_meet' => 'nullable|url',
+            'participants' => 'nullable|array',
+            'participants.*' => 'exists:salaries,id',
+        ]);
 
-    return redirect()->back()->with('success', 'Formation créée avec succès.');
-}
+        // Vérifier si la formation est en ligne et le lien est fourni
+        if ($validated['type'] === 'en_ligne' && empty($validated['lien_meet'])) {
+            return redirect()->back()->withErrors(['lien_meet' => 'Le lien Meet est requis pour une formation en ligne.']);
+        }
 
-// Méthode pour mettre à jour une formation
-public function updateFormation(Request $request, Formation $formation)
-{
-    $validated = $request->validate([
-        'titre' => 'required|string|max:255',
-        'description' => 'nullable|string',
-        'type' => 'required|in:en_ligne,presentiel',
-        'date_debut' => 'nullable|date',
-        'date_fin' => 'nullable|date|after_or_equal:date_debut',
-        'duree' => 'nullable|string|max:100',
-        'statut' => 'required|in:planifiée,en cours,terminée',
-        'responsable_id' => 'required|exists:users,id',
-        'competences' => 'nullable|string', // Changé de 'array' à 'string'
-        'lien_meet' => 'nullable|url',
-    ]);
+        // Extraire les participants avant de mettre à jour la formation
+        $participants = $validated['participants'] ?? [];
+        unset($validated['participants']);
 
-    // Vérifier si la formation est en ligne et le lien est fourni
-    if ($validated['type'] === 'en_ligne' && empty($validated['lien_meet'])) {
-        return redirect()->back()->withErrors(['lien_meet' => 'Le lien Meet est requis pour une formation en ligne.']);
+        $formation->update($validated);
+
+        // Synchroniser les participants (remplace tous les participants existants)
+        if (!empty($participants)) {
+            $participantsData = [];
+            foreach ($participants as $participantId) {
+                $participantsData[$participantId] = [
+                    'statut' => 'inscrit',
+                    'progression' => 0,
+                ];
+            }
+            $formation->participants()->sync($participantsData);
+        } else {
+            // Si aucun participant sélectionné, détacher tous les participants
+            $formation->participants()->detach();
+        }
+
+        return redirect()->back()->with('success', 'Formation mise à jour avec succès.');
     }
-
-    $formation->update($validated);
-
-    return redirect()->back()->with('success', 'Formation mise à jour avec succès.');
-}
-
 
     // Méthode pour supprimer une formation
     public function destroyFormation(Formation $formation)
     {
         $formation->delete();
-
         return redirect()->back()->with('success', 'Formation supprimée avec succès.');
+    }
+
+    // Méthode pour récupérer les formations avec les participants
+    public function getFormationsWithParticipants()
+    {
+        $formations = Formation::with(['responsable', 'participants'])
+            ->withCount('participants')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $users = User::all();
+        $salaries = Salarie::where('statut', 'actif')->get();
+
+        return inertia('Formations', [
+            'formations' => $formations,
+            'users' => $users,
+            'salaries' => $salaries,
+        ]);
     }
 }
