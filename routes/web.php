@@ -16,7 +16,8 @@ use App\Http\Controllers\QualiteAuditController;
 use App\Http\Controllers\RessourcesHumainesController;
 use App\Http\Controllers\SuiviControleController;
 use App\Http\Controllers\ScreenshotController;
-
+use ZipArchive;
+use Illuminate\Http\Request;
 Route::get('/', function () {
     return redirect()->route('login');
 })->name('home');
@@ -175,28 +176,60 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
     Route::delete('/ressources-humaines/formations/{formation}', [RessourcesHumainesController::class, 'destroyFormation'])
         ->name('ressources-humaines.formations.destroy');
 
-    // Proxy pour télécharger les fichiers ZIP externes (contourne CORS)
-    Route::get('/ressources-humaines/proxy-download', function (\Illuminate\Http\Request $request) {
-        $url = $request->query('url');
-        if (!$url) {
-            return response('URL manquante', 400);
-        }
+    //zip
 
-        try {
-            $response = Http::get($url);
 
-            if ($response->failed()) {
-                return response('Erreur lors du téléchargement du fichier distant', 500);
+
+    Route::get('/ressources-humaines/list-dao-files', function (Request $request) {
+        $zipUrl = $request->query('zipPath');
+        if (!$zipUrl) return response()->json([], 400);
+
+        // Télécharger le ZIP temporairement
+        $tempZip = tempnam(sys_get_temp_dir(), 'dao');
+        file_put_contents($tempZip, file_get_contents($zipUrl));
+
+        $zip = new ZipArchive();
+        $files = [];
+
+        if ($zip->open($tempZip) === true) {
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $files[] = [
+                    'name' => $zip->getNameIndex($i),
+                    'path' => $zip->getNameIndex($i), // utilisé pour l'ouverture
+                ];
             }
-
-            return response($response->body(), 200)
-                ->header('Content-Type', 'application/zip')
-                ->header('Content-Disposition', 'attachment; filename="download.zip"')
-                ->header('Access-Control-Allow-Origin', '*'); // pour CORS
-        } catch (\Exception $e) {
-            return response('Erreur: ' . $e->getMessage(), 500);
+            $zip->close();
         }
-    })->name('ressources-humaines.proxy-download');
+
+        unlink($tempZip); // supprimer fichier temporaire
+
+        return response()->json($files);
+    });
+
+
+    Route::get('/ressources-humaines/download-dao-file', function (Request $request) {
+        $zipUrl = $request->query('zipPath');
+        $filePath = $request->query('filePath');
+        if (!$zipUrl || !$filePath) return response('Paramètre manquant', 400);
+
+        $tempZip = tempnam(sys_get_temp_dir(), 'dao');
+        file_put_contents($tempZip, file_get_contents($zipUrl));
+
+        $zip = new ZipArchive();
+        $content = null;
+        if ($zip->open($tempZip) === true) {
+            $content = $zip->getFromName($filePath);
+            $zip->close();
+        }
+
+        unlink($tempZip);
+
+        if ($content === null) return response('Fichier introuvable', 404);
+
+        return response($content)
+            ->header('Content-Disposition', 'attachment; filename="' . basename($filePath) . '"');
+    });
+
 
     //soustrait 
     Route::get('/sousTrais', [RessourcesHumainesController::class, 'getSousTrais'])->name('sousTrais.get.ressources-humaines');

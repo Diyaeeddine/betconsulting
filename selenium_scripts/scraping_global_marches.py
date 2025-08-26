@@ -5,6 +5,10 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
+import os
+
+# Chemin absolu vers storage/app/public de ton projet
+storage_public = "/Applications/XAMPP/xamppfiles/htdocs/betconsulting/storage/app/public"
 
 driver = webdriver.Chrome()
 
@@ -52,17 +56,19 @@ try:
         all_keys.update(proj.keys())
     all_keys = list(all_keys)
 
-    # Sauvegarder en CSV
-    with open("projets.csv", "w", newline="", encoding="utf-8") as f:
+    # **Enregistrer directement dans storage/app/public**
+    csv_path = os.path.join(storage_public, "projets.csv")
+    json_path = os.path.join(storage_public, "projets.json")
+
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
         dict_writer = csv.DictWriter(f, fieldnames=all_keys, extrasaction='ignore')
         dict_writer.writeheader()
         dict_writer.writerows(all_projects)
 
-    # Sauvegarder en JSON
-    with open("projets.json", "w", encoding="utf-8") as f:
+    with open(json_path, "w", encoding="utf-8") as f:
         json.dump(all_projects, f, ensure_ascii=False, indent=4)
 
-    print(f"{len(all_projects)} projets récupérés et sauvegardés dans 'projets.csv' et 'projets.json'.")
+    print(f"{len(all_projects)} projets récupérés et sauvegardés dans '{csv_path}' et '{json_path}'.")
 
 finally:
     driver.quit()
