@@ -160,6 +160,19 @@ export default function SousTraitantsManagement({ sousTraitants: initialSousTrai
     }
   }, [])
 
+  const handleDeleteSousTrait = (id: number) => {
+    if (window.confirm("Are you sure you want to delete this sous traitant?")) {
+      router.delete(`/sousTrais/${id}`, {
+        onSuccess: () => {
+          setSousTraitants(sousTraitants.filter(item => item.id !== id))
+          console.log(`Successfully deleted item with ID: ${id}`)
+        },
+        onError: (errors) => {
+          console.error("Failed to delete sous traitant:", errors)
+        }
+      })
+    }
+  }
   const fetchSousTraitants = async () => {
     try {
       setLoading(true)
@@ -254,7 +267,7 @@ export default function SousTraitantsManagement({ sousTraitants: initialSousTrai
     ))
   }
 
-const handleAddSousTrait = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddSousTrait = (e: React.FormEvent<HTMLFormElement>) => {
   e.preventDefault();
   setIsSubmitting(true);
 
@@ -314,6 +327,9 @@ const handleAddSousTrait = (e: React.FormEvent<HTMLFormElement>) => {
     },
   });
 };
+
+
+
 
   const handleAddCancel = () => {
     setIsAddModalOpen(false)
@@ -393,23 +409,23 @@ const handleAddSousTrait = (e: React.FormEvent<HTMLFormElement>) => {
   return "autre"
 }
 
-    const totalSousTraitants = sousTraitants.length
+  const totalSousTraitants = sousTraitants.length
 
-    const bureauEtudesCount = sousTraitants.filter(
-    st => getProfilFromPoste(st.poste) === "bureau_etudes"
-    ).length
+  const bureauEtudesCount = sousTraitants.filter(
+  st => getProfilFromPoste(st.poste) === "bureau_etudes"
+  ).length
 
-    const constructionCount = sousTraitants.filter(
-    st => getProfilFromPoste(st.poste) === "construction"
-    ).length
+  const constructionCount = sousTraitants.filter(
+  st => getProfilFromPoste(st.poste) === "construction"
+  ).length
 
-    const suiviControleCount = sousTraitants.filter(
-    st => getProfilFromPoste(st.poste) === "suivi_controle"
-    ).length
+  const suiviControleCount = sousTraitants.filter(
+  st => getProfilFromPoste(st.poste) === "suivi_controle"
+  ).length
 
-    const supportGestionCount = sousTraitants.filter(
-    st => getProfilFromPoste(st.poste) === "support_gestion"
-    ).length
+  const supportGestionCount = sousTraitants.filter(
+  st => getProfilFromPoste(st.poste) === "support_gestion"
+  ).length
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
@@ -535,33 +551,50 @@ const handleAddSousTrait = (e: React.FormEvent<HTMLFormElement>) => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {sousTraitants.map((sousTrait, index) => (
-                      <tr key={sousTrait.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{index + 1}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{sousTrait.nom}</div>
-                        </td>
-                        {/* <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-500">{sousTrait.profil_string || sousTrait.profil}</div>
-                        </td> */}
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-500">{sousTrait.poste}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                          {formatDate(sousTrait.created_at)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                {sousTraitants.length > 0 ? (
+                  sousTraitants.map((sousTrait, index) => (
+                    <tr key={sousTrait.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{index + 1}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">{sousTrait.nom}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">{sousTrait.poste}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {formatDate(sousTrait.created_at)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                        <div className="flex justify-center space-x-2">
+                          {/* View Button */}
                           <button
                             onClick={() => handleViewFromLeftTable(sousTrait)}
-                            className="inline-flex items-center space-x-1 px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors duration-200"
+                            className="inline-flex items-center justify-center p-2 bg-blue-600 text-white text-xs font-medium rounded-full hover:bg-blue-700 transition-colors duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                            aria-label={`View details for ${sousTrait.nom}`}
                           >
-                            <Eye className="w-3 h-3" />
-                            <span>Voir CV</span>
+                            <Eye className="w-4 h-4" />
                           </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
+
+                          {/* Delete Button with Trash Icon */}
+                          <button
+                            onClick={() => handleDeleteSousTrait(sousTrait.id)}
+                            className="inline-flex items-center justify-center p-2 bg-red-600 text-white text-xs font-medium rounded-full hover:bg-red-700 transition-colors duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                            aria-label={`Delete ${sousTrait.nom}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500">
+                      No sous traitants found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
                 </table>
               )}
             </div>

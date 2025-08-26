@@ -1045,4 +1045,17 @@ class RessourcesHumainesController extends Controller
         return redirect()->back()->with('success', 'Sous Traitant ajouté avec succès.');
     }
 
+    public function deleteSousTrais($id)
+{
+    $sousTrait = SousTrait::find($id);
+
+    if (!$sousTrait) {
+        return redirect()->back()->with('error', 'Sous Traitent Not Found.');
+    }
+
+    $sousTrait->delete();
+
+     return redirect()->back()->with('success', 'Sous Traitant Supprimé avec succès.');
+}
+
  }

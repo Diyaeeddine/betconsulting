@@ -113,10 +113,12 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
     Route::get('/ressources-humaines/formations', [RessourcesHumainesController::class, 'formations'])
         ->name('ressources-humaines.formations');
 
+    
     Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
         '/ressources-humaines/fetch-projets-direct',
         [RessourcesHumainesController::class, 'fetchProjetsDirect']
     )->name('ressources-humaines.fetch-projets-direct');
+
 
     Route::get('/ressources-humaines/sousTrais', [RessourcesHumainesController::class, 'SousTrais'])
         ->name('SousTraitants.ressources-humaines');
@@ -156,7 +158,6 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
     Route::get('/ressources-humaines/maps', [RessourcesHumainesController::class, 'Maps'])
         ->name('maps.ressources-humaines');
 
-    Route::get('/ressources-humaines/projets-csv', [RessourcesHumainesController::class, 'getProjetsCsv'])->name('ressources-humaines.projets-csv');
 
     Route::get('/ressources-humaines/users', [RessourcesHumainesController::class, 'Users'])
         ->name('users.ressources-humaines');
@@ -201,6 +202,8 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
     //soustrait 
     Route::get('/sousTrais', [RessourcesHumainesController::class, 'getSousTrais'])->name('sousTrais.get.ressources-humaines');
     Route::post('/sousTrais', [RessourcesHumainesController::class, 'storeSousTrais'])->name('sousTrais.store.ressources-humaines');
+    Route::delete('/sousTrais/{id}', [RessourcesHumainesController::class, 'deleteSousTrais'])->name('sousTrais.delete.ressources-humaines');
+
 });
 
 
