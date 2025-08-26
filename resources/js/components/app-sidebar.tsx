@@ -77,7 +77,7 @@ const mainNavItems: NavItem[] = [
                     icon: Users,
                 },
                 {
-                    title: 'Sous traitents',
+                    title: 'Sous traitants',
                     href: '/ressources-humaines/sousTrais',
                     icon: Users,
                 },
