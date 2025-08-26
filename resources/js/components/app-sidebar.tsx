@@ -71,11 +71,16 @@ const mainNavItems: NavItem[] = [
                     href: '/ressources-humaines/formations',
                     icon: BookOpen,
                 },
-                    {
-      title: 'Users',
-      href: '/ressources-humaines/users',
-      icon: Users,
-    },
+                {
+                    title: 'Users',
+                    href: '/ressources-humaines/users',
+                    icon: Users,
+                },
+                {
+                    title: 'Sous traitents',
+                    href: '/ressources-humaines/sousTrais',
+                    icon: Users,
+                },
             ]
             : [])];
 

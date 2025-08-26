@@ -11,11 +11,11 @@ use App\Models\Salarie;
 use App\Models\Progression;
 use App\Models\Profil;
 use App\Models\Formation;
+use App\Models\SousTrait;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\hash;
-
 use Inertia\Inertia;
 
 class RessourcesHumainesController extends Controller
@@ -1004,5 +1004,45 @@ class RessourcesHumainesController extends Controller
             ->with('error', 'Erreur lors de l\'exécution du script Selenium.');
     }
 
+    public function SousTrais()
+    {
+        $projets = Projet::with('responsable')->get();
+
+        return Inertia::render('ressources-humaines/SousTraitants', [
+            'projets' => $projets,
+        ]);
+    } 
+    
+    public function getSousTrais()
+    {
+        $sousTrais = SousTrait::all();
+
+        return response()->json($sousTrais, 200);
+    }
+
+    public function storeSousTrais(Request $request)
+    {
+        $validated = $request->validate([
+            'nom'         => 'required|string|max:255',
+            'poste'       => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'formation'   => 'nullable|array',
+            'experience'  => 'nullable|array',
+            'competences' => 'nullable|array',
+            'autre'       => 'nullable|string|max:255',
+        ]);
+
+        $sousTrait = SousTrait::create([
+            'nom'         => $validated['nom'],
+            'poste'       => $validated['poste'],
+            'description' => $validated['description'] ?? null,
+            'formation'   => $validated['formation'] ?? [],
+            'experience'  => $validated['experience'] ?? [],
+            'competences' => $validated['competences'] ?? [],
+            'autre'       => $validated['autre'] ?? null,
+        ]);
+
+        return redirect()->back()->with('success', 'Sous Traitant ajouté avec succès.');
+    }
 
  }

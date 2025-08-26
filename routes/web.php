@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Http;
 use App\Http\Controllers\DirectionGeneraleController;
 use App\Http\Controllers\CommunicationDigitaleController;
 use App\Http\Controllers\EtudesTechniquesController;
@@ -117,6 +118,9 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
         [RessourcesHumainesController::class, 'fetchProjetsDirect']
     )->name('ressources-humaines.fetch-projets-direct');
 
+    Route::get('/ressources-humaines/sousTrais', [RessourcesHumainesController::class, 'SousTrais'])
+        ->name('SousTraitants.ressources-humaines');
+
 
     // Routes CRUD pour les projets
     Route::post('/ressources-humaines/projets', [RessourcesHumainesController::class, 'store'])
@@ -170,7 +174,35 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
         ->name('ressources-humaines.formations.update');
     Route::delete('/ressources-humaines/formations/{formation}', [RessourcesHumainesController::class, 'destroyFormation'])
         ->name('ressources-humaines.formations.destroy');
+
+    // Proxy pour télécharger les fichiers ZIP externes (contourne CORS)
+    Route::get('/ressources-humaines/proxy-download', function (\Illuminate\Http\Request $request) {
+        $url = $request->query('url');
+        if (!$url) {
+            return response('URL manquante', 400);
+        }
+
+        try {
+            $response = Http::get($url);
+
+            if ($response->failed()) {
+                return response('Erreur lors du téléchargement du fichier distant', 500);
+            }
+
+            return response($response->body(), 200)
+                ->header('Content-Type', 'application/zip')
+                ->header('Content-Disposition', 'attachment; filename="download.zip"')
+                ->header('Access-Control-Allow-Origin', '*'); // pour CORS
+        } catch (\Exception $e) {
+            return response('Erreur: ' . $e->getMessage(), 500);
+        }
+    })->name('ressources-humaines.proxy-download');
+
+    //soustrait 
+    Route::get('/sousTrais', [RessourcesHumainesController::class, 'getSousTrais'])->name('sousTrais.get.ressources-humaines');
+    Route::post('/sousTrais', [RessourcesHumainesController::class, 'storeSousTrais'])->name('sousTrais.store.ressources-humaines');
 });
+
 
 // Suivi & Contrôle
 Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function () {
