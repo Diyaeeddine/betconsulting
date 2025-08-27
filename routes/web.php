@@ -16,8 +16,9 @@ use App\Http\Controllers\QualiteAuditController;
 use App\Http\Controllers\RessourcesHumainesController;
 use App\Http\Controllers\SuiviControleController;
 use App\Http\Controllers\ScreenshotController;
-use ZipArchive;
 use Illuminate\Http\Request;
+//use ZipArchive;
+
 Route::get('/', function () {
     return redirect()->route('login');
 })->name('home');
@@ -121,6 +122,10 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
 
     Route::get('/ressources-humaines/sousTrais', [RessourcesHumainesController::class, 'SousTrais'])
         ->name('SousTraitants.ressources-humaines');
+
+    Route::get('/ressources-humaines/projets-data', [RessourcesHumainesController::class, 'getProjetsData'])
+    ->name('ressources-humaines.projets-data');
+
 
 
     // Routes CRUD pour les projets

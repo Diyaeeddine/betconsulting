@@ -11,7 +11,25 @@ const breadcrumbs = [
 ];
 
 type Projet = {
-    [key: string]: string | null;
+    id: number;
+    organisme?: string | null;
+    objet?: string | null;
+    ville_execution?: string | null;
+    allotissement?: string | null;
+    adresse_retrait?: string | null;
+    contact?: string | null;
+    montant_retrait?: string | null;
+    mode_paiement?: string | null;
+    mt_caution?: string | null;
+    budget?: string | null;
+    visite_lieux?: string | null;
+    type?: string | null;
+    observation?: string | null;
+    soumission_electronique?: string | null;
+    support?: string | null;
+    secteur?: string | null;
+    telechargement?: string | null;
+    chemin_fichiers?: string[] | null;
 };
 
 type SupportItem = {
@@ -30,19 +48,67 @@ export default function RessourcesHumaines() {
     const [currentZip, setCurrentZip] = useState<string | null>(null);
     const [loadingDao, setLoadingDao] = useState(false);
 
-    useEffect(() => {
-        fetch('/storage/projets.json')
-            .then((res) => {
-                if (!res.ok) throw new Error('Erreur chargement du fichier JSON');
-                return res.json();
-            })
-            .then((data: Projet[]) => {
-                setProjets(data);
-            })
+    // NEW: états filtres
+    const [filterOrganisme, setFilterOrganisme] = useState('');
+    const [filterDate, setFilterDate] = useState('');
+    const [filterBudget, setFilterBudget] = useState('');
+    const [filterReference, setFilterReference] = useState('');
+
+    // Fonction pour récupérer les projets depuis la base
+    const fetchProjets = () => {
+        axios
+            .get('/ressources-humaines/projets-data')
+            .then((res) => setProjets(res.data))
             .catch((err) => setError(err.message))
             .finally(() => setLoading(false));
+    };
+
+    useEffect(() => {
+        // Chargement initial
+        fetchProjets();
+
+        // Vérification automatique toutes les 5 minutes
+        const interval = setInterval(fetchProjets, 5 * 60 * 1000);
+
+
+        return () => clearInterval(interval); // nettoyage
     }, []);
 
+    // NEW: normalise "DD/MM/YYYY HH:mm" -> "YYYY-MM-DD"
+    const getDateLimiteISO = (visite_lieux?: string | null): string => {
+        if (!visite_lieux) return '';
+        const first = visite_lieux.split('|')[0]?.trim() || '';
+        const m = first.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+        if (!m) return '';
+        const [, dd, mm, yyyy] = m;
+        const day = dd.padStart(2, '0');
+        const month = mm.padStart(2, '0');
+        return `${yyyy}-${month}-${day}`;
+    };
+
+    // NEW: suggestions organismes
+    const organismesList = Array.from(new Set(projets.map((p) => p.organisme).filter(Boolean)));
+
+    // NEW: filtrage client
+    const filteredProjets = projets.filter((p) => {
+        const matchOrganisme = filterOrganisme
+            ? (p.organisme || '').toLowerCase().includes(filterOrganisme.toLowerCase())
+            : true;
+
+        // compare la valeur ISO de l'input date (YYYY-MM-DD) avec la date normalisée du champ
+        const matchDate = filterDate
+            ? getDateLimiteISO(p.visite_lieux) === filterDate
+            : true;
+
+        const matchBudget = filterBudget
+            ? (p.budget || '').includes(filterBudget)
+            : true;
+
+        // Référence 
+        return matchOrganisme && matchDate && matchBudget;
+    });
+
+    // Parse le champ support
     const parseSupport = (supportString: string): SupportItem[] => {
         const cleaned = supportString.replace(/\|/g, '\n');
         const lines = cleaned.split('\n').filter((line) => line.trim() !== '');
@@ -86,15 +152,74 @@ export default function RessourcesHumaines() {
             <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
                 <h1 className="text-2xl font-bold mb-4">Liste des Projets</h1>
 
+                {/* NEW: Filtres */}
+                <div className="bg-gray-100 p-4 rounded-lg shadow mb-4 grid grid-cols-4 gap-4">
+                    {/* Organisme */}
+                    <div>
+                        <label className="block text-sm font-semibold mb-1">Organisme</label>
+                        <input
+                            type="text"
+                            value={filterOrganisme}
+                            onChange={(e) => setFilterOrganisme(e.target.value)}
+                            list="organismes"
+                            className="border rounded px-2 py-1 w-full"
+                            placeholder="Filtrer par organisme"
+                        />
+                        <datalist id="organismes">
+                            {organismesList.map((org, i) => (
+                                <option key={i} value={org || ''} />
+                            ))}
+                        </datalist>
+                    </div>
+
+                    {/* Date limite */}
+                    <div>
+                        <label className="block text-sm font-semibold mb-1">Date limite</label>
+                        <input
+                            type="date"
+                            value={filterDate}
+                            onChange={(e) => setFilterDate(e.target.value)}
+                            className="border rounded px-2 py-1 w-full"
+                        />
+                    </div>
+
+                    {/* Budget */}
+                    <div>
+                        <label className="block text-sm font-semibold mb-1">Budget</label>
+                        <input
+                            type="text"
+                            value={filterBudget}
+                            onChange={(e) => setFilterBudget(e.target.value)}
+                            className="border rounded px-2 py-1 w-full"
+                            placeholder="Filtrer par budget"
+                        />
+                    </div>
+
+                    {/* Référence (placeholder, pas de logique) */}
+                    <div>
+                        <label className="block text-sm font-semibold mb-1">Référence</label>
+                        <input
+                            type="text"
+                            value={filterReference}
+                            onChange={(e) => setFilterReference(e.target.value)}
+                            className="border rounded px-2 py-1 w-full"
+                            placeholder="Référence (nn actif)"
+                        />
+                    </div>
+                </div>
+
                 {loading && <p>Chargement des projets...</p>}
                 {error && <p className="text-red-500">{error}</p>}
 
-                {!loading && !error && projets.length > 0 && (
+                {!loading && !error && filteredProjets.length > 0 && (
                     <div className="space-y-6">
-                        {projets.map((projet, index) => {
-                            const supportItems = projet['Support']
-                                ? parseSupport(projet['Support'])
-                                : [];
+                        {filteredProjets.map((projet, index) => {
+                            const supportItems =
+                                typeof projet.support === 'string' ? parseSupport(projet.support) : [];
+                            const dateLimite =
+                                typeof projet.visite_lieux === 'string'
+                                    ? projet.visite_lieux.split('|')[0]
+                                    : '---';
 
                             return (
                                 <div key={index} className="border rounded-lg shadow-md bg-white">
@@ -103,43 +228,37 @@ export default function RessourcesHumaines() {
                                             <span className="font-bold">N° ordre :</span> {index + 1}
                                         </div>
                                         <div>
-                                            <span className="font-bold">Date/Heure limite :</span>{' '}
-                                            {projet['Visite des lieux ']?.split('|')[0] || '---'}
+                                            <span className="font-bold">Date/Heure limite :</span> {dateLimite}
                                         </div>
                                     </div>
 
                                     <div className="p-4 grid grid-cols-2 gap-4 text-sm">
                                         <p>
-                                            <span className="font-bold">Organisme :</span>{' '}
-                                            {projet['Organisme ']}
+                                            <span className="font-bold">Organisme :</span> {projet.organisme}
                                         </p>
                                         <p>
-                                            <span className="font-bold">Objet :</span> {projet['Objet ']}
+                                            <span className="font-bold">Objet :</span> {projet.objet}
                                         </p>
                                         <p>
-                                            <span className="font-bold">Ville d'exécution :</span>{' '}
-                                            {projet["Ville d'exécution "]}
+                                            <span className="font-bold">Ville d'exécution :</span> {projet.ville_execution}
                                         </p>
-                                        {projet['Allotissement '] && (
+                                        {projet.allotissement && (
                                             <p>
-                                                <span className="font-bold">Allotissement :</span>{' '}
-                                                {projet['Allotissement ']}
+                                                <span className="font-bold">Allotissement :</span> {projet.allotissement}
                                             </p>
                                         )}
                                         <p>
-                                            <span className="font-bold">Contact :</span>{' '}
-                                            {projet['Contact ']}
+                                            <span className="font-bold">Contact :</span> {projet.contact}
                                         </p>
                                         <p>
-                                            <span className="font-bold">Budget :</span> {projet['Budget ']}
+                                            <span className="font-bold">Budget :</span> {projet.budget}
                                         </p>
                                         <p>
-                                            <span className="font-bold">Type :</span> {projet['Type ']}
+                                            <span className="font-bold">Type :</span> {projet.type}
                                         </p>
-                                        {projet['Obsérvation '] && (
+                                        {projet.observation && (
                                             <p>
-                                                <span className="font-bold">Observation :</span>{' '}
-                                                {projet['Obsérvation ']}
+                                                <span className="font-bold">Observation :</span> {projet.observation}
                                             </p>
                                         )}
                                     </div>
@@ -168,10 +287,10 @@ export default function RessourcesHumaines() {
                                         </div>
                                     )}
 
-                                    {projet['Téléchargement'] && (
+                                    {projet.telechargement && (
                                         <div className="p-4 border-t flex gap-2 justify-end">
                                             <a
-                                                href={projet['Téléchargement']!} // ← correction TS
+                                                href={projet.telechargement}
                                                 download
                                                 className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
                                             >
@@ -180,8 +299,7 @@ export default function RessourcesHumaines() {
 
                                             <button
                                                 onClick={() =>
-                                                    projet['Téléchargement'] &&
-                                                    handleOpenDao(projet['Téléchargement'])
+                                                    projet.telechargement && handleOpenDao(projet.telechargement)
                                                 }
                                                 className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
                                             >

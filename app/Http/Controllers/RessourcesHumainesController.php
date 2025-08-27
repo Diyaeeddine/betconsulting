@@ -20,6 +20,8 @@ use Illuminate\Support\Facades\hash;
 use Inertia\Inertia;
 use ZipArchive;
 use League\Csv\Reader;
+use Illuminate\Support\Facades\Cache;
+
 
 class RessourcesHumainesController extends Controller
 {
@@ -975,70 +977,107 @@ class RessourcesHumainesController extends Controller
             'salaries' => $salaries,
         ]);
     }
-public function fetchProjetsDirect()
+
+
+    public function getProjetsData()
+    {
+        $projets = ProjetNv::all(); // récupère tous les projets
+        return response()->json($projets);
+    }
+
+    public function fetchProjetsDirect()
 {
     $pythonScript = base_path('selenium_scripts/scraping_global_marches.py');
 
-    // Exécuter le script Python
-    $output = [];
-    $returnVar = null;
-    exec("python3 $pythonScript", $output, $returnVar);
-
-    if ($returnVar !== 0) {
+    // Vérifier si un autre Selenium est déjà en cours
+    $lock = Cache::lock('selenium_lock', 300); // verrou de 5 minutes
+    if (!$lock->get()) {
         return redirect()->route('ressources-humaines.projets')
-            ->with('error', 'Erreur lors de l\'exécution du script Selenium.');
+            ->with('error', 'Une exécution Selenium est déjà en cours, réessayez dans quelques minutes.');
     }
 
-    // Chemins des fichiers générés directement dans storage/public
-    $csvPath = storage_path('app/public/projets.csv');
-    $jsonPath = storage_path('app/public/projets.json');
-
-    if (!file_exists($csvPath) || !file_exists($jsonPath)) {
-        return redirect()->route('ressources-humaines.projets')
-            ->with('error', 'Fichiers CSV/JSON introuvables après exécution du script.');
-    }
-
-    // Importer le CSV dans la base de données
     try {
-        $csv = Reader::createFromPath($csvPath, 'r');
-        $csv->setHeaderOffset(0);
-        $records = $csv->getRecords();
-
-        foreach ($records as $row) {
-            ProjetNv::updateOrCreate(
-                [
-                    'objet' => $row['Objet '] ?? null,
-                    'organisme' => $row['Organisme '] ?? null,
-                    'ville_execution' => $row["Ville d'exécution "] ?? null,
-                ],
-                [
-                    'allotissement' => $row['Allotissement '] ?? null,
-                    'adresse_retrait' => $row['Adresse retrait '] ?? null,
-                    'contact' => $row['Contact '] ?? null,
-                    'montant_retrait' => $row['Montant retrait '] ?? null,
-                    'mode_paiement' => $row['Mode paiement '] ?? null,
-                    'mt_caution' => $row['Montant caution '] ?? null,
-                    'budget' => $row['Budget '] ?? null,
-                    'visite_lieux' => $row['Visite des lieux '] ?? null,
-                    'type' => $row['Type '] ?? null,
-                    'observation' => $row['Obsérvation '] ?? null,
-                    'soumission_electronique' => $row['Soumission électronique '] ?? null,
-                    'support' => $row['Support'] ?? null,
-                    'secteur' => $row['Secteur '] ?? null,
-                    'telechargement' => $row['Téléchargement'] ?? null,
-                    'chemin_fichiers' => [], // vide au départ
-                ]
-            );
+        // Exécuter le script Python EN ARRIÈRE-PLAN pour ne pas bloquer l'UI
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            // Windows
+            pclose(popen("start /B python $pythonScript", "r"));
+        } else {
+            // Linux / macOS
+            exec("nohup python3 $pythonScript > /dev/null 2>&1 &");
         }
-    } catch (\Exception $e) {
-        return redirect()->route('ressources-humaines.projets')
-            ->with('error', 'Erreur lors de l\'importation du CSV : ' . $e->getMessage());
+
+        // Le reste de ta méthode reste EXACTEMENT comme avant
+        // Chemins des fichiers générés
+        $csvPath = storage_path('app/public/projets.csv');
+        $jsonPath = storage_path('app/public/projets.json');
+
+        if (!file_exists($csvPath) || !file_exists($jsonPath)) {
+            return redirect()->route('ressources-humaines.projets')
+                ->with('error', 'Fichiers CSV/JSON introuvables après exécution du script.');
+        }
+
+        try {
+            // Lire le JSON pour récupérer les chemins des fichiers extraits
+            $jsonData = json_decode(file_get_contents($jsonPath), true);
+            if (!$jsonData) {
+                throw new \Exception('Impossible de lire le fichier JSON.');
+            }
+
+            // Créer un index basé sur "Objet" pour associer CSV <-> JSON
+            $jsonIndex = [];
+            foreach ($jsonData as $proj) {
+                $objetKey = trim($proj['Objet'] ?? $proj['Objet '] ?? '');
+                if ($objetKey) {
+                    $jsonIndex[$objetKey] = $proj;
+                }
+            }
+
+            // Lire le CSV pour l'insertion
+            $csv = Reader::createFromPath($csvPath, 'r');
+            $csv->setHeaderOffset(0);
+            $records = $csv->getRecords();
+
+            foreach ($records as $row) {
+                $objet = trim($row['Objet '] ?? '');
+                $projJson = $jsonIndex[$objet] ?? [];
+
+                ProjetNv::updateOrCreate(
+                    [
+                        'objet' => $objet,
+                        'organisme' => $row['Organisme '] ?? null,
+                        'ville_execution' => $row["Ville d'exécution "] ?? null,
+                    ],
+                    [
+                        'allotissement' => $row['Allotissement '] ?? null,
+                        'adresse_retrait' => $row['Adresse retrait '] ?? null,
+                        'contact' => $row['Contact '] ?? null,
+                        'montant_retrait' => $row['Montant retrait '] ?? null,
+                        'mode_paiement' => $row['Mode paiement '] ?? null,
+                        'mt_caution' => $row['Montant caution '] ?? null,
+                        'budget' => $row['Budget '] ?? null,
+                        'visite_lieux' => $row['Visite des lieux '] ?? null,
+                        'type' => $row['Type '] ?? null,
+                        'observation' => $row['Obsérvation '] ?? null,
+                        'soumission_electronique' => $row['Soumission électronique '] ?? null,
+                        'support' => $row['Support'] ?? null,
+                        'secteur' => $row['Secteur '] ?? null,
+                        'telechargement' => $row['Téléchargement'] ?? null,
+                        'chemin_fichiers' => $projJson['EXTRACTED_FILES'] ?? [], // chemins extraits depuis le JSON
+                    ]
+                );
+            }
+        } catch (\Exception $e) {
+            return redirect()->route('ressources-humaines.projets')
+                ->with('error', 'Erreur lors de l\'importation : ' . $e->getMessage());
+        }
+    } finally {
+        // Libérer le lock
+        $lock->release();
     }
 
     return redirect()->route('ressources-humaines.projets')
-        ->with('success', 'Projets mis à jour automatiquement et CSV importé dans la base !');
+        ->with('success', 'Le script Selenium a été lancé en arrière-plan. Les projets seront mis à jour automatiquement.');
 }
-
 
 
 
@@ -1049,8 +1088,8 @@ public function fetchProjetsDirect()
         return Inertia::render('ressources-humaines/SousTraitants', [
             'projets' => $projets,
         ]);
-    } 
-    
+    }
+
     public function getSousTrais()
     {
         $sousTrais = SousTrait::all();
@@ -1083,98 +1122,96 @@ public function fetchProjetsDirect()
         return redirect()->back()->with('success', 'Sous Traitant ajouté avec succès.');
     }
 
-public function listDaoFiles(Request $request)
-{
-    $zipPath = $request->input('zipPath'); // chemin du zip depuis le JSON
+    public function listDaoFiles(Request $request)
+    {
+        $zipPath = $request->input('zipPath'); // chemin du zip depuis le JSON
 
-    if (!$zipPath || !Storage::exists($zipPath)) {
-        return response()->json(['error' => 'Fichier ZIP introuvable'], 404);
-    }
-
-    $zip = new ZipArchive();
-    $filesList = [];
-
-    $fullPath = Storage::path($zipPath);
-    if ($zip->open($fullPath) === true) {
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            $stat = $zip->statIndex($i);
-            if (!str_ends_with($stat['name'], '/')) { // ignorer les dossiers
-                $filesList[] = [
-                    'name' => basename($stat['name']),
-                    'path' => $stat['name']
-                ];
-            }
+        if (!$zipPath || !Storage::exists($zipPath)) {
+            return response()->json(['error' => 'Fichier ZIP introuvable'], 404);
         }
-        $zip->close();
+
+        $zip = new ZipArchive();
+        $filesList = [];
+
+        $fullPath = Storage::path($zipPath);
+        if ($zip->open($fullPath) === true) {
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $stat = $zip->statIndex($i);
+                if (!str_ends_with($stat['name'], '/')) { // ignorer les dossiers
+                    $filesList[] = [
+                        'name' => basename($stat['name']),
+                        'path' => $stat['name']
+                    ];
+                }
+            }
+            $zip->close();
+        }
+
+        return response()->json($filesList);
     }
 
-    return response()->json($filesList);
+    // Optionnel : pour télécharger directement un fichier
+    public function downloadDaoFile(Request $request)
+    {
+        $zipPath = $request->input('zipPath');
+        $filePath = $request->input('filePath');
+
+        if (!$zipPath || !$filePath || !Storage::exists($zipPath)) {
+            return response()->json(['error' => 'Fichier introuvable'], 404);
+        }
+
+        $zip = new ZipArchive();
+        $fullPath = Storage::path($zipPath);
+
+        if ($zip->open($fullPath) === true) {
+            $tmpFile = tempnam(sys_get_temp_dir(), 'dao_');
+            copy("zip://{$fullPath}#{$filePath}", $tmpFile);
+            $zip->close();
+
+            return response()->download($tmpFile, basename($filePath))->deleteFileAfterSend(true);
+        }
+
+        return response()->json(['error' => 'Impossible d’ouvrir le fichier ZIP'], 500);
+    }
+
+    public function importProjetsFromCsv()
+    {
+        $csvPath = storage_path('app/public/projets.csv');
+
+        if (!file_exists($csvPath)) {
+            return redirect()->back()->with('error', 'Fichier CSV introuvable.');
+        }
+
+        $csv = Reader::createFromPath($csvPath, 'r');
+        $csv->setHeaderOffset(0); // première ligne = noms des colonnes
+        $records = $csv->getRecords();
+
+        foreach ($records as $row) {
+            ProjetNv::updateOrCreate(
+                ['objet' => $row['Objet '] ?? null], // clé unique pour éviter doublons
+                [
+                    'organisme' => $row['Organisme '] ?? null,
+                    'objet' => $row['Objet '] ?? null,
+                    'ville_execution' => $row["Ville d'exécution "] ?? null,
+                    'allotissement' => $row['Allotissement '] ?? null,
+                    'adresse_retrait' => $row['Adresse retrait '] ?? null,
+                    'contact' => $row['Contact '] ?? null,
+                    'montant_retrait' => $row['Montant retrait '] ?? null,
+                    'mode_paiement' => $row['Mode paiement '] ?? null,
+                    'mt_caution' => $row['Montant caution '] ?? null,
+                    'budget' => $row['Budget '] ?? null,
+                    'visite_lieux' => $row['Visite des lieux '] ?? null,
+                    'type' => $row['Type '] ?? null,
+                    'observation' => $row['Obsérvation '] ?? null,
+                    'soumission_electronique' => $row['Soumission électronique '] ?? null,
+                    'support' => $row['Support'] ?? null,
+                    'secteur' => $row['Secteur '] ?? null,
+                    'telechargement' => $row['Téléchargement'] ?? null,
+                    'chemin_fichiers' => [], // vide au départ
+                ]
+            );
+        }
+
+        return redirect()->back()->with('success', 'CSV importé avec succès.');
+    }
 }
-
-// Optionnel : pour télécharger directement un fichier
-public function downloadDaoFile(Request $request)
-{
-    $zipPath = $request->input('zipPath');
-    $filePath = $request->input('filePath');
-
-    if (!$zipPath || !$filePath || !Storage::exists($zipPath)) {
-        return response()->json(['error' => 'Fichier introuvable'], 404);
-    }
-
-    $zip = new ZipArchive();
-    $fullPath = Storage::path($zipPath);
-
-    if ($zip->open($fullPath) === true) {
-        $tmpFile = tempnam(sys_get_temp_dir(), 'dao_');
-        copy("zip://{$fullPath}#{$filePath}", $tmpFile);
-        $zip->close();
-
-        return response()->download($tmpFile, basename($filePath))->deleteFileAfterSend(true);
-    }
-
-    return response()->json(['error' => 'Impossible d’ouvrir le fichier ZIP'], 500);
-}
-
-public function importProjetsFromCsv()
-{
-    $csvPath = storage_path('app/public/projets.csv');
-
-    if (!file_exists($csvPath)) {
-        return redirect()->back()->with('error', 'Fichier CSV introuvable.');
-    }
-
-    $csv = Reader::createFromPath($csvPath, 'r');
-    $csv->setHeaderOffset(0); // première ligne = noms des colonnes
-    $records = $csv->getRecords();
-
-    foreach ($records as $row) {
-        ProjetNv::updateOrCreate(
-            ['objet' => $row['Objet '] ?? null], // clé unique pour éviter doublons
-            [
-                'organisme' => $row['Organisme '] ?? null,
-                'objet' => $row['Objet '] ?? null,
-                'ville_execution' => $row["Ville d'exécution "] ?? null,
-                'allotissement' => $row['Allotissement '] ?? null,
-                'adresse_retrait' => $row['Adresse retrait '] ?? null,
-                'contact' => $row['Contact '] ?? null,
-                'montant_retrait' => $row['Montant retrait '] ?? null,
-                'mode_paiement' => $row['Mode paiement '] ?? null,
-                'mt_caution' => $row['Montant caution '] ?? null,
-                'budget' => $row['Budget '] ?? null,
-                'visite_lieux' => $row['Visite des lieux '] ?? null,
-                'type' => $row['Type '] ?? null,
-                'observation' => $row['Obsérvation '] ?? null,
-                'soumission_electronique' => $row['Soumission électronique '] ?? null,
-                'support' => $row['Support'] ?? null,
-                'secteur' => $row['Secteur '] ?? null,
-                'telechargement' => $row['Téléchargement'] ?? null,
-                'chemin_fichiers' => [], // vide au départ
-            ]
-        );
-    }
-
-    return redirect()->back()->with('success', 'CSV importé avec succès.');
-}
-
-
- }
