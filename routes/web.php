@@ -135,6 +135,15 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
         [RessourcesHumainesController::class, 'getAppelOffersData']
     )->name('ressources-humaines.appel-offers-data');
 
+    // Lancer le script Selenium pour récupérer les bons de commande
+    Route::get('/ressources-humaines/fetch-bons-commande', [RessourcesHumainesController::class, 'fetchBonsCommande'])
+        ->name('ressources-humaines.fetch-bons-commande');
+
+    // Obtenir les données JSON des bons de commande
+    Route::get('/ressources-humaines/bons-commandes', [RessourcesHumainesController::class, 'getBonsCommandeData'])
+        ->name('ressources-humaines.bons-commandes');
+
+
 
 
 

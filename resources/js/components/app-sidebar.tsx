@@ -7,7 +7,7 @@ import { Link, usePage } from '@inertiajs/react';
 import { LayoutGrid } from 'lucide-react';
 import BetconsultingDashLogo from './betconsulting-dash-logo';
 import {
-  Users, Route,Car,Wrench, BookOpen} from "lucide-react"
+  Users, Route,Car,Wrench, BookOpen,ShoppingCart} from "lucide-react"
 export function AppSidebar() {
     const { auth } = usePage<SharedData>().props;
 
@@ -44,6 +44,12 @@ const mainNavItems: NavItem[] = [
                 href: '/ressources-humaines/appel-offer', 
                 icon: BookOpen, 
             },
+            {
+    title: 'Bons de Commande',
+    href: '/ressources-humaines/fetch-bons-commande',
+    icon: ShoppingCart, // ou un autre icon adapté
+},
+
                 {
                   title: 'Tracking',
                   href: '/ressources-humaines/tracking',

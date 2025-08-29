@@ -14,6 +14,7 @@ use App\Models\Formation;
 use App\Models\SousTrait;
 use App\Models\ProjetNv;
 use App\Models\AppelOffer;
+use App\Models\BonCommande;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -1205,6 +1206,101 @@ class RessourcesHumainesController extends Controller
             'projets' => $projets,
         ]);
     }
+
+
+public function fetchBonsCommande()
+{
+    $pythonScript = base_path('selenium_scripts/scraping_bons_commande.py');
+
+    $lock = Cache::lock('selenium_lock', 300); // 5 min
+    if (!$lock->get()) {
+        return redirect()->route('ressources-humaines.bons-commandes')
+            ->with('error', 'Une exécution Selenium est déjà en cours, réessayez dans quelques minutes.');
+    }
+
+    try {
+        // Exécuter le script Python
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            pclose(popen("start /B python $pythonScript", "r"));
+        } else {
+            exec("nohup python3 $pythonScript > /dev/null 2>&1 &");
+        }
+
+        $csvPath = storage_path('app/public/bons_commande/bons_commande.csv');
+        $jsonPath = storage_path('app/public/bons_commande/bons_commande.json');
+
+        if (!file_exists($csvPath) || !file_exists($jsonPath)) {
+            return redirect()->route('ressources-humaines.bons-commandes')
+                ->with('error', 'Fichiers CSV/JSON introuvables après exécution du script.');
+        }
+
+        $jsonData = json_decode(file_get_contents($jsonPath), true);
+        if (!$jsonData) {
+            return redirect()->route('ressources-humaines.bons-commandes')
+                ->with('error', 'Impossible de lire le fichier JSON.');
+        }
+
+        // Créer un index basé sur "Objet"
+        $jsonIndex = [];
+        foreach ($jsonData as $bon) {
+            $objetKey = trim($bon['Objet'] ?? $bon['Objet '] ?? '');
+            if ($objetKey) {
+                $jsonIndex[$objetKey] = $bon;
+            }
+        }
+
+        // Lire le CSV
+        $csv = Reader::createFromPath($csvPath, 'r');
+        $csv->setHeaderOffset(0);
+        $records = $csv->getRecords();
+
+        foreach ($records as $row) {
+            $objet = trim($row['Objet '] ?? '');
+            $bonJson = $jsonIndex[$objet] ?? [];
+
+            BonCommande::updateOrCreate(
+                [
+                    'objet' => $objet,
+                    'organisme' => $row['Organisme'] ?? null,
+                    'ville_execution' => $row["Ville d'exécution"] ?? null,
+                ],
+                [
+                    'observation' => $row['Obsérvation'] ?? null,
+                    'visite_lieux' => $row['Visite des lieux'] ?? null,
+                    'telechargement_dao' => $row['Téléchargement_DAO'] ?? null,
+                    'lien_cliquer_ici' => $row['Lien_Cliquer_Ici'] ?? null,
+                    'type' => $row['Type'] ?? null,
+                    'soumission_electronique' => $row['Soumission électronique'] ?? null,
+                    'chemin_fichiers' => $bonJson['EXTRACTED_FILES'] ?? [],
+                ]
+            );
+        }
+
+    } catch (\Exception $e) {
+        return redirect()->route('ressources-humaines.bons-commandes')
+            ->with('error', 'Erreur lors de l\'importation : ' . $e->getMessage());
+    } finally {
+        $lock->release();
+    }
+
+    return redirect()->route('ressources-humaines.bons-commandes')
+        ->with('success', 'Le script Selenium a été lancé en arrière-plan. Les bons de commande seront mis à jour automatiquement.');
+}
+
+
+
+    // Récupérer les données JSON des bons de commande
+public function getBonsCommandeData()
+{
+    $bons = BonCommande::orderBy('created_at', 'desc')->get();
+
+    return Inertia::render('ressources-humaines/BonCommande', [
+        'bonsCommande' => $bons
+    ]);
+}
+
+
+
 
     public function getSousTrais()
     {
