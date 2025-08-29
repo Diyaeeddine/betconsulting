@@ -120,11 +120,29 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
         [RessourcesHumainesController::class, 'fetchProjetsDirect']
     )->name('ressources-humaines.fetch-projets-direct');
 
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/fetch-resultats-offres',
+        [RessourcesHumainesController::class, 'fetchResultatsOffres']
+    )->name('ressources-humaines.fetch-resultats-offres');
+
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/appel-offer',
+        [RessourcesHumainesController::class, 'appelOfferPage']
+    )->name('ressources-humaines.appel-offer');
+
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/appel-offers-data',
+        [RessourcesHumainesController::class, 'getAppelOffersData']
+    )->name('ressources-humaines.appel-offers-data');
+
+
+
+
     Route::get('/ressources-humaines/sousTrais', [RessourcesHumainesController::class, 'SousTrais'])
         ->name('SousTraitants.ressources-humaines');
 
     Route::get('/ressources-humaines/projets-data', [RessourcesHumainesController::class, 'getProjetsData'])
-    ->name('ressources-humaines.projets-data');
+        ->name('ressources-humaines.projets-data');
 
 
 

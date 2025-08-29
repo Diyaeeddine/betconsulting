@@ -39,6 +39,11 @@ const mainNavItems: NavItem[] = [
         // Ressources Humaines
         ...(auth?.user?.role === 'ressources-humaines'
             ? [
+                            {
+                title: 'Résultats Appels d\'Offres', 
+                href: '/ressources-humaines/appel-offer', 
+                icon: BookOpen, 
+            },
                 {
                   title: 'Tracking',
                   href: '/ressources-humaines/tracking',

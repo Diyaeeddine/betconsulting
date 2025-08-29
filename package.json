@@ -57,6 +57,7 @@
         "laravel-vite-plugin": "^2.0",
         "leaflet": "^1.9.4",
         "lucide-react": "^0.475.0",
+        "papaparse": "^5.5.3",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
         "recharts": "^2.15.4",

@@ -48,13 +48,14 @@ export default function RessourcesHumaines() {
     const [currentZip, setCurrentZip] = useState<string | null>(null);
     const [loadingDao, setLoadingDao] = useState(false);
 
-    // NEW: états filtres
     const [filterOrganisme, setFilterOrganisme] = useState('');
     const [filterDate, setFilterDate] = useState('');
     const [filterBudget, setFilterBudget] = useState('');
     const [filterReference, setFilterReference] = useState('');
 
-    // Fonction pour récupérer les projets depuis la base
+    // État pour le bouton d'actualisation
+    const [refreshing, setRefreshing] = useState(false);
+
     const fetchProjets = () => {
         axios
             .get('/ressources-humaines/projets-data')
@@ -64,17 +65,12 @@ export default function RessourcesHumaines() {
     };
 
     useEffect(() => {
-        // Chargement initial
         fetchProjets();
 
-        // Vérification automatique toutes les 5 minutes
         const interval = setInterval(fetchProjets, 5 * 60 * 1000);
-
-
-        return () => clearInterval(interval); // nettoyage
+        return () => clearInterval(interval);
     }, []);
 
-    // NEW: normalise "DD/MM/YYYY HH:mm" -> "YYYY-MM-DD"
     const getDateLimiteISO = (visite_lieux?: string | null): string => {
         if (!visite_lieux) return '';
         const first = visite_lieux.split('|')[0]?.trim() || '';
@@ -86,16 +82,13 @@ export default function RessourcesHumaines() {
         return `${yyyy}-${month}-${day}`;
     };
 
-    // NEW: suggestions organismes
     const organismesList = Array.from(new Set(projets.map((p) => p.organisme).filter(Boolean)));
 
-    // NEW: filtrage client
     const filteredProjets = projets.filter((p) => {
         const matchOrganisme = filterOrganisme
             ? (p.organisme || '').toLowerCase().includes(filterOrganisme.toLowerCase())
             : true;
 
-        // compare la valeur ISO de l'input date (YYYY-MM-DD) avec la date normalisée du champ
         const matchDate = filterDate
             ? getDateLimiteISO(p.visite_lieux) === filterDate
             : true;
@@ -104,11 +97,9 @@ export default function RessourcesHumaines() {
             ? (p.budget || '').includes(filterBudget)
             : true;
 
-        // Référence 
         return matchOrganisme && matchDate && matchBudget;
     });
 
-    // Parse le champ support
     const parseSupport = (supportString: string): SupportItem[] => {
         const cleaned = supportString.replace(/\|/g, '\n');
         const lines = cleaned.split('\n').filter((line) => line.trim() !== '');
@@ -146,15 +137,59 @@ export default function RessourcesHumaines() {
         window.open(`/ressources-humaines/download-dao-file?${params.toString()}`, '_blank');
     };
 
+    const handleRefresh = () => {
+        setRefreshing(true);
+        axios
+            .get('/ressources-humaines/fetch-projets-direct')
+            .then(() => {
+                fetchProjets();
+            })
+            .catch((err) => {
+                console.error(err);
+                setError("Erreur lors de l'actualisation");
+            })
+            .finally(() => setRefreshing(false));
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Dashboard Ressources Humaines & Gestion des Compétences" />
             <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                <h1 className="text-2xl font-bold mb-4">Liste des Projets</h1>
+                <div className="flex justify-between items-center mb-4">
+                    <h1 className="text-2xl font-bold">Liste des Projets</h1>
+                    <button
+                        onClick={handleRefresh}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold px-4 py-2 rounded shadow flex items-center gap-2"
+                        disabled={refreshing}
+                    >
+                        {refreshing && (
+                            <svg
+                                className="animate-spin h-5 w-5 text-white"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                            >
+                                <circle
+                                    className="opacity-25"
+                                    cx="12"
+                                    cy="12"
+                                    r="10"
+                                    stroke="currentColor"
+                                    strokeWidth="4"
+                                ></circle>
+                                <path
+                                    className="opacity-75"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8v8z"
+                                ></path>
+                            </svg>
+                        )}
+                        {refreshing ? 'Actualisation...' : 'Actualiser'}
+                    </button>
+                </div>
 
-                {/* NEW: Filtres */}
+                {/* Filtres */}
                 <div className="bg-gray-100 p-4 rounded-lg shadow mb-4 grid grid-cols-4 gap-4">
-                    {/* Organisme */}
                     <div>
                         <label className="block text-sm font-semibold mb-1">Organisme</label>
                         <input
@@ -172,7 +207,6 @@ export default function RessourcesHumaines() {
                         </datalist>
                     </div>
 
-                    {/* Date limite */}
                     <div>
                         <label className="block text-sm font-semibold mb-1">Date limite</label>
                         <input
@@ -183,7 +217,6 @@ export default function RessourcesHumaines() {
                         />
                     </div>
 
-                    {/* Budget */}
                     <div>
                         <label className="block text-sm font-semibold mb-1">Budget</label>
                         <input
@@ -195,7 +228,6 @@ export default function RessourcesHumaines() {
                         />
                     </div>
 
-                    {/* Référence (placeholder, pas de logique) */}
                     <div>
                         <label className="block text-sm font-semibold mb-1">Référence</label>
                         <input

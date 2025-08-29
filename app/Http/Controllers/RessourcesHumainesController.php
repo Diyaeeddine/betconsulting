@@ -13,6 +13,7 @@ use App\Models\Profil;
 use App\Models\Formation;
 use App\Models\SousTrait;
 use App\Models\ProjetNv;
+use App\Models\AppelOffer;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -21,6 +22,7 @@ use Inertia\Inertia;
 use ZipArchive;
 use League\Csv\Reader;
 use Illuminate\Support\Facades\Cache;
+use Carbon\Carbon;
 
 
 class RessourcesHumainesController extends Controller
@@ -986,100 +988,214 @@ class RessourcesHumainesController extends Controller
     }
 
     public function fetchProjetsDirect()
-{
-    $pythonScript = base_path('selenium_scripts/scraping_global_marches.py');
+    {
+        $pythonScript = base_path('selenium_scripts/scraping_global_marches.py');
 
-    // Vérifier si un autre Selenium est déjà en cours
-    $lock = Cache::lock('selenium_lock', 300); // verrou de 5 minutes
-    if (!$lock->get()) {
-        return redirect()->route('ressources-humaines.projets')
-            ->with('error', 'Une exécution Selenium est déjà en cours, réessayez dans quelques minutes.');
-    }
-
-    try {
-        // Exécuter le script Python EN ARRIÈRE-PLAN pour ne pas bloquer l'UI
-        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-            // Windows
-            pclose(popen("start /B python $pythonScript", "r"));
-        } else {
-            // Linux / macOS
-            exec("nohup python3 $pythonScript > /dev/null 2>&1 &");
-        }
-
-        // Le reste de ta méthode reste EXACTEMENT comme avant
-        // Chemins des fichiers générés
-        $csvPath = storage_path('app/public/projets.csv');
-        $jsonPath = storage_path('app/public/projets.json');
-
-        if (!file_exists($csvPath) || !file_exists($jsonPath)) {
+        // Vérifier si un autre Selenium est déjà en cours
+        $lock = Cache::lock('selenium_lock', 300); // verrou de 5 minutes
+        if (!$lock->get()) {
             return redirect()->route('ressources-humaines.projets')
-                ->with('error', 'Fichiers CSV/JSON introuvables après exécution du script.');
+                ->with('error', 'Une exécution Selenium est déjà en cours, réessayez dans quelques minutes.');
         }
 
         try {
-            // Lire le JSON pour récupérer les chemins des fichiers extraits
-            $jsonData = json_decode(file_get_contents($jsonPath), true);
-            if (!$jsonData) {
-                throw new \Exception('Impossible de lire le fichier JSON.');
+            // Exécuter le script Python EN ARRIÈRE-PLAN pour ne pas bloquer l'UI
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                // Windows
+                pclose(popen("start /B python $pythonScript", "r"));
+            } else {
+                // Linux / macOS
+                exec("nohup python3 $pythonScript > /dev/null 2>&1 &");
             }
 
-            // Créer un index basé sur "Objet" pour associer CSV <-> JSON
+            // Chemins des fichiers générés
+            $csvPath = storage_path('app/public/projets.csv');
+            $jsonPath = storage_path('app/public/projets.json');
+
+            if (!file_exists($csvPath) || !file_exists($jsonPath)) {
+                return redirect()->route('ressources-humaines.projets')
+                    ->with('error', 'Fichiers CSV/JSON introuvables après exécution du script.');
+            }
+
+            try {
+                // Lire le JSON pour récupérer les chemins des fichiers extraits
+                $jsonData = json_decode(file_get_contents($jsonPath), true);
+                if (!$jsonData) {
+                    throw new \Exception('Impossible de lire le fichier JSON.');
+                }
+
+                // Créer un index basé sur "Objet" pour associer CSV <-> JSON
+                $jsonIndex = [];
+                foreach ($jsonData as $proj) {
+                    $objetKey = trim($proj['Objet'] ?? $proj['Objet '] ?? '');
+                    if ($objetKey) {
+                        $jsonIndex[$objetKey] = $proj;
+                    }
+                }
+
+                // Lire le CSV pour l'insertion
+                $csv = Reader::createFromPath($csvPath, 'r');
+                $csv->setHeaderOffset(0);
+                $records = $csv->getRecords();
+
+                foreach ($records as $row) {
+                    $objet = trim($row['Objet '] ?? '');
+                    $projJson = $jsonIndex[$objet] ?? [];
+
+                    ProjetNv::updateOrCreate(
+                        [
+                            'objet' => $objet,
+                            'organisme' => $row['Organisme '] ?? null,
+                            'ville_execution' => $row["Ville d'exécution "] ?? null,
+                        ],
+                        [
+                            'allotissement' => $row['Allotissement '] ?? null,
+                            'adresse_retrait' => $row['Adresse retrait '] ?? null,
+                            'contact' => $row['Contact '] ?? null,
+                            'montant_retrait' => $row['Montant retrait '] ?? null,
+                            'mode_paiement' => $row['Mode paiement '] ?? null,
+                            'mt_caution' => $row['Montant caution '] ?? null,
+                            'budget' => $row['Budget '] ?? null,
+                            'visite_lieux' => $row['Visite des lieux '] ?? null,
+                            'type' => $row['Type '] ?? null,
+                            'observation' => $row['Obsérvation '] ?? null,
+                            'soumission_electronique' => $row['Soumission électronique '] ?? null,
+                            'support' => $row['Support'] ?? null,
+                            'secteur' => $row['Secteur '] ?? null,
+                            'telechargement' => $row['Téléchargement'] ?? null,
+                            'chemin_fichiers' => $projJson['EXTRACTED_FILES'] ?? [], // chemins extraits depuis le JSON
+                        ]
+                    );
+                }
+            } catch (\Exception $e) {
+                return redirect()->route('ressources-humaines.projets')
+                    ->with('error', 'Erreur lors de l\'importation : ' . $e->getMessage());
+            }
+        } finally {
+            // Libérer le lock
+            $lock->release();
+        }
+
+        return redirect()->route('ressources-humaines.projets')
+            ->with('success', 'Le script Selenium a été lancé en arrière-plan. Les projets seront mis à jour automatiquement.');
+    }
+
+    public function getAppelOffersData()
+    {
+        $appelOffers = AppelOffer::orderBy('date_ouverture', 'desc')->get();
+        return response()->json($appelOffers);
+    }
+
+
+    public function fetchResultatsOffres()
+    {
+        $pythonScript = base_path('selenium_scripts/resultats_offres.py');
+
+        // Lock pour éviter les exécutions multiples
+        $lock = Cache::lock('selenium_appel_offer_lock', 300);
+        if (!$lock->get()) {
+            return redirect()->route('ressources-humaines.appel-offer')
+                ->with('error', 'Une exécution Selenium est déjà en cours, réessayez dans quelques minutes.');
+        }
+
+        try {
+            // Lancer le script Python en arrière-plan
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                pclose(popen("start /B python $pythonScript", "r"));
+            } else {
+                exec("nohup python3 $pythonScript > /dev/null 2>&1 &");
+            }
+
+            $csvPath = storage_path('app/public/resultats_offres/resultats_offres.csv');
+            $jsonPath = storage_path('app/public/resultats_offres/resultats_offres.json');
+
+            if (!file_exists($csvPath) || !file_exists($jsonPath)) {
+                return redirect()->route('ressources-humaines.appel-offer')
+                    ->with('error', 'Fichiers CSV/JSON introuvables après exécution du script.');
+            }
+
+            // Lire le JSON pour récupérer les chemins des fichiers
+            $jsonData = json_decode(file_get_contents($jsonPath), true) ?? [];
             $jsonIndex = [];
-            foreach ($jsonData as $proj) {
-                $objetKey = trim($proj['Objet'] ?? $proj['Objet '] ?? '');
+            foreach ($jsonData as $offer) {
+                $objetKey = trim($offer['Objet'] ?? '');
                 if ($objetKey) {
-                    $jsonIndex[$objetKey] = $proj;
+                    $jsonIndex[$objetKey] = $offer;
                 }
             }
 
-            // Lire le CSV pour l'insertion
+            // Lire le CSV
             $csv = Reader::createFromPath($csvPath, 'r');
             $csv->setHeaderOffset(0);
             $records = $csv->getRecords();
 
             foreach ($records as $row) {
-                $objet = trim($row['Objet '] ?? '');
-                $projJson = $jsonIndex[$objet] ?? [];
 
-                ProjetNv::updateOrCreate(
+                // Récupérer toutes les colonnes avec fallback null
+                $reference = $row['Référence'] ?? null;
+                $maitre_ouvrage = $row["Maitre d'ouvrage"] ?? null;
+                $objet = $row['Objet'] ?? null;
+                $adjudicataire = $row['Adjudicataire'] ?? null;
+                $ville = $row['Ville'] ?? null;
+                $budget = $row['Budget(DHs)'] ?? null;
+                $montant = $row['Montant(DHs)'] ?? null;
+                $date_adjudications = $row['Date des adjudications'] ?? null;
+                $date_ouverture = $row["Date d'ouverture"] ?? null;
+                $date_affichage = $row["Date d'affichage"] ?? null;
+                $lien_dao = $row['Lien_DAO'] ?? null;
+                $lien_pv = $row['Lien_PV'] ?? null;
+                $dao = $row['D.A.O'] ?? null;
+                $pv = $row['PV'] ?? null;
+
+                $offerJson = $jsonIndex[$objet] ?? [];
+                $chemin_fichiers = $offerJson['EXTRACTED_FILES'] ?? [];
+
+                // Convertir les dates si elles existent
+                $date_ouverture = $date_ouverture ? Carbon::createFromFormat('d/m/Y', $date_ouverture) : null;
+                $date_adjudications = $date_adjudications ? Carbon::createFromFormat('d/m/Y', $date_adjudications) : null;
+                $date_affichage = $date_affichage ? Carbon::createFromFormat('d/m/Y', $date_affichage) : null;
+
+                // Créer ou mettre à jour l'offre
+                AppelOffer::updateOrCreate(
                     [
+                        'reference' => $reference,
                         'objet' => $objet,
-                        'organisme' => $row['Organisme '] ?? null,
-                        'ville_execution' => $row["Ville d'exécution "] ?? null,
+                        'maitre_ouvrage' => $maitre_ouvrage,
                     ],
                     [
-                        'allotissement' => $row['Allotissement '] ?? null,
-                        'adresse_retrait' => $row['Adresse retrait '] ?? null,
-                        'contact' => $row['Contact '] ?? null,
-                        'montant_retrait' => $row['Montant retrait '] ?? null,
-                        'mode_paiement' => $row['Mode paiement '] ?? null,
-                        'mt_caution' => $row['Montant caution '] ?? null,
-                        'budget' => $row['Budget '] ?? null,
-                        'visite_lieux' => $row['Visite des lieux '] ?? null,
-                        'type' => $row['Type '] ?? null,
-                        'observation' => $row['Obsérvation '] ?? null,
-                        'soumission_electronique' => $row['Soumission électronique '] ?? null,
-                        'support' => $row['Support'] ?? null,
-                        'secteur' => $row['Secteur '] ?? null,
-                        'telechargement' => $row['Téléchargement'] ?? null,
-                        'chemin_fichiers' => $projJson['EXTRACTED_FILES'] ?? [], // chemins extraits depuis le JSON
+                        'pv' => $pv,
+                        'date_ouverture' => $date_ouverture,
+                        'budget' => $budget,
+                        'lien_dao' => $lien_dao,
+                        'lien_pv' => $lien_pv,
+                        'dao' => $dao,
+                        'date_adjudications' => $date_adjudications,
+                        'ville' => $ville,
+                        'montant' => $montant,
+                        'adjudicataire' => $adjudicataire,
+                        'chemin_fichiers' => $chemin_fichiers,
+                        'date_affichage' => $date_affichage,
                     ]
                 );
             }
         } catch (\Exception $e) {
-            return redirect()->route('ressources-humaines.projets')
+            return redirect()->route('ressources-humaines.appel-offer')
                 ->with('error', 'Erreur lors de l\'importation : ' . $e->getMessage());
+        } finally {
+            $lock->release();
         }
-    } finally {
-        // Libérer le lock
-        $lock->release();
+
+        return redirect()->route('ressources-humaines.appel-offer')
+            ->with('success', 'Le script Selenium a été lancé en arrière-plan. Les appels d’offres seront mis à jour automatiquement.');
     }
 
-    return redirect()->route('ressources-humaines.projets')
-        ->with('success', 'Le script Selenium a été lancé en arrière-plan. Les projets seront mis à jour automatiquement.');
-}
 
 
+
+    public function appelOfferPage()
+    {
+        return inertia('ressources-humaines/appel_offer');
+    }
 
     public function SousTrais()
     {
