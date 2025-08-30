@@ -1,10 +1,17 @@
 @import 'tailwindcss';
+
 @import url('https://fonts.googleapis.com/css2?family=Poppins:opsz,wght@8..144,100..1000&display=swap');
 
 @plugin 'tailwindcss-animate';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 @source '../views';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+
+
+
 
 @custom-variant dark (&:is(.dark *));
 

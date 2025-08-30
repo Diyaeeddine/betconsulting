@@ -412,7 +412,7 @@ export default function Access() {
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="Gestion des Accès" />
 
-      <div className="space-y-8 p-4">
+      <div className="space-y-8 p-8">
         {/* Header Section */}
         <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6">
           <div className="space-y-2">
