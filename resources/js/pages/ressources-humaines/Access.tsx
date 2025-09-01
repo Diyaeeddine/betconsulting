@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Head, router, usePage } from "@inertiajs/react"
 import AppLayout from "@/layouts/app-layout"
 import { Button } from "@/components/ui/button"
@@ -56,7 +56,7 @@ interface Projet {
 interface PageProps extends Record<string, any> {
   users: User[]
   salaries: Salarie[]
-  projets?: Projet[] // Made optional to handle undefined case
+  projets?: Projet[]
 }
 
 interface FormData {
@@ -84,13 +84,15 @@ const initialFormData: FormData = {
 }
 
 export default function Access() {
-  const pageProps = usePage<PageProps>().props
-  const { users = [], salaries = [], projets = [] } = pageProps
-
-  useEffect(() => {
-    console.log("[v0] Access component mounted")
-    console.log("[v0] Props received:", { users: users?.length, salaries: salaries?.length, projets: projets?.length })
-  }, [])
+  // Use usePage().props directly in render and memoize the data
+  const { props } = usePage<PageProps>()
+  
+  // Memoize the data to ensure consistency
+  const { users, salaries, projets } = useMemo(() => ({
+    users: props.users || [],
+    salaries: props.salaries || [],
+    projets: props.projets || []
+  }), [props.users, props.salaries, props.projets])
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false)
@@ -114,62 +116,83 @@ export default function Access() {
     { title: "Gestion des Accès", href: "/ressources-humaines/access" },
   ]
 
-  const filteredUsers = users.filter((user) => {
-    const salarie = salaries?.find((s) => s.user?.id === user.id)
+  // Memoize filtered users to prevent unnecessary recalculations
+  const filteredUsers = useMemo(() => {
+    if (!Array.isArray(users)) return []
+    
+    return users.filter((user) => {
+      const salarie = salaries?.find((s) => s.user?.id === user.id)
 
-    // Search filter
-    const searchMatch =
-      searchTerm === "" ||
-      user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      salarie?.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      salarie?.prenom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      salarie?.telephone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      salarie?.poste?.toLowerCase().includes(searchTerm.toLowerCase())
+      // Search filter
+      const searchMatch =
+        searchTerm === "" ||
+        user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        salarie?.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        salarie?.prenom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        salarie?.telephone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        salarie?.poste?.toLowerCase().includes(searchTerm.toLowerCase())
 
-    // Status filter
-    const statusMatch = statusFilter === "all" || salarie?.statut === statusFilter
+      // Status filter
+      const statusMatch = statusFilter === "all" || salarie?.statut === statusFilter
 
-    // Date filter
-    let dateMatch = true
-    if (dateFilter !== "all" && salarie?.date_embauche) {
-      const hireDate = new Date(salarie.date_embauche)
-      const now = new Date()
-      const diffTime = now.getTime() - hireDate.getTime()
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+      // Date filter
+      let dateMatch = true
+      if (dateFilter !== "all" && salarie?.date_embauche) {
+        const hireDate = new Date(salarie.date_embauche)
+        const now = new Date()
+        const diffTime = now.getTime() - hireDate.getTime()
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
 
-      switch (dateFilter) {
-        case "recent":
-          dateMatch = diffDays <= 30
-          break
-        case "6months":
-          dateMatch = diffDays <= 180
-          break
-        case "1year":
-          dateMatch = diffDays <= 365
-          break
-        case "older":
-          dateMatch = diffDays > 365
-          break
+        switch (dateFilter) {
+          case "recent":
+            dateMatch = diffDays <= 30
+            break
+          case "6months":
+            dateMatch = diffDays <= 180
+            break
+          case "1year":
+            dateMatch = diffDays <= 365
+            break
+          case "older":
+            dateMatch = diffDays > 365
+            break
+        }
       }
-    }
 
-    // Project filter
-    let projectMatch = true
-    if (projectFilter === "with_projects") {
-      projectMatch = (salarie?.projets?.length ?? 0) > 0
-    } else if (projectFilter === "without_projects") {
-      projectMatch = (salarie?.projets?.length ?? 0) === 0
-    }
+      // Project filter
+      let projectMatch = true
+      if (projectFilter === "with_projects") {
+        projectMatch = (salarie?.projets?.length ?? 0) > 0
+      } else if (projectFilter === "without_projects") {
+        projectMatch = (salarie?.projets?.length ?? 0) === 0
+      }
 
+      return searchMatch && statusMatch && dateMatch && projectMatch
+    })
+  }, [users, salaries, searchTerm, statusFilter, dateFilter, projectFilter])
 
-    return searchMatch && statusMatch && dateMatch && projectMatch
-  })
+  // Debug logging
+  useEffect(() => {
+    console.log("[v0] Access component mounted/updated")
+    console.log("[v0] Data:", { 
+      users: users?.length, 
+      salaries: salaries?.length, 
+      projets: projets?.length,
+      filteredUsers: filteredUsers?.length
+    })
+  }, [users, salaries, projets, filteredUsers])
 
   const openDetailsDialog = (user: User) => {
     const salarie = salaries?.find((s) => s.user?.id === user.id)
     setSelectedUserDetails({ user, salarie })
     setIsDetailsDialogOpen(true)
+  }
+
+  const resetForm = () => {
+    setFormData(initialFormData)
+    setEditingUser(null)
+    setShowPassword(false)
   }
 
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -187,12 +210,11 @@ export default function Access() {
     try {
       if (editingUser) {
         router.put(`/ressources-humaines/access/${editingUser.id}`, data, {
-          onSuccess: () => {
-            console.log("[v0] Update successful")
+          onSuccess: (page) => {
+            console.log("[v0] Update successful", page)
             toast.success("Accès mis à jour avec succès")
             setIsDialogOpen(false)
-            setEditingUser(null)
-            setFormData(initialFormData)
+            resetForm()
           },
           onError: (errors: any) => {
             console.log("[v0] Update error:", errors)
@@ -201,15 +223,16 @@ export default function Access() {
           onFinish: () => {
             setLoading(false)
           },
+          preserveScroll: true,
+          preserveState: false, // Important: don't preserve state to get fresh data
         })
       } else {
         router.post("/ressources-humaines/access", data, {
-          onSuccess: () => {
-            console.log("[v0] Create successful")
+          onSuccess: (page) => {
+            console.log("[v0] Create successful", page)
             toast.success("Accès créé avec succès ! Un email avec les informations de connexion a été envoyé.")
             setIsDialogOpen(false)
-            setEditingUser(null)
-            setFormData(initialFormData)
+            resetForm()
           },
           onError: (errors: any) => {
             console.log("[v0] Create error:", errors)
@@ -218,6 +241,8 @@ export default function Access() {
           onFinish: () => {
             setLoading(false)
           },
+          preserveScroll: true,
+          preserveState: false, // Important: don't preserve state to get fresh data
         })
       }
     } catch (error) {
@@ -264,6 +289,8 @@ export default function Access() {
           onError: () => {
             toast.error("Erreur lors de la suppression")
           },
+          preserveScroll: true,
+          preserveState: false, // Important: don't preserve state to get fresh data
         })
       } catch (error) {
         toast.error("Erreur lors de la suppression")
@@ -275,8 +302,7 @@ export default function Access() {
     console.log("[v0] Create button clicked")
 
     try {
-      setEditingUser(null)
-      setFormData(initialFormData)
+      resetForm()
       setIsDialogOpen(true)
       console.log("[v0] Create dialog should open now")
     } catch (error) {
@@ -316,6 +342,8 @@ export default function Access() {
           onFinish: () => {
             setLoading(false)
           },
+          preserveScroll: true,
+          preserveState: false, // Important: don't preserve state to get fresh data
         },
       )
     } catch (error) {
@@ -330,13 +358,15 @@ export default function Access() {
     )
   }
 
-  const filteredProjects = Array.isArray(projets)
-    ? projets.filter(
-        (projet) =>
-          projet?.nom?.toLowerCase().includes(projectSearch.toLowerCase()) ||
-          projet?.client?.toLowerCase().includes(projectSearch.toLowerCase()),
-      )
-    : []
+  const filteredProjects = useMemo(() => {
+    return Array.isArray(projets)
+      ? projets.filter(
+          (projet) =>
+            projet?.nom?.toLowerCase().includes(projectSearch.toLowerCase()) ||
+            projet?.client?.toLowerCase().includes(projectSearch.toLowerCase()),
+        )
+      : []
+  }, [projets, projectSearch])
 
   const getStatusBadge = (statut?: string) => {
     const statusConfig = {
@@ -392,6 +422,7 @@ export default function Access() {
     )
   }
 
+  // Show loading or error states appropriately
   if (!users || !Array.isArray(users)) {
     return (
       <AppLayout breadcrumbs={breadcrumbs}>
@@ -452,11 +483,16 @@ export default function Access() {
           </div>
 
           {/* Action Button */}
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => {
+            setIsDialogOpen(open)
+            if (!open) {
+              resetForm()
+            }
+          }}>
             <DialogTrigger asChild>
               <Button
                 onClick={openCreateDialog}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2.5 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md flex items-center gap-2"
+                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:bg-blue-100 text-white font-medium px-8 py-4 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md flex items-center gap-2"
               >
                 <Plus className="h-4 w-4" />
                 Nouvel Accès

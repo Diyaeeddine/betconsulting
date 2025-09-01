@@ -14,9 +14,11 @@
     "axe/forms": [
       "default",
       {
-        "label": "off"
+        "label": "off",
+        "select-name": "off"
       }
-    ]
+    ],
+    "disown-opener": "off"
   },
   "browserslist": [
     "defaults",

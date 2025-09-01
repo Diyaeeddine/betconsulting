@@ -409,12 +409,8 @@ const trackingPoints = [
 ]
 
 const customStyles = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
   
-  * {
-    font-family: 'Inter', sans-serif !important;
-  }
-  
+
   .hide-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;

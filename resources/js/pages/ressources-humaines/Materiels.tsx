@@ -264,7 +264,7 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                     </div>
                     <button
                         onClick={openCreateModal}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md"
                     >
                         <Plus className="w-4 h-4" />
                         Nouveau Matériel
