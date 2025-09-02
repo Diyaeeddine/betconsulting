@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Head, router, usePage } from "@inertiajs/react"
 import AppLayout from "@/layouts/app-layout"
 import { Button } from "@/components/ui/button"
@@ -56,7 +56,7 @@ interface Projet {
 interface PageProps extends Record<string, any> {
   users: User[]
   salaries: Salarie[]
-  projets?: Projet[] // Made optional to handle undefined case
+  projets?: Projet[]
 }
 
 interface FormData {
@@ -84,13 +84,15 @@ const initialFormData: FormData = {
 }
 
 export default function Access() {
-  const pageProps = usePage<PageProps>().props
-  const { users = [], salaries = [], projets = [] } = pageProps
-
-  useEffect(() => {
-    console.log("[v0] Access component mounted")
-    console.log("[v0] Props received:", { users: users?.length, salaries: salaries?.length, projets: projets?.length })
-  }, [])
+  // Use usePage().props directly in render and memoize the data
+  const { props } = usePage<PageProps>()
+  
+  // Memoize the data to ensure consistency
+  const { users, salaries, projets } = useMemo(() => ({
+    users: props.users || [],
+    salaries: props.salaries || [],
+    projets: props.projets || []
+  }), [props.users, props.salaries, props.projets])
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false)
@@ -111,65 +113,86 @@ export default function Access() {
 
   const breadcrumbs = [
     { title: "Dashboard", href: "/ressources-humaines/dashboard" },
-    { title: "Gestion des Accès", href: "/ressources-humaines/access" },
+    { title: "Gestion des profile", href: "/ressources-humaines/access" },
   ]
 
-  const filteredUsers = users.filter((user) => {
-    const salarie = salaries?.find((s) => s.user?.id === user.id)
+  // Memoize filtered users to prevent unnecessary recalculations
+  const filteredUsers = useMemo(() => {
+    if (!Array.isArray(users)) return []
+    
+    return users.filter((user) => {
+      const salarie = salaries?.find((s) => s.user?.id === user.id)
 
-    // Search filter
-    const searchMatch =
-      searchTerm === "" ||
-      user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      salarie?.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      salarie?.prenom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      salarie?.telephone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      salarie?.poste?.toLowerCase().includes(searchTerm.toLowerCase())
+      // Search filter
+      const searchMatch =
+        searchTerm === "" ||
+        user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        salarie?.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        salarie?.prenom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        salarie?.telephone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        salarie?.poste?.toLowerCase().includes(searchTerm.toLowerCase())
 
-    // Status filter
-    const statusMatch = statusFilter === "all" || salarie?.statut === statusFilter
+      // Status filter
+      const statusMatch = statusFilter === "all" || salarie?.statut === statusFilter
 
-    // Date filter
-    let dateMatch = true
-    if (dateFilter !== "all" && salarie?.date_embauche) {
-      const hireDate = new Date(salarie.date_embauche)
-      const now = new Date()
-      const diffTime = now.getTime() - hireDate.getTime()
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+      // Date filter
+      let dateMatch = true
+      if (dateFilter !== "all" && salarie?.date_embauche) {
+        const hireDate = new Date(salarie.date_embauche)
+        const now = new Date()
+        const diffTime = now.getTime() - hireDate.getTime()
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
 
-      switch (dateFilter) {
-        case "recent":
-          dateMatch = diffDays <= 30
-          break
-        case "6months":
-          dateMatch = diffDays <= 180
-          break
-        case "1year":
-          dateMatch = diffDays <= 365
-          break
-        case "older":
-          dateMatch = diffDays > 365
-          break
+        switch (dateFilter) {
+          case "recent":
+            dateMatch = diffDays <= 30
+            break
+          case "6months":
+            dateMatch = diffDays <= 180
+            break
+          case "1year":
+            dateMatch = diffDays <= 365
+            break
+          case "older":
+            dateMatch = diffDays > 365
+            break
+        }
       }
-    }
 
-    // Project filter
-    let projectMatch = true
-    if (projectFilter === "with_projects") {
-      projectMatch = (salarie?.projets?.length ?? 0) > 0
-    } else if (projectFilter === "without_projects") {
-      projectMatch = (salarie?.projets?.length ?? 0) === 0
-    }
+      // Project filter
+      let projectMatch = true
+      if (projectFilter === "with_projects") {
+        projectMatch = (salarie?.projets?.length ?? 0) > 0
+      } else if (projectFilter === "without_projects") {
+        projectMatch = (salarie?.projets?.length ?? 0) === 0
+      }
 
+      return searchMatch && statusMatch && dateMatch && projectMatch
+    })
+  }, [users, salaries, searchTerm, statusFilter, dateFilter, projectFilter])
 
-    return searchMatch && statusMatch && dateMatch && projectMatch
-  })
+  // Debug logging
+  useEffect(() => {
+    console.log("[v0] Access component mounted/updated")
+    console.log("[v0] Data:", { 
+      users: users?.length, 
+      salaries: salaries?.length, 
+      projets: projets?.length,
+      filteredUsers: filteredUsers?.length
+    })
+  }, [users, salaries, projets, filteredUsers])
 
   const openDetailsDialog = (user: User) => {
     const salarie = salaries?.find((s) => s.user?.id === user.id)
     setSelectedUserDetails({ user, salarie })
     setIsDetailsDialogOpen(true)
+  }
+
+  const resetForm = () => {
+    setFormData(initialFormData)
+    setEditingUser(null)
+    setShowPassword(false)
   }
 
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -187,12 +210,11 @@ export default function Access() {
     try {
       if (editingUser) {
         router.put(`/ressources-humaines/access/${editingUser.id}`, data, {
-          onSuccess: () => {
-            console.log("[v0] Update successful")
-            toast.success("Accès mis à jour avec succès")
+          onSuccess: (page) => {
+            console.log("[v0] Update successful", page)
+            toast.success("Profile mis à jour avec succès")
             setIsDialogOpen(false)
-            setEditingUser(null)
-            setFormData(initialFormData)
+            resetForm()
           },
           onError: (errors: any) => {
             console.log("[v0] Update error:", errors)
@@ -201,15 +223,16 @@ export default function Access() {
           onFinish: () => {
             setLoading(false)
           },
+          preserveScroll: true,
+          preserveState: false, // Important: don't preserve state to get fresh data
         })
       } else {
         router.post("/ressources-humaines/access", data, {
-          onSuccess: () => {
-            console.log("[v0] Create successful")
-            toast.success("Accès créé avec succès ! Un email avec les informations de connexion a été envoyé.")
+          onSuccess: (page) => {
+            console.log("[v0] Create successful", page)
+            toast.success("Profile créé avec succès ! Un email avec les informations de connexion a été envoyé.")
             setIsDialogOpen(false)
-            setEditingUser(null)
-            setFormData(initialFormData)
+            resetForm()
           },
           onError: (errors: any) => {
             console.log("[v0] Create error:", errors)
@@ -218,6 +241,8 @@ export default function Access() {
           onFinish: () => {
             setLoading(false)
           },
+          preserveScroll: true,
+          preserveState: false, // Important: don't preserve state to get fresh data
         })
       }
     } catch (error) {
@@ -255,15 +280,17 @@ export default function Access() {
   }
 
   const handleDelete = async (user: User) => {
-    if (window.confirm("Êtes-vous sûr de vouloir supprimer cet accès ?")) {
+    if (window.confirm("Êtes-vous sûr de vouloir supprimer cet profile ?")) {
       try {
         router.delete(`/ressources-humaines/access/${user.id}`, {
           onSuccess: () => {
-            toast.success("Accès supprimé avec succès")
+            toast.success("Profile supprimé avec succès")
           },
           onError: () => {
             toast.error("Erreur lors de la suppression")
           },
+          preserveScroll: true,
+          preserveState: false, // Important: don't preserve state to get fresh data
         })
       } catch (error) {
         toast.error("Erreur lors de la suppression")
@@ -275,8 +302,7 @@ export default function Access() {
     console.log("[v0] Create button clicked")
 
     try {
-      setEditingUser(null)
-      setFormData(initialFormData)
+      resetForm()
       setIsDialogOpen(true)
       console.log("[v0] Create dialog should open now")
     } catch (error) {
@@ -316,6 +342,8 @@ export default function Access() {
           onFinish: () => {
             setLoading(false)
           },
+          preserveScroll: true,
+          preserveState: false, // Important: don't preserve state to get fresh data
         },
       )
     } catch (error) {
@@ -330,13 +358,15 @@ export default function Access() {
     )
   }
 
-  const filteredProjects = Array.isArray(projets)
-    ? projets.filter(
-        (projet) =>
-          projet?.nom?.toLowerCase().includes(projectSearch.toLowerCase()) ||
-          projet?.client?.toLowerCase().includes(projectSearch.toLowerCase()),
-      )
-    : []
+  const filteredProjects = useMemo(() => {
+    return Array.isArray(projets)
+      ? projets.filter(
+          (projet) =>
+            projet?.nom?.toLowerCase().includes(projectSearch.toLowerCase()) ||
+            projet?.client?.toLowerCase().includes(projectSearch.toLowerCase()),
+        )
+      : []
+  }, [projets, projectSearch])
 
   const getStatusBadge = (statut?: string) => {
     const statusConfig = {
@@ -392,10 +422,11 @@ export default function Access() {
     )
   }
 
+  // Show loading or error states appropriately
   if (!users || !Array.isArray(users)) {
     return (
       <AppLayout breadcrumbs={breadcrumbs}>
-        <Head title="Gestion des Accès" />
+        <Head title="Gestion des profiles" />
         <div className="p-4">
           <div className="text-center py-8">
             <p className="text-red-600">Erreur: Données utilisateurs non disponibles</p>
@@ -410,9 +441,9 @@ export default function Access() {
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title="Gestion des Accès" />
+      <Head title="Gestion des Profiles" />
 
-      <div className="space-y-8 p-4">
+      <div className="space-y-8 p-8">
         {/* Header Section */}
         <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6">
           <div className="space-y-2">
@@ -421,8 +452,8 @@ export default function Access() {
                 <Shield className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold tracking-tight text-gray-900">Gestion des Accès</h1>
-                <p className="text-gray-500 font-medium">Créez et gérez les comptes d'accès pour les salariés</p>
+                <h1 className="text-3xl font-bold tracking-tight text-gray-900">Gestion des Profiles</h1>
+                <p className="text-gray-500 font-medium">Créez et gérez les comptes d'Profile pour les salariés</p>
               </div>
             </div>
 
@@ -431,7 +462,7 @@ export default function Access() {
               <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 shadow-sm">
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm font-medium text-gray-600">Total Accès</span>
+                  <span className="text-sm font-medium text-gray-600">Total Profiles</span>
                 </div>
                 <p className="text-2xl font-bold text-gray-900 mt-1">{filteredUsers?.length || 0}</p>
               </div>
@@ -452,26 +483,31 @@ export default function Access() {
           </div>
 
           {/* Action Button */}
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => {
+            setIsDialogOpen(open)
+            if (!open) {
+              resetForm()
+            }
+          }}>
             <DialogTrigger asChild>
               <Button
                 onClick={openCreateDialog}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2.5 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md flex items-center gap-2"
+                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:bg-blue-100 text-white font-medium px-8 py-4 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md flex items-center gap-2"
               >
                 <Plus className="h-4 w-4" />
-                Nouvel Accès
+                Nouvel Profile 
               </Button>
             </DialogTrigger>
 
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader className="pb-4 border-b border-gray-100">
                 <DialogTitle className="text-xl font-semibold text-gray-900">
-                  {editingUser ? "Modifier l'accès" : "Créer un nouvel accès"}
+                  {editingUser ? "Modifier le profile" : "Créer un nouvel profile"}
                 </DialogTitle>
                 <DialogDescription className="text-gray-600">
                   {editingUser
-                    ? "Modifiez les informations de l'accès"
-                    : 'Créez un nouveau compte d\'accès avec le rôle "salarié"'}
+                    ? "Modifiez les informations de profile"
+                    : 'Créez un nouveau compte de profile avec le rôle "salarié"'}
                 </DialogDescription>
               </DialogHeader>
 
@@ -751,7 +787,7 @@ export default function Access() {
             <Card className="border-0 shadow-sm bg-white">
               <CardContent className="p-8 text-center">
                 <Users className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="font-medium text-gray-500">Aucun accès trouvé</p>
+                <p className="font-medium text-gray-500">Aucun profile trouvé</p>
                 <p className="text-sm text-gray-400">Essayez de modifier vos critères de recherche</p>
               </CardContent>
             </Card>
@@ -826,10 +862,10 @@ export default function Access() {
             <DialogHeader className="pb-4 border-b border-gray-100">
               <DialogTitle className="text-xl font-semibold text-gray-900 flex items-center gap-2">
                 <Eye className="h-5 w-5 text-blue-600" />
-                Détails de l'accès
+                Détails de profile
               </DialogTitle>
               <DialogDescription className="text-gray-600">
-                Informations complètes sur l'accès utilisateur
+                Informations complètes sur le Profile utilisateur
               </DialogDescription>
             </DialogHeader>
 

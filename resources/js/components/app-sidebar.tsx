@@ -1,17 +1,17 @@
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
-import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenuButton } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
-import { FolderKanban, LayoutDashboard, TrendingUp, UserPlus } from "lucide-react"
+import { Building2, FolderKanban, LayoutDashboard, TrendingUp, UserPlus } from "lucide-react"
 import { Link, usePage } from '@inertiajs/react';
 import BetconsultingDashLogo from './betconsulting-dash-logo';
-import { Users, Route, Car, Wrench} from "lucide-react"
+import { Route, Car, Wrench} from "lucide-react"
 import { Notifications } from './ui/notifications';
 
 export function AppSidebar() {
+    
     const { auth } = usePage<SharedData>().props;
-
     const roleDashboardMap: Record<string, string> = {
         'admin': '/direction-generale/dashboard',
         'marches-marketing': '/marches-marketing/dashboard',
@@ -36,7 +36,6 @@ export function AppSidebar() {
             icon: LayoutDashboard,
         },
 
-        // Ressources Humaines
         ...(auth?.user?.role === 'ressources-humaines'
             ? [
                   {
@@ -65,9 +64,18 @@ export function AppSidebar() {
                       icon: TrendingUp,
                   },
                   {
-                      title: 'Accès',
+                      title: 'Profiles',
                       href: '/ressources-humaines/access',
                       icon: UserPlus,
+                  },
+              ]
+            : []),
+        ...(auth?.user?.role === 'marches-marketing'
+            ? [
+                  {
+                      title: 'Les marchés',
+                      href: '/marches-marketing/marches',
+                      icon: Building2,
                   },
               ]
             : []),

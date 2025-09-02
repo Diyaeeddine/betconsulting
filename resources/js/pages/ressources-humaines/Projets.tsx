@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Head, useForm, router } from '@inertiajs/react';
 import { Plus, Edit, Trash2, Eye, MapPin, Calendar, DollarSign } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 
 const breadcrumbs = [
     {
@@ -55,39 +54,39 @@ export default function Projets({ projets, users }: Props) {
     const mapInstanceRef = useRef<any>(null);
     const markerRef = useRef<any>(null);
 
- type FormData = {
-    nom: string;
-    description: string;
-    budget_total: string;
-    budget_utilise: string;
-    date_debut: string;
-    date_fin: string;
-    statut: 'en_attente' | 'en_cours' | 'termine';
-    client: string;
-    lieu_realisation: string;
-    latitude: string;
-    longitude: string;
-    radius: string;
-    responsable_id: string;
-    type_projet: 'suivi' | 'etude' | 'controle';
-};
+    type FormData = {
+        nom: string;
+        description: string;
+        budget_total: string;
+        budget_utilise: string;
+        date_debut: string;
+        date_fin: string;
+        statut: 'en_attente' | 'en_cours' | 'termine';
+        client: string;
+        lieu_realisation: string;
+        latitude: string;
+        longitude: string;
+        radius: string;
+        responsable_id: string;
+        type_projet: 'suivi' | 'etude' | 'controle';
+    };
 
-const { data, setData, post, put, processing, errors, reset } = useForm<FormData>({
-    nom: '',
-    description: '',
-    budget_total: '',
-    budget_utilise: '',
-    date_debut: '',
-    date_fin: '',
-    statut: 'en_attente', 
-    client: '',
-    lieu_realisation: '',
-    latitude: '',
-    longitude: '',
-    radius: '',
-    responsable_id: '',
-    type_projet: 'suivi', 
-});
+    const { data, setData, post, put, processing, errors, reset } = useForm<FormData>({
+        nom: '',
+        description: '',
+        budget_total: '',
+        budget_utilise: '',
+        date_debut: '',
+        date_fin: '',
+        statut: 'en_attente', 
+        client: '',
+        lieu_realisation: '',
+        latitude: '',
+        longitude: '',
+        radius: '',
+        responsable_id: '',
+        type_projet: 'suivi', 
+    });
 
     // Initialize map when modal opens
     useEffect(() => {
@@ -109,9 +108,8 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                 const lng = data.longitude ? parseFloat(data.longitude) : -7.0926;
 
                 if (mapRef.current) {
-                mapInstanceRef.current = L.map(mapRef.current).setView([lat, lng], 6);
+                    mapInstanceRef.current = L.map(mapRef.current).setView([lat, lng], 6);
                 }
-
 
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: ' &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -284,7 +282,7 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('fr-FR', {
             style: 'currency',
-            currency: 'EUR'
+            currency: 'MAD'
         }).format(amount);
     };
 
@@ -301,7 +299,7 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Gestion des Projets - Ressources Humaines" />
-
+            
             {/* Load Leaflet CSS */}
             <link
                 rel="stylesheet"
@@ -309,29 +307,29 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                 integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
                 crossOrigin=""
             />
-
+            
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-6">
                 {/* Header */}
-                <div className="flex items-center justify-between">
+                <div className="flex justify-between items-center">
                     <div>
                         <h1 className="text-3xl font-bold text-gray-900">Gestion des Projets</h1>
-                        <p className="mt-1 text-gray-600">Gérez tous les projets de l'entreprise</p>
+                        <p className="text-gray-600 mt-1">Gérez tous les projets de l'entreprise</p>
                     </div>
-                    <Button
+                    <button
                         onClick={openCreateModal}
-                        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white shadow-md transition-colors hover:bg-blue-700"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md"
                     >
-                        <Plus className="h-4 w-4" />
+                        <Plus className="w-4 h-4" />
                         Nouveau Projet
-                    </Button>
+                    </button>
                 </div>
 
                 {/* Stats Cards */}
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                    <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-md">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
                         <div className="flex items-center gap-3">
-                            <div className="rounded-lg bg-blue-100 p-2">
-                                <Eye className="h-5 w-5 text-blue-600" />
+                            <div className="p-2 bg-blue-100 rounded-lg">
+                                <Eye className="w-5 h-5 text-blue-600" />
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-gray-600">Total Projets</p>
@@ -339,21 +337,23 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                             </div>
                         </div>
                     </div>
-                    <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-md">
+                    <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
                         <div className="flex items-center gap-3">
-                            <div className="rounded-lg bg-green-100 p-2">
-                                <Calendar className="h-5 w-5 text-green-600" />
+                            <div className="p-2 bg-green-100 rounded-lg">
+                                <Calendar className="w-5 h-5 text-green-600" />
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-gray-600">En Cours</p>
-                                <p className="text-2xl font-bold text-gray-900">{projets.filter((p) => p.statut === 'en_cours').length}</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                    {projets.filter(p => p.statut === 'en_cours').length}
+                                </p>
                             </div>
                         </div>
                     </div>
-                    <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-md">
+                    <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
                         <div className="flex items-center gap-3">
-                            <div className="rounded-lg bg-purple-100 p-2">
-                                <DollarSign className="h-5 w-5 text-purple-600" />
+                            <div className="p-2 bg-purple-100 rounded-lg">
+                                <DollarSign className="w-5 h-5 text-purple-600" />
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-gray-600">Budget Total</p>
@@ -363,97 +363,129 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                             </div>
                         </div>
                     </div>
-                    <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-md">
+                    <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
                         <div className="flex items-center gap-3">
-                            <div className="rounded-lg bg-orange-100 p-2">
-                                <MapPin className="h-5 w-5 text-orange-600" />
+                            <div className="p-2 bg-orange-100 rounded-lg">
+                                <MapPin className="w-5 h-5 text-orange-600" />
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-gray-600">Terminés</p>
-                                <p className="text-2xl font-bold text-gray-900">{projets.filter((p) => p.statut === 'termine').length}</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                    {projets.filter(p => p.statut === 'termine').length}
+                                </p>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 {/* Table */}
-                <div className="overflow-hidden rounded-lg border border-gray-100 bg-white shadow-md">
+                <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Projet</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Client</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Responsable</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Type</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Statut</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Budget</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Dates</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Actions</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Projet
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Client
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Responsable
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Type
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Statut
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Budget
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Dates
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Actions
+                                    </th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-200 bg-white">
+                            <tbody className="bg-white divide-y divide-gray-200">
                                 {projets.map((projet) => (
-                                    <tr key={projet.id} className="transition-colors hover:bg-gray-50">
+                                    <tr key={projet.id} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div>
                                                 <div className="text-sm font-medium text-gray-900">{projet.nom}</div>
                                                 {projet.description && (
-                                                    <div className="max-w-xs truncate text-sm text-gray-500">{projet.description}</div>
+                                                    <div className="text-sm text-gray-500 truncate max-w-xs">
+                                                        {projet.description}
+                                                    </div>
                                                 )}
                                                 {projet.lieu_realisation && (
-                                                    <div className="mt-1 flex items-center gap-1">
-                                                        <MapPin className="h-3 w-3 text-gray-400" />
+                                                    <div className="flex items-center gap-1 mt-1">
+                                                        <MapPin className="w-3 h-3 text-gray-400" />
                                                         <span className="text-xs text-gray-500">{projet.lieu_realisation}</span>
                                                     </div>
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-900">{projet.client || '-'}</td>
-                                        <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-900">{projet.responsable?.name}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap">{getTypeBadge(projet.type_projet)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(projet.statut)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            {projet.client || '-'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            {projet.responsable?.name}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {getTypeBadge(projet.type_projet)}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {getStatusBadge(projet.statut)}
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="text-sm">
-                                                <div className="font-medium text-gray-900">{formatCurrency(projet.budget_total)}</div>
+                                                <div className="font-medium text-gray-900">
+                                                    {formatCurrency(projet.budget_total)}
+                                                </div>
                                                 {projet.budget_utilise && (
                                                     <div className="mt-1">
                                                         <div className="flex items-center gap-2">
-                                                            <div className="h-1.5 w-12 rounded-full bg-gray-200">
+                                                            <div className="w-12 bg-gray-200 rounded-full h-1.5">
                                                                 <div
-                                                                    className="h-1.5 rounded-full bg-blue-600"
+                                                                    className="bg-blue-600 h-1.5 rounded-full"
                                                                     style={{
-                                                                        width: `${getBudgetProgress(projet.budget_total, projet.budget_utilise)}%`,
+                                                                        width: `${getBudgetProgress(projet.budget_total, projet.budget_utilise)}%`
                                                                     }}
                                                                 ></div>
                                                             </div>
-                                                            <span className="text-xs text-gray-500">{formatCurrency(projet.budget_utilise)}</span>
+                                                            <span className="text-xs text-gray-500">
+                                                                {formatCurrency(projet.budget_utilise)}
+                                                            </span>
                                                         </div>
                                                     </div>
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-500">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                             <div>
                                                 <div>Début: {formatDate(projet.date_debut || '')}</div>
                                                 <div>Fin: {formatDate(projet.date_fin || '')}</div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                             <div className="flex items-center gap-2">
                                                 <button
                                                     onClick={() => openEditModal(projet)}
-                                                    className="rounded p-1 text-blue-600 transition-colors hover:bg-blue-100 hover:text-blue-900"
+                                                    className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-100 transition-colors"
                                                     title="Modifier"
                                                 >
-                                                    <Edit className="h-4 w-4" />
+                                                    <Edit className="w-4 h-4" />
                                                 </button>
                                                 <button
                                                     onClick={() => openDeleteModal(projet)}
-                                                    className="rounded p-1 text-red-600 transition-colors hover:bg-red-100 hover:text-red-900"
+                                                    className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-100 transition-colors"
                                                     title="Supprimer"
                                                 >
-                                                    <Trash2 className="h-4 w-4" />
+                                                    <Trash2 className="w-4 h-4" />
                                                 </button>
                                             </div>
                                         </td>
@@ -464,9 +496,9 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                     </div>
 
                     {projets.length === 0 && (
-                        <div className="py-12 text-center">
+                        <div className="text-center py-12">
                             <div className="text-gray-500">
-                                <Eye className="mx-auto mb-4 h-12 w-12 text-gray-400" />
+                                <Eye className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                                 <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun projet</h3>
                                 <p className="mt-1 text-sm text-gray-500">Commencez par créer un nouveau projet.</p>
                             </div>
@@ -476,245 +508,299 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
 
                 {/* Modal */}
                 {showModal && (
-                    <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-gray-600">
-                        <div className="m-4 max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg bg-white p-6">
-                            <h3 className="mb-4 text-lg font-medium text-gray-900">{editingProjet ? 'Modifier le projet' : 'Nouveau projet'}</h3>
+                    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4">
+                            <h3 className="text-lg font-medium text-gray-900 mb-4">
+                                {editingProjet ? 'Modifier le projet' : 'Nouveau projet'}
+                            </h3>
+                            
+                            <form onSubmit={handleSubmit} className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label htmlFor="nom" className="block text-sm font-medium text-gray-700">
+                                            Nom du projet *
+                                        </label>
+                                        <input
+                                            id="nom"
+                                            type="text"
+                                            value={data.nom}
+                                            onChange={(e) => setData('nom', e.target.value)}
+                                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            required
+                                            aria-describedby={errors.nom ? "nom-error" : undefined}
+                                        />
+                                        {errors.nom && <div id="nom-error" className="text-red-500 text-sm mt-1">{errors.nom}</div>}
+                                    </div>
 
-                                                    <form onSubmit={handleSubmit} className="space-y-6">
-                            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Nom du projet *</label>
-                                    <input
-                                        type="text"
-                                        value={data.nom}
-                                        onChange={(e) => setData('nom', e.target.value)}
-                                        className="block w-full px-4 py-3 text-gray-900 border border-gray-200 rounded-xl bg-gray-50/50 backdrop-blur-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white hover:bg-white hover:border-gray-300"
-                                        placeholder="Entrez le nom du projet"
-                                        required
-                                    />
-                                    {errors.nom && <div className="mt-2 text-sm text-red-500 font-medium">{errors.nom}</div>}
-                                </div>
+                                    <div>
+                                        <label htmlFor="client" className="block text-sm font-medium text-gray-700">
+                                            Client
+                                        </label>
+                                        <input
+                                            id="client"
+                                            type="text"
+                                            value={data.client}
+                                            onChange={(e) => setData('client', e.target.value)}
+                                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            aria-describedby={errors.client ? "client-error" : undefined}
+                                        />
+                                        {errors.client && <div id="client-error" className="text-red-500 text-sm mt-1">{errors.client}</div>}
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Client</label>
-                                    <input
-                                        type="text"
-                                        value={data.client}
-                                        onChange={(e) => setData('client', e.target.value)}
-                                        className="block w-full px-4 py-3 text-gray-900 border border-gray-200 rounded-xl bg-gray-50/50 backdrop-blur-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white hover:bg-white hover:border-gray-300"
-                                        placeholder="Nom du client"
-                                    />
-                                    {errors.client && <div className="mt-2 text-sm text-red-500 font-medium">{errors.client}</div>}
-                                </div>
+                                    <div className="md:col-span-2">
+                                        <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                                            Description
+                                        </label>
+                                        <textarea
+                                            id="description"
+                                            value={data.description}
+                                            onChange={(e) => setData('description', e.target.value)}
+                                            rows={3}
+                                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            aria-describedby={errors.description ? "description-error" : undefined}
+                                        />
+                                        {errors.description && <div id="description-error" className="text-red-500 text-sm mt-1">{errors.description}</div>}
+                                    </div>
 
-                                <div className="md:col-span-2">
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
-                                    <textarea
-                                        value={data.description}
-                                        onChange={(e) => setData('description', e.target.value)}
-                                        rows={3}
-                                        className="block w-full px-4 py-3 text-gray-900 border border-gray-200 rounded-xl bg-gray-50/50 backdrop-blur-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white hover:bg-white hover:border-gray-300 resize-none"
-                                        placeholder="Description détaillée du projet"
-                                    />
-                                    {errors.description && <div className="mt-2 text-sm text-red-500 font-medium">{errors.description}</div>}
-                                </div>
+                                    <div>
+                                        <label htmlFor="budget_total" className="block text-sm font-medium text-gray-700">
+                                            Budget total *
+                                        </label>
+                                        <input
+                                            id="budget_total"
+                                            type="number"
+                                            step="0.01"
+                                            value={data.budget_total}
+                                            onChange={(e) => setData('budget_total', e.target.value)}
+                                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            required
+                                            aria-describedby={errors.budget_total ? "budget-total-error" : undefined}
+                                        />
+                                        {errors.budget_total && <div id="budget-total-error" className="text-red-500 text-sm mt-1">{errors.budget_total}</div>}
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Budget total *</label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        value={data.budget_total}
-                                        onChange={(e) => setData('budget_total', e.target.value)}
-                                        className="block w-full px-4 py-3 text-gray-900 border border-gray-200 rounded-xl bg-gray-50/50 backdrop-blur-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white hover:bg-white hover:border-gray-300"
-                                        placeholder="0.00 €"
-                                        required
-                                    />
-                                    {errors.budget_total && <div className="mt-2 text-sm text-red-500 font-medium">{errors.budget_total}</div>}
-                                </div>
+                                    <div>
+                                        <label htmlFor="budget_utilise" className="block text-sm font-medium text-gray-700">
+                                            Budget utilisé
+                                        </label>
+                                        <input
+                                            id="budget_utilise"
+                                            type="number"
+                                            step="0.01"
+                                            value={data.budget_utilise}
+                                            onChange={(e) => setData('budget_utilise', e.target.value)}
+                                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            aria-describedby={errors.budget_utilise ? "budget-utilise-error" : undefined}
+                                        />
+                                        {errors.budget_utilise && <div id="budget-utilise-error" className="text-red-500 text-sm mt-1">{errors.budget_utilise}</div>}
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Budget utilisé</label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        value={data.budget_utilise}
-                                        onChange={(e) => setData('budget_utilise', e.target.value)}
-                                        className="block w-full px-4 py-3 text-gray-900 border border-gray-200 rounded-xl bg-gray-50/50 backdrop-blur-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white hover:bg-white hover:border-gray-300"
-                                        placeholder="0.00 €"
-                                    />
-                                    {errors.budget_utilise && <div className="mt-2 text-sm text-red-500 font-medium">{errors.budget_utilise}</div>}
-                                </div>
+                                    <div>
+                                        <label htmlFor="date_debut" className="block text-sm font-medium text-gray-700">
+                                            Date de début
+                                        </label>
+                                        <input
+                                            id="date_debut"
+                                            type="date"
+                                            value={data.date_debut}
+                                            onChange={(e) => setData('date_debut', e.target.value)}
+                                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            aria-describedby={errors.date_debut ? "date-debut-error" : undefined}
+                                        />
+                                        {errors.date_debut && <div id="date-debut-error" className="text-red-500 text-sm mt-1">{errors.date_debut}</div>}
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Date de début</label>
-                                    <input
-                                        type="date"
-                                        value={data.date_debut}
-                                        onChange={(e) => setData('date_debut', e.target.value)}
-                                        className="block w-full px-4 py-3 text-gray-900 border border-gray-200 rounded-xl bg-gray-50/50 backdrop-blur-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white hover:bg-white hover:border-gray-300"
-                                    />
-                                    {errors.date_debut && <div className="mt-2 text-sm text-red-500 font-medium">{errors.date_debut}</div>}
-                                </div>
+                                    <div>
+                                        <label htmlFor="date_fin" className="block text-sm font-medium text-gray-700">
+                                            Date de fin
+                                        </label>
+                                        <input
+                                            id="date_fin"
+                                            type="date"
+                                            value={data.date_fin}
+                                            onChange={(e) => setData('date_fin', e.target.value)}
+                                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            aria-describedby={errors.date_fin ? "date-fin-error" : undefined}
+                                        />
+                                        {errors.date_fin && <div id="date-fin-error" className="text-red-500 text-sm mt-1">{errors.date_fin}</div>}
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Date de fin</label>
-                                    <input
-                                        type="date"
-                                        value={data.date_fin}
-                                        onChange={(e) => setData('date_fin', e.target.value)}
-                                        className="block w-full px-4 py-3 text-gray-900 border border-gray-200 rounded-xl bg-gray-50/50 backdrop-blur-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white hover:bg-white hover:border-gray-300"
-                                    />
-                                    {errors.date_fin && <div className="mt-2 text-sm text-red-500 font-medium">{errors.date_fin}</div>}
-                                </div>
+                                    <div>
+                                        <label htmlFor="statut" className="block text-sm font-medium text-gray-700">
+                                            Statut *
+                                        </label>
+                                        <select
+                                            id="statut"
+                                            value={data.statut}
+                                            onChange={(e) => setData('statut', e.target.value as any)}
+                                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            required
+                                            aria-describedby={errors.statut ? "statut-error" : undefined}
+                                        >
+                                            <option value="en_attente">En Attente</option>
+                                            <option value="en_cours">En Cours</option>
+                                            <option value="termine">Terminé</option>
+                                        </select>
+                                        {errors.statut && <div id="statut-error" className="text-red-500 text-sm mt-1">{errors.statut}</div>}
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Statut *</label>
-                                    <select
-                                        value={data.statut}
-                                        onChange={(e) => setData('statut', e.target.value as any)}
-                                        className="block w-full px-4 py-3 text-gray-900 border border-gray-200 rounded-xl bg-gray-50/50 backdrop-blur-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white hover:bg-white hover:border-gray-300 cursor-pointer"
-                                        required
-                                    >
-                                        <option value="en_attente">En Attente</option>
-                                        <option value="en_cours">En Cours</option>
-                                        <option value="termine">Terminé</option>
-                                    </select>
-                                    {errors.statut && <div className="mt-2 text-sm text-red-500 font-medium">{errors.statut}</div>}
-                                </div>
+                                    <div>
+                                        <label htmlFor="type_projet" className="block text-sm font-medium text-gray-700">
+                                            Type de projet *
+                                        </label>
+                                        <select
+                                            id="type_projet"
+                                            value={data.type_projet}
+                                            onChange={(e) => setData('type_projet', e.target.value as any)}
+                                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            required
+                                            aria-describedby={errors.type_projet ? "type-projet-error" : undefined}
+                                        >
+                                            <option value="suivi">Suivi</option>
+                                            <option value="etude">Étude</option>
+                                            <option value="controle">Contrôle</option>
+                                        </select>
+                                        {errors.type_projet && <div id="type-projet-error" className="text-red-500 text-sm mt-1">{errors.type_projet}</div>}
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Type de projet *</label>
-                                    <select
-                                        value={data.type_projet}
-                                        onChange={(e) => setData('type_projet', e.target.value as any)}
-                                        className="block w-full px-4 py-3 text-gray-900 border border-gray-200 rounded-xl bg-gray-50/50 backdrop-blur-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white hover:bg-white hover:border-gray-300 cursor-pointer"
-                                        required
-                                    >
-                                        <option value="suivi">Suivi</option>
-                                        <option value="etude">Étude</option>
-                                        <option value="controle">Contrôle</option>
-                                    </select>
-                                    {errors.type_projet && <div className="mt-2 text-sm text-red-500 font-medium">{errors.type_projet}</div>}
-                                </div>
+                                    <div>
+                                        <label htmlFor="responsable_id" className="block text-sm font-medium text-gray-700">
+                                            Responsable *
+                                        </label>
+                                        <select
+                                            id="responsable_id"
+                                            value={data.responsable_id}
+                                            onChange={(e) => setData('responsable_id', e.target.value)}
+                                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            required
+                                            aria-describedby={errors.responsable_id ? "responsable-error" : undefined}
+                                        >
+                                            <option value="">Sélectionner un responsable</option>
+                                            {users.map((user) => (
+                                                <option key={user.id} value={user.id}>
+                                                    {user.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {errors.responsable_id && <div id="responsable-error" className="text-red-500 text-sm mt-1">{errors.responsable_id}</div>}
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Responsable *</label>
-                                    <select
-                                        value={data.responsable_id}
-                                        onChange={(e) => setData('responsable_id', e.target.value)}
-                                        className="block w-full px-4 py-3 text-gray-900 border border-gray-200 rounded-xl bg-gray-50/50 backdrop-blur-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white hover:bg-white hover:border-gray-300 cursor-pointer"
-                                        required
-                                    >
-                                        <option value="">Sélectionner un responsable</option>
-                                        {users.map((user) => (
-                                            <option key={user.id} value={user.id}>
-                                                {user.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    {errors.responsable_id && <div className="mt-2 text-sm text-red-500 font-medium">{errors.responsable_id}</div>}
-                                </div>
+                                    <div>
+                                        <label htmlFor="lieu_realisation" className="block text-sm font-medium text-gray-700">
+                                            Lieu de réalisation
+                                        </label>
+                                        <input
+                                            id="lieu_realisation"
+                                            type="text"
+                                            value={data.lieu_realisation}
+                                            onChange={(e) => setData('lieu_realisation', e.target.value)}
+                                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            aria-describedby={errors.lieu_realisation ? "lieu-error" : undefined}
+                                        />
+                                        {errors.lieu_realisation && <div id="lieu-error" className="text-red-500 text-sm mt-1">{errors.lieu_realisation}</div>}
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Lieu de réalisation</label>
-                                    <input
-                                        type="text"
-                                        value={data.lieu_realisation}
-                                        onChange={(e) => setData('lieu_realisation', e.target.value)}
-                                        className="block w-full px-4 py-3 text-gray-900 border border-gray-200 rounded-xl bg-gray-50/50 backdrop-blur-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white hover:bg-white hover:border-gray-300"
-                                        placeholder="Adresse du projet"
-                                    />
-                                    {errors.lieu_realisation && <div className="mt-2 text-sm text-red-500 font-medium">{errors.lieu_realisation}</div>}
-                                </div>
-
-                                {/* Localisation par carte */}
-                                <div className="md:col-span-2">
-                                    <label className="block text-sm font-semibold text-gray-700 mb-3">
-                                        Localisation du projet (cliquez sur la carte pour sélectionner)
-                                    </label>
-                                    <div
-                                        ref={mapRef}
-                                        className="h-64 w-full rounded-xl border-2 border-gray-200 bg-gradient-to-br from-blue-50 to-green-50 shadow-inner"
-                                        style={{ minHeight: '300px' }}
-                                    />
-                                    <div className="mt-4 grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-500 mb-1">Latitude</label>
-                                            <input
-                                                type="text"
-                                                value={data.latitude}
-                                                readOnly
-                                                className="block w-full px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg bg-gray-50 shadow-sm"
-                                            />
+                                    {/* Localisation par carte */}
+                                    <div className="md:col-span-2">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Localisation du projet (cliquez sur la carte pour sélectionner)
+                                        </label>
+                                        <div
+                                            ref={mapRef}
+                                            className="w-full h-64 border-2 border-gray-300 rounded-md"
+                                            style={{ minHeight: '300px' }}
+                                            role="application"
+                                            aria-label="Carte interactive pour sélectionner la localisation du projet"
+                                        />
+                                        <div className="mt-2 grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label htmlFor="latitude" className="block text-xs text-gray-500">Latitude</label>
+                                                <input
+                                                    id="latitude"
+                                                    type="text"
+                                                    value={data.latitude}
+                                                    readOnly
+                                                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm"
+                                                    aria-label="Latitude sélectionnée"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label htmlFor="longitude" className="block text-xs text-gray-500">Longitude</label>
+                                                <input
+                                                    id="longitude"
+                                                    type="text"
+                                                    value={data.longitude}
+                                                    readOnly
+                                                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm"
+                                                    aria-label="Longitude sélectionnée"
+                                                />
+                                            </div>
                                         </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-500 mb-1">Longitude</label>
-                                            <input
-                                                type="text"
-                                                value={data.longitude}
-                                                readOnly
-                                                className="block w-full px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg bg-gray-50 shadow-sm"
-                                            />
-                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label htmlFor="radius" className="block text-sm font-medium text-gray-700">
+                                            Rayon (km)
+                                        </label>
+                                        <input
+                                            id="radius"
+                                            type="number"
+                                            step="0.1"
+                                            value={data.radius}
+                                            onChange={(e) => setData('radius', e.target.value)}
+                                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            aria-describedby={errors.radius ? "radius-error" : undefined}
+                                        />
+                                        {errors.radius && <div id="radius-error" className="text-red-500 text-sm mt-1">{errors.radius}</div>}
                                     </div>
                                 </div>
 
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Rayon (km)</label>
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        value={data.radius}
-                                        onChange={(e) => setData('radius', e.target.value)}
-                                        className="block w-full px-4 py-3 text-gray-900 border border-gray-200 rounded-xl bg-gray-50/50 backdrop-blur-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white hover:bg-white hover:border-gray-300"
-                                        placeholder="10.0"
-                                    />
-                                    {errors.radius && <div className="mt-2 text-sm text-red-500 font-medium">{errors.radius}</div>}
+                                <div className="flex justify-end gap-3 pt-4 border-t">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowModal(false);
+                                            setEditingProjet(null);
+                                            reset();
+                                        }}
+                                        className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                                    >
+                                        Annuler
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={processing}
+                                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                        aria-describedby={processing ? "submit-status" : undefined}
+                                    >
+                                        {processing ? 'En cours...' : editingProjet ? 'Mettre à jour' : 'Créer'}
+                                    </button>
+                                    {processing && <span id="submit-status" className="sr-only">Traitement en cours</span>}
                                 </div>
-                            </div>
-
-                            <div className="flex justify-end gap-3 border-t border-gray-100 pt-6 mt-8">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowModal(false);
-                                        setEditingProjet(null);
-                                        reset();
-                                    }}
-                                    className="px-6 py-2.5 text-gray-700 font-medium border border-gray-200 rounded-xl bg-white hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 shadow-sm hover:shadow-md"
-                                >
-                                    Annuler
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={processing}
-                                    className="px-6 py-2.5 text-white font-medium bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                                >
-                                    {processing ? 'En cours...' : editingProjet ? 'Mettre à jour' : 'Créer'}
-                                </button>
-                            </div>
-                        </form>
+                            </form>
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
 
-                 
                 {/* Delete Modal */}
                 {showDeleteModal && deletingProjet && (
-                    <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-gray-600">
-                        <div className="m-4 w-full max-w-md rounded-lg bg-white p-6">
-                            <div className="mb-4 flex items-center gap-3">
-                                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
-                                    <Trash2 className="h-5 w-5 text-red-600" />
+                    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+                        <div className="bg-white rounded-lg p-6 w-full max-w-md m-4">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                                    <Trash2 className="w-5 h-5 text-red-600" aria-hidden="true" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-medium text-gray-900">Supprimer le projet</h3>
-                                    <p className="text-sm text-gray-500">Cette action est irréversible.</p>
+                                    <h3 id="delete-title" className="text-lg font-medium text-gray-900">
+                                        Supprimer le projet
+                                    </h3>
+                                    <p className="text-sm text-gray-500">
+                                        Cette action est irréversible.
+                                    </p>
                                 </div>
                             </div>
-
-                            <p className="mb-6 text-gray-700">
+                            
+                            <p className="text-gray-700 mb-6">
                                 Êtes-vous sûr de vouloir supprimer le projet <strong>"{deletingProjet.nom}"</strong> ?
                             </p>
 
@@ -725,14 +811,14 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                                         setShowDeleteModal(false);
                                         setDeletingProjet(null);
                                     }}
-                                    className="rounded-md border border-gray-300 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-50"
+                                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
                                 >
                                     Annuler
                                 </button>
                                 <button
                                     type="button"
                                     onClick={handleDelete}
-                                    className="rounded-md bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700"
+                                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
                                 >
                                     Supprimer
                                 </button>

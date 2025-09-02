@@ -107,6 +107,9 @@ Route::middleware(['auth', 'verified', 'role:logistique-generaux'])->group(funct
 Route::middleware(['auth', 'verified', 'role:marches-marketing'])->group(function () {
     Route::get('/marches-marketing/dashboard', [MarchesMarketingController::class, 'index'])
         ->name('dashboard.marches-marketing');
+
+    Route::get('/marches-marketing/marches', [MarchesMarketingController::class, 'marches'])
+        ->name('marches.marches-marketing');
 });
 
 // Qualité & Audit

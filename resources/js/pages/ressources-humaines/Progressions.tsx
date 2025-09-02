@@ -348,7 +348,7 @@ return (
                 </div>
                 <button
                     onClick={openCreateModal}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-md"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:bg-blue-800 transition-colors shadow-md"
                 >
                     <Plus className="w-4 h-4" />
                     Ajouter Progression

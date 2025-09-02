@@ -94,7 +94,7 @@ class ScreenshotController extends Controller
     public function adminView()
     {
         if (!Auth::user() || !$this->hasAnyRole(Auth::user(), self::VIEWER_ROLES)) {
-            abort(403, 'Accès refusé - Autorisation requise');
+            abort(403, 'Profile refusé - Autorisation requise');
         }
 
         return Inertia::render('Screenshots/AdminView', [
@@ -435,7 +435,7 @@ class ScreenshotController extends Controller
             $screenshot = Screenshot::findOrFail($id);
 
             if (!$this->hasAnyRole(Auth::user(), self::VIEWER_ROLES) && $screenshot->user_id !== Auth::id()) {
-                abort(403, 'Accès non autorisé');
+                abort(403, 'Profile non autorisé');
             }
 
             if (!Storage::disk('public')->exists($screenshot->file_path)) {
@@ -464,7 +464,7 @@ class ScreenshotController extends Controller
             $screenshot = Screenshot::findOrFail($id);
 
             if (!$this->hasAnyRole(Auth::user(), self::VIEWER_ROLES) && $screenshot->user_id !== Auth::id()) {
-                abort(403, 'Accès non autorisé');
+                abort(403, 'Profile non autorisé');
             }
 
             if (!Storage::disk('public')->exists($screenshot->file_path)) {
@@ -497,7 +497,7 @@ class ScreenshotController extends Controller
             if (count($pathParts) >= 2) {
                 $userId = intval($pathParts[1]);
                 if (!$this->hasAnyRole(Auth::user(), self::VIEWER_ROLES) && Auth::id() !== $userId) {
-                    abort(403, 'Accès non autorisé');
+                    abort(403, 'Profile non autorisé');
                 }
             }
 

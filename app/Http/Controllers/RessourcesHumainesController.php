@@ -835,7 +835,7 @@ public function storeAccess(Request $request)
             'user_id' => $user->id,
         ]);
 
-        return redirect()->back()->with('success', 'Accès créé avec succès.');
+        return redirect()->back()->with('success', 'Profile créé avec succès.');
 
     } catch (\Exception $e) {
         \Log::error('Error storing access', [
@@ -845,7 +845,7 @@ public function storeAccess(Request $request)
         ]);
         
         return redirect()->back()
-            ->with('error', 'Erreur lors de la création de l\'accès: ' . $e->getMessage());
+            ->with('error', 'Erreur lors de la création de profile: ' . $e->getMessage());
     }
 }
 
@@ -895,7 +895,7 @@ public function updateAccess(Request $request, User $user)
             Salarie::create($salarieData);
         }
 
-        return redirect()->back()->with('success', 'Accès mis à jour avec succès.');
+        return redirect()->back()->with('success', 'Profile mis à jour avec succès.');
 
     } catch (\Exception $e) {
         \Log::error('Error updating access', [
@@ -905,7 +905,7 @@ public function updateAccess(Request $request, User $user)
         ]);
         
         return redirect()->back()
-            ->with('error', 'Erreur lors de la mise à jour de l\'accès: ' . $e->getMessage());
+            ->with('error', 'Erreur lors de la mise à jour de profile: ' . $e->getMessage());
     }
 }
 
@@ -917,13 +917,13 @@ public function destroyAccess(User $user)
         
         $user->delete();
         
-        return redirect()->back()->with('success', 'Accès supprimé avec succès.');
+        return redirect()->back()->with('success', 'Profile supprimé avec succès.');
     } catch (\Exception $e) {
-        Log::error('Erreur suppression accès:', [
+        Log::error('Erreur suppression profile:', [
             'message' => $e->getMessage(),
             'user_id' => $user->id
         ]);
-        return redirect()->back()->with('error', 'Erreur lors de la suppression de l\'accès.');
+        return redirect()->back()->with('error', 'Erreur lors de la suppression de profile.');
     }
 }
 

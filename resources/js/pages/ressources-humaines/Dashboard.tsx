@@ -445,8 +445,6 @@ export default function RessourcesHumaines() {
             </div>
 
             <div className="space-y-8">
-              
-
               <div className="bg-gradient-to-br from-white via-white to-indigo-50/30 rounded-3xl border border-gray-200/70 p-8 shadow-lg">
                 <h3 className="text-xl font-bold text-gray-900 mb-6 tracking-tight">
                   Statistiques Rapides

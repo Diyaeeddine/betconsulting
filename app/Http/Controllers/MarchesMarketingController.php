@@ -11,4 +11,7 @@ class MarchesMarketingController extends Controller
         return Inertia::render('marches-marketing/Dashboard');
 
     }
+    public function marches(){
+        return Inertia::render('marches-marketing/Marches');
+    }
 }

@@ -81,11 +81,11 @@ export function Notifications() {
             </button>
           </DropdownMenuTrigger>
 
-          <DropdownMenuContent className="w-80 shadow-xl border-slate-200 dark:border-slate-700">
+          <DropdownMenuContent className="w-80 shadow-xl border-slate-200">
             <DropdownMenuLabel className="flex items-center justify-between px-4 py-3">
               <span className="font-semibold">Notifications</span>
               {notifications.length > 0 && (
-                <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full">
+                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
                   {notifications.length} nouvelles
                 </span>
               )}
@@ -104,19 +104,19 @@ export function Notifications() {
                 notifications.map((n) => (
                   <DropdownMenuItem
                     key={n.id}
-                    className="flex flex-col items-start p-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-150 border-b border-slate-100 dark:border-slate-700 last:border-b-0"
+                    className="flex flex-col items-start p-4 transition-colors duration-150 border-b border-slate-100 last:border-b-0"
                   >
                     <div className="w-full">
                       <div className="flex items-start justify-between">
-                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2">
+                        <span className="text-sm font-medium text-slate-900 line-clamp-2">
                           {n.titre}
                         </span>
                         <div className="h-2 w-2 rounded-full bg-blue-500 flex-shrink-0 ml-2"></div>
                       </div>
                       {n.commentaire && (
-                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 line-clamp-2">{n.commentaire}</p>
+                        <p className="text-xs text-slate-600 mt-1 line-clamp-2">{n.commentaire}</p>
                       )}
-                      <span className="text-xs text-slate-500 dark:text-slate-500 mt-2 block">
+                      <span className="text-xs text-slate-500 mt-2 block">
                         {new Date(n.created_at).toLocaleString()}
                       </span>
                     </div>
