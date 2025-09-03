@@ -4,7 +4,7 @@ import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { LayoutGrid } from 'lucide-react';
+import { LayoutGrid,MapPin } from 'lucide-react';
 import BetconsultingDashLogo from './betconsulting-dash-logo';
 import {
   Users, Route,Car,Wrench, BookOpen} from "lucide-react"
@@ -82,7 +82,19 @@ const mainNavItems: NavItem[] = [
                     icon: Users,
                 },
             ]
-            : [])];
+            : []),
+        
+        ...(auth?.user?.role === 'suivi-controle'
+        ? [
+            {
+            title: 'Terrains',
+            href: '/suivi-controle/terrains',
+            icon: MapPin,
+            },
+        ]
+        : []),
+        
+        ];
 
     return (
         <Sidebar collapsible="icon" variant="floating">

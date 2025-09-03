@@ -211,6 +211,9 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
 Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function () {
     Route::get('/suivi-controle/dashboard', [SuiviControleController::class, 'index'])
         ->name('dashboard.suivi-controle');
+
+    Route::get('/suivi-controle/terrains', [SuiviControleController::class, 'Terrains'])
+        ->name('terrains.suivi-controle');
 });
 
 // Route::get('/dashboard', function () {

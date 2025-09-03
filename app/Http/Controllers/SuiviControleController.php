@@ -11,4 +11,10 @@ class SuiviControleController extends Controller
         return Inertia::render('suivi-controle/Dashboard');
 
     }
+
+    public function Terrains()
+    {
+        return Inertia::render('suivi-controle/Terrains');
+
+    }
 }

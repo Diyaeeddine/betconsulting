@@ -1046,16 +1046,18 @@ class RessourcesHumainesController extends Controller
     }
 
     public function deleteSousTrais($id)
-{
-    $sousTrait = SousTrait::find($id);
+    {
+        $sousTrait = SousTrait::find($id);
 
-    if (!$sousTrait) {
-        return redirect()->back()->with('error', 'Sous Traitent Not Found.');
+        if (!$sousTrait) {
+            return redirect()->back()->with('error', 'Sous Traitent Not Found.');
+        }
+
+        $sousTrait->delete();
+
+        return redirect()->back()->with('success', 'Sous Traitant Supprimé avec succès.');
     }
 
-    $sousTrait->delete();
-
-     return redirect()->back()->with('success', 'Sous Traitant Supprimé avec succès.');
-}
+    
 
  }
