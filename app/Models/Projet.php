@@ -23,11 +23,13 @@ class Projet extends Model
         'type_projet',
         'latitude',
         'longitude',
-        'radius'
+        'radius',
+        'terrain_ids',
     ];
 
     protected $casts = [
         'salarie_ids' => 'array',
+        'terrain_ids' => 'array',
     ];
 
     public function responsable()
@@ -47,5 +49,10 @@ class Projet extends Model
     public function progressions()
     {
         return $this->hasMany(Progression::class);
+    }
+
+    public function terrains()
+    {
+        return $this->hasMany(Terrain::class);
     }
 }

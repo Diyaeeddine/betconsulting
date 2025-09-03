@@ -18,12 +18,14 @@ class Salarie extends Model
         'salaire_mensuel', 
         'date_embauche', 
         'statut', 
-        'password'
+        'password',
+        'emplacement',
     ];
 
     protected $casts = [
         'password' => 'hashed',
         'projet_ids' => 'array',
+        'terrain_ids'=> 'array',
     ];
 
     protected $hidden = [

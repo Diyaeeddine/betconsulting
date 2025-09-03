@@ -214,7 +214,15 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
 
     Route::get('/suivi-controle/terrains', [SuiviControleController::class, 'Terrains'])
         ->name('terrains.suivi-controle');
-});
+
+
+
+    Route::get('/suivi-controle/getTechs', [RessourcesHumainesController::class, 'getTechs'])->name('suivi.getTechs.suivi-controle');
+    Route::get('/suivi-controle/getTechInfo', [RessourcesHumainesController::class, 'getTechInfo'])->name('suivi.getTechInfo.suivi-controle');
+    Route::put('/suivi-controle/affectGrantTech', [RessourcesHumainesController::class, 'affectGrantTech'])->name('suivi.affectGrantTech.suivi-controle');
+    Route::get('/suivi-controle/getTechInfo', [RessourcesHumainesController::class, 'getTechInfo'])->name('suivi.getTechInfo.suivi-controle');
+
+}); 
 
 // Route::get('/dashboard', function () {
 //     $user = auth()->user();
