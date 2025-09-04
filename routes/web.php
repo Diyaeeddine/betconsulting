@@ -217,11 +217,11 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
 
 
 
-    Route::get('/suivi-controle/getTechs', [RessourcesHumainesController::class, 'getTechs'])->name('suivi.getTechs.suivi-controle');
-    Route::get('/suivi-controle/getTechInfo', [RessourcesHumainesController::class, 'getTechInfo'])->name('suivi.getTechInfo.suivi-controle');
-    Route::put('/suivi-controle/affectGrantTech', [RessourcesHumainesController::class, 'affectGrantTech'])->name('suivi.affectGrantTech.suivi-controle');
-    Route::get('/suivi-controle/getTechInfo', [RessourcesHumainesController::class, 'getTechInfo'])->name('suivi.getTechInfo.suivi-controle');
-
+    Route::get('/suivi-controle/getTechs', [SuiviControleController::class, 'getTechs'])->name('getTechs.suivi-controle');
+    Route::get('/suivi-controle/getTechInfo/{id}', [SuiviControleController::class, 'getTechInfo'])->name('getTechInfo.suivi-controle');
+    Route::put('/suivi-controle/affectGrantTech', [SuiviControleController::class, 'affectGrantTech'])->name('affectGrantTech.suivi-controle');
+    Route::put('/suivi-controle/updateStatutTerr', [SuiviControleController::class, 'updateStatutTerr'])->name('updateStatutTerr.suivi-controle');
+    Route::post('/suivi-controle/ws-tech-data', [SuiviControleController::class, 'store_ws_data']);
 }); 
 
 // Route::get('/dashboard', function () {

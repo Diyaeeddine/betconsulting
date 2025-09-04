@@ -16,6 +16,8 @@ class Terrain extends Model
         'long',
         'radius',
         'projet_id',
+        'statut_tech',
+        'statut_final',
         'salarie_ids',
     ];
 
@@ -34,5 +36,11 @@ class Terrain extends Model
         return Salarie::query()
             ->whereIn('id', $this->salarie_ids ?? [])
             ->get();
+    }
+    public function updateStatuses(string $statutTech, string $statutFinal): bool
+    {
+        $this->statut_tech = $statutTech;
+        $this->statut_final = $statutFinal;
+        return $this->save();
     }
 }

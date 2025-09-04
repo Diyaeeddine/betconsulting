@@ -9,6 +9,8 @@ use App\Models\Vehicule;
 use App\Models\Materiel;
 use App\Models\Depense;
 use App\Models\Profil;
+use App\Models\Terrain;
+use App\Models\WsTechData;
 
 class RHSeeder extends Seeder
 {
@@ -20,7 +22,7 @@ class RHSeeder extends Seeder
             ['name' => 'Admin User', 'password' => bcrypt('password')]
         );
 
-        $totalProjects = 6; // More projects for variety
+        $totalProjects = 6;
         $totalSalaries = 12;
 
         // Step 1: Create projects
@@ -40,117 +42,91 @@ class RHSeeder extends Seeder
                 'longitude'         => -5.799999 + ($i * 0.01),
                 'radius'            => 5 + $i,
                 'type_projet'       => ['suivi', 'etude', 'controle'][array_rand(['suivi', 'etude', 'controle'])],
-                'salarie_ids'       => [], // Will be filled later
-                'responsable_id'    => 7,
+                'salarie_ids'       => [],
+                'terrain_ids'       => [],
+                'responsable_id'    => $user->id,
             ]));
         }
 
-        // Step 2: Create salaries with multiple projects and passwords
+        // Step 2: Create salaries
         $salaries = collect();
         $profilsPostes = [
-            [
-                'value' => "bureau_etudes",
-                'label' => "Bureau d'Études Techniques (BET)",
-                'postes' => [
-                    "Ingénieur structure (béton, acier, bois)",
-                    "Ingénieur génie civil",
-                    "Ingénieur électricité / électricité industrielle",
-                    "Ingénieur thermique / énergétique",
-                    "Ingénieur fluides (HVAC, plomberie, CVC)",
-                    "Ingénieur géotechnique",
-                    "Dessinateur projeteur / DAO (Autocad, Revit, Tekla)",
-                    "Technicien bureau d’études",
-                    "Chargé d’études techniques",
-                    "Ingénieur environnement / développement durable",
-                    "Ingénieur calcul de structures",
-                    "Architecte"
-                ],
-            ],
-            [
-                'value' => "construction",
-                'label' => "Construction",
-                'postes' => [
-                    "Chef de chantier",
-                    "Conducteur de travaux",
-                    "Ingénieur travaux / Ingénieur chantier",
-                    "Conducteur d’engins",
-                    "Chef d’équipe",
-                    "Technicien travaux",
-                    "Manœuvre / Ouvrier spécialisé",
-                    "Coordinateur sécurité chantier (SST, prévention)",
-                    "Métreur / Économiste de la construction"
-                ],
-            ],
-            [
-                'value' => "suivi_controle",
-                'label' => "Suivi et Contrôle",
-                'postes' => [
-                    "Contrôleur technique",
-                    "Chargé de suivi qualité",
-                    "Chargé de suivi sécurité",
-                    "Inspecteur de chantier",
-                    "Responsable HSE (Hygiène, Sécurité, Environnement)",
-                    "Technicien contrôle qualité",
-                    "Planificateur / Chargé de planning",
-                    "Responsable logistique chantier"
-                ],
-            ],
-            [
-                'value' => "support_gestion",
-                'label' => "Support et Gestion",
-                'postes' => [
-                    "Responsable administratif chantier",
-                    "Assistant de projet",
-                    "Responsable achats / approvisionnement",
-                    "Responsable qualité",
-                    "Gestionnaire de contrats",
-                    "Chargé de communication",
-                    "Responsable financier / comptable chantier"
-                ],
-            ],
+            ['value' => "bureau_etudes", 'postes' => ["Ingénieur génie civil", "Architecte"]],
+            ['value' => "construction", 'postes' => ["Chef de chantier", "Conducteur de travaux"]],
+            ['value' => "suivi_controle", 'postes' => ["Contrôleur technique", "Inspecteur de chantier"]],
+            ['value' => "support_gestion", 'postes' => ["Responsable administratif chantier", "Assistant de projet"]],
         ];
 
         for ($j = 1; $j <= $totalSalaries; $j++) {
-            // Random projects for this salarie
             $assignedProjects = $projets->random(rand(1, 3))->pluck('id')->toArray();
 
-            $salarie = Salarie::create([ // Used a variable to create the salarie
-                'nom'               => "Nom $j",
-                'prenom'            => "Prénom $j",
-                'email'             => "salarie{$j}@example.com",
-                'telephone'         => "06000000{$j}",
-                'salaire_mensuel'   => 3000 + $j * 100,
-                'date_embauche'     => now()->subYears(rand(0, 5))->toDateString(),
-                'statut'            => 'actif',
-                'projet_ids'        => $assignedProjects,
-                'password'          => bcrypt('password123'), // Set password for the user
+            $salarie = Salarie::create([
+                'nom'             => "Nom $j",
+                'prenom'          => "Prénom $j",
+                'email'           => "salarie{$j}@example.com",
+                'telephone'       => "06000000{$j}",
+                'salaire_mensuel' => 3000 + $j * 100,
+                'date_embauche'   => now()->subYears(rand(0, 5))->toDateString(),
+                'statut'          => 'actif',
+                'emplacement'    => (rand(0, 1) ? 'bureau' : 'terrain'),
+                'projet_ids'      => $assignedProjects,
+                'terrain_ids'     => [],
+                'password'        => bcrypt('password123'),
             ]);
 
-            // Assign this salarie to these projects in reverse (fill salarie_ids in projects)
+            $salaries->push($salarie);
+
             foreach ($assignedProjects as $pId) {
                 $proj = $projets->firstWhere('id', $pId);
-                if ($proj) { // Check if project exists
-                    $salarieIds = $proj->salarie_ids ?? [];
-                    $salarieIds[] = $salarie->id; // Use the newly created salarie's id
-                    $proj->salarie_ids = array_unique($salarieIds);
+                if ($proj) {
+                    $proj->salarie_ids = array_unique(array_merge($proj->salarie_ids ?? [], [$salarie->id]));
                     $proj->save();
                 }
             }
 
-            // Step 3: Assign ONE random profile to each salarie
+            // Assign profile
             $randomProfilPoste = $profilsPostes[array_rand($profilsPostes)];
             $randomPoste = $randomProfilPoste['postes'][array_rand($randomProfilPoste['postes'])];
 
             Profil::create([
-                'user_id'    => $salarie->id,
-                'nom_profil' => $randomProfilPoste['value'],
-                'poste_profil' => $randomPoste,
+                'user_id'     => $salarie->id,
+                'nom_profil'  => substr($randomProfilPoste['value'], 0, 50), // prevent truncation
+                'poste_profil'=> $randomPoste,
             ]);
         }
 
-        // Step 4: Create vehicles and materials for each salary
+        // Step 3: Create terrains
+        foreach ($projets as $projet) {
+            for ($t = 1; $t <= 3; $t++) {
+                Terrain::create([
+                    'name'        => "Terrain {$t}_Projet{$projet->id}",
+                    'description' => "Description terrain {$t} du projet {$projet->id}",
+                    'long'        => $projet->longitude + ($t * 0.001),
+                    'lat'         => $projet->latitude + ($t * 0.001),
+                    'radius'      => 100 + $t * 20,
+                    'projet_id'   => $projet->id,
+                    'salarie_ids' => [],
+                    'statut_tech' => 'en_cours',
+                    'statut_final'=> 'en_cours',
+                ]);
+            }
+        }
+
+        // Step 4: Create random WS positions for salaries
         foreach ($salaries as $salarie) {
-            // Vehicles
+            for ($p = 0; $p < 3; $p++) {
+                WsTechData::create([
+                    'salarie_id' => $salarie->id,
+                    'recorded_at'  => now()->subMinutes($p * 5),
+                    'long'       => 35.6 + rand(0, 100) / 1000,
+                    'lat'        => -5.7 + rand(0, 100) / 1000,
+                    'alt'        => rand(10, 100),
+                ]);
+            }
+        }
+
+        // Step 5: Vehicles and materials
+        foreach ($salaries as $salarie) {
             if (rand(0, 1)) {
                 Vehicule::create([
                     'modele'            => "Modèle {$salarie->id}",
@@ -167,7 +143,6 @@ class RHSeeder extends Seeder
                 ]);
             }
 
-            // Materials
             for ($k = 1; $k <= 2; $k++) {
                 Materiel::create([
                     'nom'               => "Materiel {$k}_Sal{$salarie->id}",
@@ -181,7 +156,7 @@ class RHSeeder extends Seeder
             }
         }
 
-        // Step 5: Create non-assigned vehicles & materials
+        // Step 6: Non-assigned materials & vehicles
         for ($m = 1; $m <= 5; $m++) {
             Materiel::create([
                 'nom'               => "Materiel Non Affecté $m",
@@ -209,7 +184,7 @@ class RHSeeder extends Seeder
             ]);
         }
 
-        // Step 6: Create expenses for each project
+        // Step 7: Expenses for each project
         foreach ($projets as $projet) {
             for ($d = 1; $d <= 4; $d++) {
                 Depense::create([

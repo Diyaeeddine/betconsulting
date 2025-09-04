@@ -1,21 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Circle, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import { Users, Save, X, MapPin, Type, Edit, Eye, BarChart3 } from 'lucide-react';
+import { router } from "@inertiajs/react";
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { User, Position, TerrainProgress } from '../types/User';
-import AppLayout from "@/layouts/app-layout"
 
 // Fix for default markers in react-leaflet
-delete L.Icon.Default.prototype._getIconUrl;
+// @ts-ignore - Leaflet type issue with _getIconUrl
+delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// Custom marker icon for saved positions
-const savedPositionIcon = new L.Icon({
+// Custom marker icon for saved terrains
+const savedTerrainIcon = new L.Icon({
   iconUrl: 'data:image/svg+xml;base64,' + btoa(`
     <svg width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
       <circle cx="15" cy="15" r="12" fill="#10B981" stroke="white" stroke-width="3"/>
@@ -53,137 +53,71 @@ const trajectoryEndIcon = new L.Icon({
   popupAnchor: [0, -10],
 });
 
-// Mock data
-const mockUsers: User[] = [
-  {
-    id: '1',
-    username: 'Jean Dupont',
-    email: 'jean.dupont@gmail.com',
-    telephone: '+33 6 12 34 56 78',
-    created_at: '2024-01-15T10:30:00Z'
-  },
-  {
-    id: '2', 
-    username: 'Marie Martin',
-    email: 'marie.martin@gmail.com',
-    telephone: '+33 6 87 65 43 21',
-    created_at: '2024-01-20T14:15:00Z'
-  },
-  {
-    id: '3',
-    username: 'Pierre Dubois',
-    email: 'pierre.dubois@gmail.com',
-    telephone: '+33 6 45 67 89 12',
-    created_at: '2024-02-01T09:00:00Z'
-  }
-];
-
-const mockPositions: Position[] = [
-  { id: '1', name: 'Position Alpha', latitude: 48.8566, longitude: 2.3522, radius: 100, isActif: true, user_id: '1' },
-  { id: '2', name: 'Position Beta', latitude: 48.8576, longitude: 2.3532, radius: 150, isActif: false, user_id: '1' },
-  { id: '3', name: 'Position Gamma', latitude: 48.8586, longitude: 2.3542, radius: 200, isActif: true, user_id: '2' }
-];
-
-const mockTerrainProgress: Record<string, TerrainProgress[]> = {
-  '1': [
-    {
-      id: '1',
-      terrain_name: 'Terrain Nord',
-      date_creation: '2024-01-16T08:00:00Z',
-      statut_tech: 'Terminé',
-      statut_final: 'validé'
-    },
-    {
-      id: '2',
-      terrain_name: 'Terrain Sud',
-      date_creation: '2024-01-18T10:30:00Z',
-      statut_tech: 'En cours',
-      statut_final: 'en_cours'
-    }
-  ],
-  '2': [
-    {
-      id: '3',
-      terrain_name: 'Terrain Est',
-      date_creation: '2024-01-22T14:00:00Z',
-      statut_tech: 'En attente',
-      statut_final: 'en_revision'
-    }
-  ],
-  '3': [
-    {
-      id: '4',
-      terrain_name: 'Terrain Ouest',
-      date_creation: '2024-02-02T09:15:00Z',
-      statut_tech: 'Terminé',
-      statut_final: 'terminé'
-    }
-  ]
-};
-
-// Enhanced mock websocket data with 5 points and 30-second intervals for each user
-const mockWebsocketData: Record<string, any[]> = {
-  '1': [
-    // Jean Dupont - Northern trajectory
-    { timestamp: '2024-01-15T08:00:00Z', lat: 48.8566, lng: 2.3522, speed: 0 },
-    { timestamp: '2024-01-15T08:00:30Z', lat: 48.8570, lng: 2.3525, speed: 25 },
-    { timestamp: '2024-01-15T08:01:00Z', lat: 48.8575, lng: 2.3530, speed: 40 },
-    { timestamp: '2024-01-15T08:01:30Z', lat: 48.8580, lng: 2.3535, speed: 35 },
-    { timestamp: '2024-01-15T08:02:00Z', lat: 48.8585, lng: 2.3540, speed: 15 }
-  ],
-  '2': [
-    // Marie Martin - Eastern trajectory
-    { timestamp: '2024-01-20T09:00:00Z', lat: 48.8586, lng: 2.3542, speed: 0 },
-    { timestamp: '2024-01-20T09:00:30Z', lat: 48.8590, lng: 2.3550, speed: 30 },
-    { timestamp: '2024-01-20T09:01:00Z', lat: 48.8595, lng: 2.3558, speed: 45 },
-    { timestamp: '2024-01-20T09:01:30Z', lat: 48.8600, lng: 2.3566, speed: 50 },
-    { timestamp: '2024-01-20T09:02:00Z', lat: 48.8605, lng: 2.3575, speed: 20 }
-  ],
-  '3': [
-    // Pierre Dubois - Southern circular trajectory
-    { timestamp: '2024-02-01T10:00:00Z', lat: 48.8550, lng: 2.3510, speed: 0 },
-    { timestamp: '2024-02-01T10:00:30Z', lat: 48.8545, lng: 2.3515, speed: 20 },
-    { timestamp: '2024-02-01T10:01:00Z', lat: 48.8540, lng: 2.3520, speed: 35 },
-    { timestamp: '2024-02-01T10:01:30Z', lat: 48.8545, lng: 2.3525, speed: 30 },
-    { timestamp: '2024-02-01T10:02:00Z', lat: 48.8552, lng: 2.3518, speed: 10 }
-  ]
-};
-
-interface Props {
-  users?: User[];
-  initialPositions?: Position[];
+interface Salarie {
+  id: string;
+  username: string;
+  email: string;
+  telephone: string;
+  created_at: string;
+  emplacement: string;
 }
 
-const breadcrumbs = [
-  {
-    title: "Gestion des Terrains",
-    href: "/terrains",
-  },
-];
+interface Terrain {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  radius: number;
+  isActif: boolean;
+  salarie_ids: string[];
+  statut_tech: string;
+  statut_final: string;
+  date_creation?: string;
+}
+
+interface Position {
+  id: string;
+  salarie_id: string;
+  lat: number;
+  lng: number;
+  recorded_at: string;
+  speed?: number;
+}
+
+interface TechData {
+  tech: Salarie;
+  terrains: Terrain[];
+}
+
+interface TechInfo {
+  salarie: Salarie;
+  terrains: Terrain[];
+  positions: Position[];
+}
 
 // Map Controller Component
 function MapController({ 
   onMapClick, 
-  onPositionClick, 
-  visiblePositions, 
-  selectedUserPosition,
+  onTerrainClick, 
+  visibleTerrains, 
+  selectedUserTerrain,
   trajectoryData,
   selectedUser
 }: {
-  onMapClick: (position: { latitude: number; longitude: number }) => void;
-  onPositionClick: (position: Position) => void;
-  visiblePositions: Position[];
-  selectedUserPosition: Position | null;
-  trajectoryData: any[];
+  onMapClick: (terrain: { latitude: number; longitude: number }) => void;
+  onTerrainClick: (terrain: Terrain) => void;
+  visibleTerrains: Terrain[];
+  selectedUserTerrain: Terrain | null;
+  trajectoryData: Position[];
   selectedUser: string;
 }) {
   const map = useMap();
 
   useEffect(() => {
-    if (selectedUserPosition && selectedUserPosition.latitude && selectedUserPosition.longitude) {
-      map.setView([selectedUserPosition.latitude, selectedUserPosition.longitude], map.getZoom());
+    if (selectedUserTerrain && selectedUserTerrain.latitude && selectedUserTerrain.longitude) {
+      map.setView([selectedUserTerrain.latitude, selectedUserTerrain.longitude], map.getZoom());
     }
-  }, [selectedUserPosition, map]);
+  }, [selectedUserTerrain, map]);
 
   useMapEvents({
     click: (e) => {
@@ -200,29 +134,29 @@ function MapController({
   // Get trajectory color based on user
   const getTrajectoryColor = (userId: string) => {
     const colors = {
-      '1': '#3B82F6', // Blue for Jean
-      '2': '#10B981', // Green for Marie  
-      '3': '#F59E0B'  // Orange for Pierre
+      '1': '#3B82F6', // Blue 
+      '2': '#10B981', // Green   
+      '3': '#F59E0B'  // Orange
     };
     return colors[userId as keyof typeof colors] || '#6B7280';
   };
 
   return (
     <>
-      {/* Render saved positions */}
-      {visiblePositions.map((position) => (
-        position.latitude && position.longitude && (
-          <div key={position.id}>
+      {/* Render saved terrains */}
+      {visibleTerrains.map((terrain) => (
+        terrain.latitude && terrain.longitude && (
+          <div key={terrain.id}>
             <Marker
-              position={[position.latitude, position.longitude]}
-              icon={savedPositionIcon}
+              position={[terrain.latitude, terrain.longitude]}
+              icon={savedTerrainIcon}
               eventHandlers={{
-                click: () => onPositionClick(position)
+                click: () => onTerrainClick(terrain)
               }}
             />
             <Circle
-              center={[position.latitude, position.longitude]}
-              radius={position.radius}
+              center={[terrain.latitude, terrain.longitude]}
+              radius={terrain.radius}
               pathOptions={{
                 color: '#10B981',
                 fillColor: '#10B981',
@@ -285,186 +219,314 @@ function MapController({
   );
 }
 
-export default function Terrains({ users = mockUsers, initialPositions = mockPositions }: Props) {
+export default function Terrains() {
+  // State for techs and terrains data
+  const [techsData, setTechsData] = useState<TechData[]>([]);
+  const [selectedTech, setSelectedTech] = useState('');
+  const [selectedTechInfo, setSelectedTechInfo] = useState<TechInfo | null>(null);
+  const [selectedUserTerrain, setSelectedUserTerrain] = useState<Terrain | null>(null);
+
   // Map states
-  const [selectedUser, setSelectedUser] = useState('');
-  const [selectedUserPosition, setSelectedUserPosition] = useState<Position | null>(null);
-  const [savedPositions, setSavedPositions] = useState<Position[]>(initialPositions);
   const [showMapPopup, setShowMapPopup] = useState(false);
-  const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
+  const [selectedTerrain, setSelectedTerrain] = useState<Terrain | null>(null);
   const [newRadius, setNewRadius] = useState(100);
   const [newName, setNewName] = useState('');
 
   // Progress and terrain states
-  const [selectedUserForProgress, setSelectedUserForProgress] = useState<User | null>(null);
-  const [showPositionsPopup, setShowPositionsPopup] = useState(false);
+  const [selectedUserForProgress, setSelectedUserForProgress] = useState<Salarie | null>(null);
   const [showTerrainsPopup, setShowTerrainsPopup] = useState(false);
-  const [selectedUserPositions, setSelectedUserPositions] = useState<Position[]>([]);
-  const [selectedUserProgress, setSelectedUserProgress] = useState<TerrainProgress[]>([]);
+  const [showProgressPopup, setShowProgressPopup] = useState(false);
+  const [selectedUserTerrains, setSelectedUserTerrains] = useState<Terrain[]>([]);
+  const [selectedUserProgress, setSelectedUserProgress] = useState<Terrain[]>([]);
   const [editingTerrain, setEditingTerrain] = useState<string | null>(null);
 
   // Loading states
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoadingPositions, setIsLoadingPositions] = useState(false);
-  const [isTogglingPosition, setIsTogglingPosition] = useState<string | null>(null);
+  const [isLoadingTerrains, setIsLoadingTerrains] = useState(false);
+  const [isTogglingTerrain, setIsTogglingTerrain] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | ''>('');
 
-  // Filter positions to show only for selected user
-  const visiblePositions = selectedUser 
-    ? savedPositions.filter(pos => pos.user_id && pos.user_id.toString() === selectedUser.toString())
-    : [];
+  // API calls using fetch for JSON responses
+  const fetchTechs = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch('/suivi-controle/getTechs');
+      if (!response.ok) throw new Error('Failed to fetch techs');
+      const data: TechData[] = await response.json();
+      setTechsData(data);
+    } catch (error) {
+      console.error('Error fetching techs:', error);
+      setMessage({ type: 'error', text: 'Erreur lors du chargement des techniciens' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  // Get trajectory data for selected user
-  const trajectoryData = selectedUser ? (mockWebsocketData[selectedUser] || []) : [];
+  const fetchTechInfo = async (techId: string): Promise<TechInfo | null> => {
+    try {
+      const response = await fetch(`/suivi-controle/getTechInfo/${techId}`);
+      if (!response.ok) throw new Error('Failed to fetch tech info');
+      const data: TechInfo = await response.json();
+      setSelectedTechInfo(data);
+      
+      // Set first terrain as selected for map view
+      if (data.terrains && data.terrains.length > 0) {
+        setSelectedUserTerrain(data.terrains[0]);
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching tech info:', error);
+      setMessage({ type: 'error', text: 'Erreur lors du chargement des informations du technicien' });
+      return null;
+    }
+  };
 
-  // Handle user selection from dropdown
-  const handleUserSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const userId = e.target.value;
-    setSelectedUser(userId);
+  const affectGrantTech = async (salarieId: string, terrainId: string) => {
+    try {
+      setIsTogglingTerrain(terrainId);
+      const response = await fetch('/suivi-controle/affectGrantTech', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          salarie_id: salarieId,
+          terrain_id: terrainId
+        })
+      });
 
-    if (userId) {
-      const userPositions = savedPositions.filter(pos => pos.user_id && pos.user_id.toString() === userId.toString());
-      if (userPositions.length > 0) {
-        setSelectedUserPosition(userPositions[0]);
+      if (!response.ok) throw new Error('Failed to update terrain assignment');
+      const data = await response.json();
+      
+      setMessage({ type: 'success', text: data.message });
+      
+      // Refresh tech data
+      await fetchTechs();
+      if (selectedTech) {
+        await fetchTechInfo(selectedTech);
+      }
+    } catch (error) {
+      console.error('Error updating terrain assignment:', error);
+      setMessage({ type: 'error', text: 'Erreur lors de la mise à jour de l\'affectation' });
+    } finally {
+      setIsTogglingTerrain(null);
+    }
+  };
+
+  const updateStatutTerr = async () => {
+    try {
+      setIsSaving(true);
+      
+      const terrainsToUpdate = selectedUserProgress.map(terrain => ({
+        id: terrain.id,
+        statut_tech: terrain.statut_tech,
+        statut_final: terrain.statut_final
+      }));
+
+      const response = await fetch('/suivi-controle/updateStatutTerr', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          terrains: terrainsToUpdate
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to update terrain statuses');
+      const data = await response.json();
+      
+      setMessage({ type: 'success', text: data.message });
+      
+      // Refresh data
+      await fetchTechs();
+      if (selectedTech) {
+        await fetchTechInfo(selectedTech);
+      }
+    } catch (error) {
+      console.error('Error updating terrain statuses:', error);
+      setMessage({ type: 'error', text: 'Erreur lors de la mise à jour des statuts' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Load initial data
+  useEffect(() => {
+    fetchTechs();
+  }, []);
+
+  // Filter terrains to show only for selected tech
+  const visibleTerrains = selectedTechInfo ? selectedTechInfo.terrains : [];
+
+  // Get trajectory data for selected tech
+  const trajectoryData = selectedTechInfo ? selectedTechInfo.positions : [];
+
+  // Handle tech selection from dropdown
+  const handleTechSelect = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const techId = e.target.value;
+    setSelectedTech(techId);
+
+    if (techId) {
+      const techInfo = await fetchTechInfo(techId);
+      if (techInfo && techInfo.terrains.length > 0) {
+        setSelectedUserTerrain(techInfo.terrains[0]);
       } else {
-        setSelectedUserPosition(null);
+        setSelectedUserTerrain(null);
       }
     } else {
-      setSelectedUserPosition(null);
+      setSelectedTechInfo(null);
+      setSelectedUserTerrain(null);
     }
 
     setShowMapPopup(false);
-    setSelectedPosition(null);
+    setSelectedTerrain(null);
   };
 
   // Map functions
   const handleMapClick = (clickedPosition: { latitude: number; longitude: number }) => {
-    if (!selectedUser) {
-      setMessage({ type: 'error', text: 'Veuillez sélectionner un utilisateur d\'abord' });
+    if (!selectedTech) {
+      setMessage({ type: 'error', text: 'Veuillez sélectionner un technicien d\'abord' });
       return;
     }
 
-    if (!selectedPosition) {
-      const newPosition: Position = {
+    if (!selectedTerrain) {
+      const newTerrain: Terrain = {
         id: Date.now().toString(),
         latitude: clickedPosition.latitude,
         longitude: clickedPosition.longitude,
         radius: 100,
         name: '',
-        user_id: selectedUser,
+        salarie_ids: [selectedTech],
         isActif: true,
-        isNew: true
+        statut_tech: 'en_cours',
+        statut_final: 'en_cours'
       };
 
-      setSavedPositions(prev => [...prev, newPosition]);
-      setSelectedPosition(newPosition);
+      setSelectedTerrain(newTerrain);
       setNewRadius(100);
       setNewName('');
       setShowMapPopup(true);
     }
   };
 
-  const handlePositionClick = (position: Position) => {
-    setSelectedPosition(position);
-    setNewRadius(position.radius);
-    setNewName(position.name || '');
-    setSelectedUser(position.user_id?.toString() || '');
+  const handleTerrainClick = (terrain: Terrain) => {
+    setSelectedTerrain(terrain);
+    setNewRadius(terrain.radius);
+    setNewName(terrain.name || '');
     setShowMapPopup(true);
   };
 
-  const handleSavePosition = async () => {
-    if (!selectedUser) {
-      setMessage({ type: 'error', text: 'Veuillez sélectionner un utilisateur' });
+  const handleSaveTerrain = async () => {
+    if (!selectedTech) {
+      setMessage({ type: 'error', text: 'Veuillez sélectionner un technicien' });
       return;
     }
 
     if (!newName.trim()) {
-      setMessage({ type: 'error', text: 'Veuillez entrer un nom pour la position' });
+      setMessage({ type: 'error', text: 'Veuillez entrer un nom pour le terrain' });
       return;
     }
 
     setIsSaving(true);
 
-    setTimeout(() => {
-      console.log('Position saved');
+    // Here you would call your terrain creation/update API
+    setTimeout(async () => {
       setShowMapPopup(false);
-      setSelectedPosition(null);
+      setSelectedTerrain(null);
       setIsSaving(false);
-      setMessage({ type: 'success', text: 'Position sauvegardée avec succès' });
+      setMessage({ type: 'success', text: 'Terrain sauvegardé avec succès' });
+      
+      // Refresh data
+      await fetchTechs();
+      if (selectedTech) {
+        await fetchTechInfo(selectedTech);
+      }
     }, 1000);
   };
 
-  const handleCancelPosition = () => {
-    if (selectedPosition?.isNew) {
-      setSavedPositions(prev => prev.filter(pos => pos.id !== selectedPosition.id));
-    }
+  const handleCancelTerrain = () => {
     setShowMapPopup(false);
-    setSelectedPosition(null);
+    setSelectedTerrain(null);
     setNewName('');
   };
 
   // Progress and terrain functions
-  const handleViewPositions = async (user: User) => {
-    setSelectedUserForProgress(user);
-    setShowPositionsPopup(true);
-    setIsLoadingPositions(true);
-
-    setTimeout(() => {
-      setSelectedUserPositions(mockPositions.filter(pos => pos.user_id === user.id));
-      setIsLoadingPositions(false);
-    }, 800);
-  };
-
-  const handleViewProgress = async (user: User) => {
-    setSelectedUserForProgress(user);
-    setSelectedUserProgress(mockTerrainProgress[user.id] || []);
+  const handleViewTerrains = async (tech: Salarie) => {
+    setSelectedUserForProgress(tech);
     setShowTerrainsPopup(true);
+    setIsLoadingTerrains(true);
+
+    try {
+      const techInfo = await fetchTechInfo(tech.id);
+      if (techInfo) {
+        setSelectedUserTerrains(techInfo.terrains);
+      }
+    } catch (error) {
+      console.error('Error loading terrains:', error);
+    } finally {
+      setIsLoadingTerrains(false);
+    }
   };
 
-  const handleTogglePosition = async (position: Position) => {
-    setIsTogglingPosition(position.id);
+  const handleViewProgress = async (tech: Salarie) => {
+    setSelectedUserForProgress(tech);
+    setShowProgressPopup(true);
+    setIsLoadingTerrains(true);
 
-    setTimeout(() => {
-      setSelectedUserPositions(prev =>
-        prev.map(pos =>
-          pos.id === position.id
-            ? { ...pos, isActif: !pos.isActif }
-            : pos
-        )
-      );
-      setIsTogglingPosition(null);
-    }, 500);
+    try {
+      const techInfo = await fetchTechInfo(tech.id);
+      if (techInfo) {
+        setSelectedUserProgress(techInfo.terrains);
+      }
+    } catch (error) {
+      console.error('Error loading progress:', error);
+    } finally {
+      setIsLoadingTerrains(false);
+    }
   };
 
-  const handleUpdateTerrainStatus = (terrainId: string, newStatus: string) => {
+  const handleToggleTerrain = async (terrain: Terrain) => {
+    if (!selectedUserForProgress) return;
+    
+    await affectGrantTech(selectedUserForProgress.id, terrain.id);
+    
+    // Refresh terrain list
+    const techInfo = await fetchTechInfo(selectedUserForProgress.id);
+    if (techInfo) {
+      setSelectedUserTerrains(techInfo.terrains);
+    }
+  };
+
+  const handleUpdateTerrainStatus = (terrainId: string, field: 'statut_tech' | 'statut_final', newStatus: string) => {
     setSelectedUserProgress(prev =>
       prev.map(terrain =>
         terrain.id === terrainId
-          ? { ...terrain, statut_final: newStatus }
+          ? { ...terrain, [field]: newStatus }
           : terrain
       )
     );
   };
 
   const handleSaveTerrains = async () => {
-    setIsSaving(true);
-    
-    setTimeout(() => {
-      console.log('Terrains updated');
-      setIsSaving(false);
-      setMessage({ type: 'success', text: 'Terrains mis à jour avec succès' });
-    }, 1000);
+    await updateStatutTerr();
+    setShowProgressPopup(false);
+    setSelectedUserForProgress(null);
+    setSelectedUserProgress([]);
   };
 
   const handleClosePopups = () => {
-    setShowPositionsPopup(false);
     setShowTerrainsPopup(false);
+    setShowProgressPopup(false);
     setSelectedUserForProgress(null);
-    setSelectedUserPositions([]);
+    setSelectedUserTerrains([]);
     setSelectedUserProgress([]);
-    setIsLoadingPositions(false);
-    setIsTogglingPosition(null);
+    setIsLoadingTerrains(false);
+    setIsTogglingTerrain(null);
     setEditingTerrain(null);
   };
 
@@ -479,7 +541,7 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
     return statusConfig[status as keyof typeof statusConfig] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
-  const formatWebsocketTime = (timestamp: string) => {
+  const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString('fr-FR', {
       hour: '2-digit',
       minute: '2-digit',
@@ -497,28 +559,34 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
     }
   }, [message]);
 
+  // Calculate totals
+  const totalTerrains = techsData.reduce((acc, tech) => acc + tech.terrains.length, 0);
+  const totalActiveTerrains = techsData.reduce((acc, tech) => 
+    acc + tech.terrains.filter(t => t.isActif).length, 0
+  );
+
   return (
-    <AppLayout breadcrumbs={breadcrumbs}>
-      <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-6">
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto">
         
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Gestion des Terrains</h1>
-            <p className="text-gray-600 mt-1">Gérez les positions et terrains des utilisateurs</p>
+            <p className="text-gray-600 mt-1">Gérez les terrains et positions des techniciens</p>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-blue-100 rounded-lg">
                 <Users className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Utilisateurs</p>
-                <p className="text-2xl font-bold text-gray-900">{users.length}</p>
+                <p className="text-sm font-medium text-gray-600">Total Techniciens</p>
+                <p className="text-2xl font-bold text-gray-900">{techsData.length}</p>
               </div>
             </div>
           </div>
@@ -528,8 +596,8 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
                 <MapPin className="w-5 h-5 text-green-600" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Positions</p>
-                <p className="text-2xl font-bold text-gray-900">{savedPositions.length}</p>
+                <p className="text-sm font-medium text-gray-600">Total Terrains</p>
+                <p className="text-2xl font-bold text-gray-900">{totalTerrains}</p>
               </div>
             </div>
           </div>
@@ -540,9 +608,7 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-600">Terrains Actifs</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {Object.values(mockTerrainProgress).flat().length}
-                </p>
+                <p className="text-2xl font-bold text-gray-900">{totalActiveTerrains}</p>
               </div>
             </div>
           </div>
@@ -554,7 +620,7 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
               <div>
                 <p className="text-sm font-medium text-gray-600">Sélectionné</p>
                 <p className="text-lg font-bold text-gray-900">
-                  {selectedUser ? users.find(u => u.id === selectedUser)?.username : 'Aucun'}
+                  {selectedTech ? techsData.find(t => t.tech.id === selectedTech)?.tech.username : 'Aucun'}
                 </p>
               </div>
             </div>
@@ -562,7 +628,7 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
         </div>
 
         {/* Map Section */}
-        <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden mb-6">
           <div className="p-6 border-b border-gray-200">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <h3 className="text-lg font-semibold text-gray-900">Carte Interactive</h3>
@@ -570,14 +636,14 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
               <div className="flex items-center space-x-3">
                 <Users className="w-5 h-5 text-gray-500" />
                 <select
-                  value={selectedUser}
-                  onChange={handleUserSelect}
+                  value={selectedTech}
+                  onChange={handleTechSelect}
                   className="block w-64 px-4 py-2 text-sm border border-gray-300 rounded-lg bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
                 >
-                  <option value="">Sélectionner un utilisateur...</option>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id.toString()}>
-                      {user.username}
+                  <option value="">Sélectionner un technicien...</option>
+                  {techsData.map((tech) => (
+                    <option key={tech.tech.id} value={tech.tech.id}>
+                      {tech.tech.username}
                     </option>
                   ))}
                 </select>
@@ -596,8 +662,8 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
             ) : (
               <div className="w-full h-[500px]">
                 <MapContainer
-                  center={selectedUserPosition && selectedUserPosition.latitude && selectedUserPosition.longitude 
-                    ? [selectedUserPosition.latitude, selectedUserPosition.longitude] 
+                  center={selectedUserTerrain && selectedUserTerrain.latitude && selectedUserTerrain.longitude 
+                    ? [selectedUserTerrain.latitude, selectedUserTerrain.longitude] 
                     : [48.8566, 2.3522]}
                   zoom={16}
                   style={{ height: '100%', width: '100%' }}
@@ -608,11 +674,11 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
                   />
                   <MapController
                     onMapClick={handleMapClick}
-                    onPositionClick={handlePositionClick}
-                    visiblePositions={visiblePositions}
-                    selectedUserPosition={selectedUserPosition}
+                    onTerrainClick={handleTerrainClick}
+                    visibleTerrains={visibleTerrains}
+                    selectedUserTerrain={selectedUserTerrain}
                     trajectoryData={trajectoryData}
-                    selectedUser={selectedUser}
+                    selectedUser={selectedTech}
                   />
                 </MapContainer>
               </div>
@@ -622,11 +688,11 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
             {!isLoading && (
               <div className="absolute top-4 right-4 bg-white bg-opacity-95 backdrop-blur-sm text-gray-800 text-sm px-4 py-3 rounded-lg shadow-lg border border-gray-200 z-[1000] max-w-xs">
                 <div className="space-y-2">
-                  {selectedUser ? (
+                  {selectedTech ? (
                     <>
                       <div className="flex items-center space-x-2 text-green-600">
                         <MapPin className="w-4 h-4" />
-                        <span className="font-medium">Cliquer pour ajouter une position</span>
+                        <span className="font-medium">Cliquer pour ajouter un terrain</span>
                       </div>
                       <div className="flex items-center space-x-2 text-blue-600">
                         <Edit className="w-4 h-4" />
@@ -642,7 +708,7 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
                   ) : (
                     <div className="flex items-center space-x-2 text-orange-600">
                       <Users className="w-4 h-4" />
-                      <span className="font-medium">Sélectionner un utilisateur</span>
+                      <span className="font-medium">Sélectionner un technicien</span>
                     </div>
                   )}
                 </div>
@@ -653,16 +719,16 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
             {!isLoading && (
               <div className="absolute bottom-4 left-4 bg-white bg-opacity-95 backdrop-blur-sm text-gray-800 text-sm px-4 py-3 rounded-lg shadow-lg border border-gray-200 z-[1000]">
                 <div className="space-y-1">
-                  {selectedUser ? (
+                  {selectedTech ? (
                     <>
-                      <div>Positions utilisateur: <span className="font-semibold text-green-600">{visiblePositions.length}</span></div>
+                      <div>Terrains technicien: <span className="font-semibold text-green-600">{visibleTerrains.length}</span></div>
                       <div>Points de trajectoire: <span className="font-semibold text-blue-600">{trajectoryData.length}</span></div>
                       <div className="text-xs text-gray-500">
-                        {users.find(u => u.id.toString() === selectedUser)?.username}
+                        {techsData.find(t => t.tech.id === selectedTech)?.tech.username}
                       </div>
                     </>
                   ) : (
-                    <div>Positions totales: <span className="font-semibold text-gray-600">{savedPositions.length}</span></div>
+                    <div>Terrains totaux: <span className="font-semibold text-gray-600">{totalTerrains}</span></div>
                   )}
                 </div>
               </div>
@@ -681,10 +747,10 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
           </div>
         </div>
 
-        {/* Users Table */}
+        {/* Technicians Table */}
         <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Utilisateurs</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Techniciens</h3>
           </div>
           
           <div className="overflow-x-auto">
@@ -694,40 +760,40 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">N°</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Téléphone</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Positions</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Terrains</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progrès</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {users.map((user, index) => (
-                  <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                {techsData.map((techData, index) => (
+                  <tr key={techData.tech.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {index + 1}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{user.username}</div>
+                      <div className="text-sm font-medium text-gray-900">{techData.tech.username}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500">{user.telephone}</div>
+                      <div className="text-sm text-gray-500">{techData.tech.telephone}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
-                        onClick={() => handleViewPositions(user)}
+                        onClick={() => handleViewTerrains(techData.tech)}
                         className="inline-flex items-center space-x-1 px-3 py-1 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors duration-200"
-                        title="Voir les positions"
+                        title="Voir les terrains"
                       >
                         <Eye className="w-3 h-3" />
-                        <span>Voir ({savedPositions.filter(pos => pos.user_id === user.id).length})</span>
+                        <span>Voir ({techData.terrains.length})</span>
                       </button>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
-                        onClick={() => handleViewProgress(user)}
+                        onClick={() => handleViewProgress(techData.tech)}
                         className="inline-flex items-center space-x-1 px-3 py-1 bg-purple-600 text-white text-xs font-medium rounded hover:bg-purple-700 transition-colors duration-200"
-                        title="Voir les terrains"
+                        title="Voir le progrès"
                       >
                         <BarChart3 className="w-3 h-3" />
-                        <span>Terrains ({mockTerrainProgress[user.id]?.length || 0})</span>
+                        <span>Progrès ({techData.terrains.length})</span>
                       </button>
                     </td>
                   </tr>
@@ -736,26 +802,26 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
             </table>
           </div>
 
-          {users.length === 0 && (
+          {techsData.length === 0 && !isLoading && (
             <div className="text-center py-12">
               <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="text-sm font-medium text-gray-900">Aucun utilisateur</h3>
-              <p className="text-sm text-gray-500">Les utilisateurs apparaîtront ici.</p>
+              <h3 className="text-sm font-medium text-gray-900">Aucun technicien</h3>
+              <p className="text-sm text-gray-500">Les techniciens apparaîtront ici.</p>
             </div>
           )}
         </div>
 
-        {/* Position Edit Popup */}
-        {showMapPopup && selectedPosition && (
+        {/* Terrain Edit Popup */}
+        {showMapPopup && selectedTerrain && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1001] p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
               <div className="px-6 py-4 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-gray-900">
-                    {selectedPosition.isNew ? 'Nouvelle Position' : 'Modifier Position'}
+                    Modifier Terrain
                   </h3>
                   <button
-                    onClick={handleCancelPosition}
+                    onClick={handleCancelTerrain}
                     className="text-gray-400 hover:text-gray-600 transition-colors"
                     disabled={isSaving}
                   >
@@ -768,14 +834,14 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     <Type className="w-4 h-4 inline mr-1" />
-                    Nom de la Position *
+                    Nom du Terrain *
                   </label>
                   <input
                     type="text"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                     className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                    placeholder="Entrez le nom de la position"
+                    placeholder="Entrez le nom du terrain"
                     disabled={isSaving}
                   />
                 </div>
@@ -799,22 +865,22 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
                 <div className="bg-gray-50 rounded-lg p-4">
                   <h4 className="text-sm font-medium text-gray-700 mb-2">Coordonnées</h4>
                   <div className="text-xs text-gray-600 space-y-1">
-                    <div>Latitude: {selectedPosition.latitude?.toFixed(6)}</div>
-                    <div>Longitude: {selectedPosition.longitude?.toFixed(6)}</div>
+                    <div>Latitude: {selectedTerrain.latitude?.toFixed(6)}</div>
+                    <div>Longitude: {selectedTerrain.longitude?.toFixed(6)}</div>
                   </div>
                 </div>
               </div>
 
               <div className="px-6 py-4 bg-gray-50 rounded-b-2xl flex justify-between">
                 <button
-                  onClick={handleCancelPosition}
+                  onClick={handleCancelTerrain}
                   disabled={isSaving}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Annuler
                 </button>
                 <button
-                  onClick={handleSavePosition}
+                  onClick={handleSaveTerrain}
                   disabled={!newName.trim() || isSaving || newRadius < 10}
                   className="inline-flex items-center space-x-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
@@ -826,13 +892,13 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
           </div>
         )}
 
-        {/* User Positions Popup */}
-        {showPositionsPopup && selectedUserForProgress && (
+        {/* User Terrains Popup */}
+        {showTerrainsPopup && selectedUserForProgress && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1001] p-4">
             <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-hidden">
               <div className="flex justify-between items-center border-b p-6">
                 <h3 className="text-lg font-semibold text-gray-900">
-                  Positions de {selectedUserForProgress.username}
+                  Terrains de {selectedUserForProgress.username}
                 </h3>
                 <button 
                   onClick={handleClosePopups} 
@@ -843,18 +909,18 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
               </div>
               
               <div className="p-6 overflow-y-auto max-h-[calc(80vh-140px)]">
-                <h4 className="text-md font-medium text-gray-900 mb-4">Positions Affectées</h4>
-                {isLoadingPositions ? (
+                <h4 className="text-md font-medium text-gray-900 mb-4">Terrains Affectés</h4>
+                {isLoadingTerrains ? (
                   <div className="flex items-center justify-center py-8">
                     <div className="flex items-center space-x-2">
                       <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
                       <span className="text-gray-600">Chargement...</span>
                     </div>
                   </div>
-                ) : selectedUserPositions.length === 0 ? (
+                ) : selectedUserTerrains.length === 0 ? (
                   <div className="text-center py-12 bg-gray-50 rounded-lg">
-                    <div className="text-gray-500 text-lg mb-2">Aucune position trouvée</div>
-                    <p className="text-gray-400">Cet utilisateur n'a pas encore de positions définies.</p>
+                    <div className="text-gray-500 text-lg mb-2">Aucun terrain trouvé</div>
+                    <p className="text-gray-400">Ce technicien n'a pas encore de terrains affectés.</p>
                   </div>
                 ) : (
                   <div className="bg-gray-50 rounded-lg overflow-hidden">
@@ -868,30 +934,30 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {selectedUserPositions.map((position) => (
-                          <tr key={position.id} className="hover:bg-gray-50 transition-colors">
+                        {selectedUserTerrains.map((terrain) => (
+                          <tr key={terrain.id} className="hover:bg-gray-50 transition-colors">
                             <td className="px-6 py-4">
-                              <div className="text-sm font-medium text-gray-900">{position.name}</div>
+                              <div className="text-sm font-medium text-gray-900">{terrain.name}</div>
                             </td>
                             <td className="px-6 py-4">
                               <div className="text-xs text-gray-500">
-                                {position.latitude?.toFixed(4)}, {position.longitude?.toFixed(4)}
+                                {terrain.latitude?.toFixed(4)}, {terrain.longitude?.toFixed(4)}
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              <div className="text-sm text-gray-500">{position.radius}m</div>
+                              <div className="text-sm text-gray-500">{terrain.radius}m</div>
                             </td>
                             <td className="px-6 py-4">
                               <button
-                                onClick={() => handleTogglePosition(position)}
-                                disabled={isTogglingPosition === position.id}
+                                onClick={() => handleToggleTerrain(terrain)}
+                                disabled={isTogglingTerrain === terrain.id}
                                 className={`inline-flex items-center px-3 py-1 text-xs font-medium rounded-full transition-colors ${
-                                  position.isActif
+                                  terrain.isActif
                                     ? 'bg-green-100 text-green-800 hover:bg-green-200'
                                     : 'bg-red-100 text-red-800 hover:bg-red-200'
                                 } disabled:opacity-50`}
                               >
-                                {isTogglingPosition === position.id ? 'Chargement...' : (position.isActif ? 'Actif' : 'Inactif')}
+                                {isTogglingTerrain === terrain.id ? 'Chargement...' : (terrain.isActif ? 'Actif' : 'Inactif')}
                               </button>
                             </td>
                           </tr>
@@ -915,12 +981,12 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
         )}
 
         {/* Terrains Progress Popup */}
-        {showTerrainsPopup && selectedUserForProgress && (
+        {showProgressPopup && selectedUserForProgress && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1001] p-4">
             <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-hidden">
               <div className="flex justify-between items-center border-b p-6">
                 <h3 className="text-lg font-semibold text-gray-900">
-                  Terrains de {selectedUserForProgress.username}
+                  Progrès des Terrains - {selectedUserForProgress.username}
                 </h3>
                 <button 
                   onClick={handleClosePopups} 
@@ -931,11 +997,18 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
               </div>
               
               <div className="p-6 overflow-y-auto max-h-[calc(80vh-140px)]">
-                <h4 className="text-md font-medium text-gray-900 mb-4">Gestion des Terrains</h4>
-                {selectedUserProgress.length === 0 ? (
+                <h4 className="text-md font-medium text-gray-900 mb-4">Gestion des Statuts</h4>
+                {isLoadingTerrains ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                      <span className="text-gray-600">Chargement...</span>
+                    </div>
+                  </div>
+                ) : selectedUserProgress.length === 0 ? (
                   <div className="text-center py-12 bg-gray-50 rounded-lg">
                     <div className="text-gray-500 text-lg mb-2">Aucun terrain trouvé</div>
-                    <p className="text-gray-400">Cet utilisateur n'a pas encore de terrains assignés.</p>
+                    <p className="text-gray-400">Ce technicien n'a pas encore de terrains assignés.</p>
                   </div>
                 ) : (
                   <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -952,26 +1025,33 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
                         {selectedUserProgress.map((terrain) => (
                           <tr key={terrain.id} className="hover:bg-gray-50 transition-colors">
                             <td className="px-6 py-4">
-                              <div className="text-sm font-medium text-gray-900">{terrain.terrain_name}</div>
+                              <div className="text-sm font-medium text-gray-900">{terrain.name}</div>
                             </td>
                             <td className="px-6 py-4">
                               <div className="text-sm text-gray-500">
-                                {new Date(terrain.date_creation).toLocaleDateString('fr-FR')}
+                                {terrain.date_creation ? new Date(terrain.date_creation).toLocaleDateString('fr-FR') : '-'}
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              <span className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                                {terrain.statut_tech}
-                              </span>
+                              <select
+                                value={terrain.statut_tech}
+                                onChange={(e) => handleUpdateTerrainStatus(terrain.id, 'statut_tech', e.target.value)}
+                                className={`text-xs font-medium border rounded-full px-3 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${getStatusBadge(terrain.statut_tech)}`}
+                              >
+                                <option value="validé">Validé</option>
+                                <option value="terminé">Terminé</option>
+                                <option value="en_cours">En cours</option>
+                                <option value="en_revision">En révision</option>
+                              </select>
                             </td>
                             <td className="px-6 py-4">
                               <select
                                 value={terrain.statut_final}
-                                onChange={(e) => handleUpdateTerrainStatus(terrain.id, e.target.value)}
+                                onChange={(e) => handleUpdateTerrainStatus(terrain.id, 'statut_final', e.target.value)}
                                 className={`text-xs font-medium border rounded-full px-3 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${getStatusBadge(terrain.statut_final)}`}
                               >
-                                <option value="terminé">Terminé</option>
                                 <option value="validé">Validé</option>
+                                <option value="terminé">Terminé</option>
                                 <option value="en_cours">En cours</option>
                                 <option value="en_revision">En révision</option>
                               </select>
@@ -986,7 +1066,7 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
               
               <div className="flex justify-between items-center p-6 border-t bg-gray-50">
                 <div className="text-sm text-gray-500">
-                  {selectedUserProgress.length} terrain(s) pour cet utilisateur
+                  {selectedUserProgress.length} terrain(s) pour ce technicien
                 </div>
                 <div className="flex space-x-3">
                   <button 
@@ -1018,6 +1098,6 @@ export default function Terrains({ users = mockUsers, initialPositions = mockPos
           </div>
         )}
       </div>
-    </AppLayout>
+    </div>
   );
 }

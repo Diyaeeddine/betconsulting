@@ -11,18 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('ws_tech_data', function (Blueprint $table) {
+       Schema::create('ws_tech_data', function (Blueprint $table) {
             $table->id();
 
             $table->foreignId('salarie_id')
-                  ->constrained('salaries')
-                  ->onDelete('cascade');
+                ->constrained('salaries')
+                ->onDelete('cascade');
 
             $table->decimal('lat', 10, 7);
             $table->decimal('long', 10, 7);
             $table->decimal('alt', 8, 2)->nullable();
 
-            // timezone-aware (e.g., "2025-09-03T21:18:00Z")
+            // timezone-aware timestamp (UTC recommended)
             $table->timestampTz('recorded_at');
 
             $table->timestamps();
