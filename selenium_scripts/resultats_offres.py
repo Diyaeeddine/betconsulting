@@ -2,6 +2,8 @@ import csv
 import json
 import os
 import time
+import requests
+import zipfile
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -49,7 +51,7 @@ try:
 
     all_projects = []
 
-    for table in tables:
+    for index, table in enumerate(tables):
         project_data = {}
 
         # Récupérer la Référence dans le thead
@@ -89,6 +91,37 @@ try:
         else:
             project_data["Lien_PV"] = None
 
+        extracted_files = []
+
+        # Télécharger et extraire les fichiers DAO si lien existe
+        if project_data["Lien_DAO"]:
+            zip_name = f"resultat_offre_{index}.zip"
+            zip_path = os.path.join(result_dir, zip_name)
+
+            try:
+                # Télécharger le ZIP
+                r = requests.get(project_data["Lien_DAO"], timeout=30)
+                if r.status_code == 200:
+                    with open(zip_path, "wb") as f:
+                        f.write(r.content)
+
+                    # Extraire le ZIP
+                    extract_dir = os.path.join(result_dir, f"resultat_offre_{index}")
+                    os.makedirs(extract_dir, exist_ok=True)
+
+                    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                        zip_ref.extractall(extract_dir)
+
+                    # Lister tous les fichiers extraits (chemins relatifs)
+                    for root, dirs, files in os.walk(extract_dir):
+                        for file in files:
+                            relative_path = os.path.relpath(os.path.join(root, file), storage_public)
+                            extracted_files.append(f"/storage/{relative_path}")
+
+            except Exception as e:
+                print(f"Erreur téléchargement ou extraction ZIP pour résultat offre {index}: {e}")
+
+        project_data["EXTRACTED_FILES"] = extracted_files
         all_projects.append(project_data)
 
     # ---------------------
@@ -115,7 +148,7 @@ try:
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(all_projects, f, ensure_ascii=False, indent=4)
 
-    print(f"{len(all_projects)} projets récupérés et sauvegardés dans '{result_dir}'.")
+    print(f"{len(all_projects)} résultats d'offres récupérés et sauvegardés dans '{result_dir}'.")
 
 finally:
     driver.quit()
