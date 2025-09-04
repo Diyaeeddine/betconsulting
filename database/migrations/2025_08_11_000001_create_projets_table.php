@@ -22,6 +22,7 @@ return new class extends Migration {
             $table->decimal('latitude', 10, 7)->nullable();
             $table->decimal('longitude', 10, 7)->nullable();
             $table->decimal('radius', 8, 2)->nullable();
+            $table->json('salarie_ids')->default('[]'); // Stores related salaries
             $table->timestamps();
         });
     }

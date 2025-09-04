@@ -3,7 +3,7 @@ import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenuButton } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
-import { Building2, FolderKanban, LayoutDashboard, TrendingUp, UserPlus } from "lucide-react"
+import { BookOpen, Building2, FolderKanban, LayoutDashboard, LayoutGrid, ShoppingCart, TrendingUp, UserPlus, Users } from "lucide-react"
 import { Link, usePage } from '@inertiajs/react';
 import BetconsultingDashLogo from './betconsulting-dash-logo';
 import { Route, Car, Wrench} from "lucide-react"
@@ -39,14 +39,31 @@ export function AppSidebar() {
         ...(auth?.user?.role === 'ressources-humaines'
             ? [
                   {
+                      title: "Résultats Appels d'Offres",
+                      href: '/ressources-humaines/appel-offer',
+                      icon: BookOpen,
+                  },
+                  {
+                      title: 'Bons de Commande',
+                      href: '/ressources-humaines/bons-commandes',
+                      icon: ShoppingCart,
+                  },
+
+                  {
+                      title: 'Résultats Bon de Commande',
+                      href: '/ressources-humaines/resultats-bon-commande-page',
+                      icon: BookOpen,
+                  },
+
+                  {
                       title: 'Tracking',
                       href: '/ressources-humaines/tracking',
-                      icon: Route,
+                      icon: LayoutGrid,
                   },
                   {
                       title: 'Projets',
                       href: '/ressources-humaines/projets',
-                      icon: FolderKanban,
+                      icon: Users,
                   },
                   {
                       title: 'Véhicules',
@@ -58,18 +75,31 @@ export function AppSidebar() {
                       href: '/ressources-humaines/materiels',
                       icon: Wrench,
                   },
+
                   {
                       title: 'Progressions',
                       href: '/ressources-humaines/progressions',
-                      icon: TrendingUp,
+                      icon: Car,
+                  },
+
+                  {
+                      title: 'Formations',
+                      href: '/ressources-humaines/formations',
+                      icon: BookOpen,
                   },
                   {
-                      title: 'Profiles',
-                      href: '/ressources-humaines/access',
-                      icon: UserPlus,
+                      title: 'Users',
+                      href: '/ressources-humaines/users',
+                      icon: Users,
+                  },
+                  {
+                      title: 'Sous traitents',
+                      href: '/ressources-humaines/sousTrais',
+                      icon: Users,
                   },
               ]
             : []),
+        
         ...(auth?.user?.role === 'marches-marketing'
             ? [
                   {

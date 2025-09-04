@@ -428,7 +428,7 @@ export default function RessourcesHumaines() {
                 <h3 className="text-2xl font-bold text-gray-900 tracking-tight">
                   Progression des Projets
                 </h3>
-                <button className="px-4 py-2 text-sm bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl font-bold hover:from-green-600 hover:to-green-700 transition-all duration-300 hover:shadow-lg hover:shadow-xl">
+                <button className="px-4 py-2 text-sm bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl font-bold hover:from-green-600 hover:to-green-700 transition-all duration-300 hover:shadow-xl">
                   Voir tout
                 </button>
               </div>

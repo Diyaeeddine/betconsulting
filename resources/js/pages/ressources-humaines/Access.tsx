@@ -873,25 +873,25 @@ export default function Access() {
               <div className="space-y-6 py-4">
                 {/* User Info Section */}
                 <div className="bg-blue-50 p-6 rounded-lg">
-                  <h3 className="font-medium font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                     <Users className="h-5 w-5 text-blue-600" />
                     Informations Utilisateur
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <Label className="font-medium font-semibold">Nom complet</Label>
+                      <Label className="font-semibold">Nom complet</Label>
                       <p className=" text-gray-900 ">
                         {selectedUserDetails.user.name || "Non défini"}
                       </p>
                     </div>
                     <div>
-                      <Label className="font-medium font-semibold">Email</Label>
+                      <Label className="font-semibold">Email</Label>
                       <p className=" text-gray-900 ">
                         {selectedUserDetails.user.email || "Non défini"}
                       </p>
                     </div>
                     <div>
-                      <Label className="font-medium font-semibold">Date de création du compte</Label>
+                      <Label className="font-semibold">Date de création du compte</Label>
                       <p className=" text-gray-900">
                         {selectedUserDetails.user.created_at
                           ? new Date(selectedUserDetails.user.created_at).toLocaleDateString("fr-FR", {
@@ -920,38 +920,38 @@ export default function Access() {
                 {/* Employee Info Section */}
                 {selectedUserDetails.salarie && (
                   <div className="bg-green-50 p-6 rounded-lg">
-                    <h3 className="font-medium font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                       <Building className="h-5 w-5 text-green-600" />
                       Informations Professionnelles
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       <div>
                         <Label className="text-sm font-medium text-gray-600">Prénom</Label>
-                        <p className="font-medium font-semibold text-gray-900 mt-1">
+                        <p className="font-semibold text-gray-900 mt-1">
                           {selectedUserDetails.salarie.prenom || "Non défini"}
                         </p>
                       </div>
                       <div>
                         <Label className="text-sm font-medium text-gray-600">Nom</Label>
-                        <p className="font-medium font-semibold text-gray-900 mt-1">
+                        <p className="font-semibold text-gray-900 mt-1">
                           {selectedUserDetails.salarie.nom || "Non défini"}
                         </p>
                       </div>
                       <div>
                         <Label className="text-sm font-medium text-gray-600">Téléphone</Label>
-                        <p className="font-medium font-semibold text-gray-900 mt-1">
+                        <p className="font-semibold text-gray-900 mt-1">
                           {selectedUserDetails.salarie.telephone || "Non renseigné"}
                         </p>
                       </div>
                       <div>
                         <Label className="text-sm font-medium text-gray-600">Poste</Label>
-                        <p className="font-medium font-semibold text-gray-900 mt-1">
+                        <p className="font-semibold text-gray-900 mt-1">
                           {selectedUserDetails.salarie.poste || "Non défini"}
                         </p>
                       </div>
                       <div>
                         <Label className="text-sm font-medium text-gray-600">Salaire mensuel</Label>
-                        <p className="font-medium font-semibold text-gray-900 mt-1">
+                        <p className="font-semibold text-gray-900 mt-1">
                           {selectedUserDetails.salarie.salaire_mensuel
                             ? `${selectedUserDetails.salarie.salaire_mensuel.toLocaleString()} DH`
                             : "Non renseigné"}
@@ -959,7 +959,7 @@ export default function Access() {
                       </div>
                       <div>
                         <Label className="text-sm font-medium text-gray-600">Date d'embauche</Label>
-                        <p className="font-medium font-semibold text-gray-900 mt-1">
+                        <p className="font-semibold text-gray-900 mt-1">
                           {selectedUserDetails.salarie.date_embauche
                             ? new Date(selectedUserDetails.salarie.date_embauche).toLocaleDateString("fr-FR", {
                                 year: "numeric",
@@ -980,7 +980,7 @@ export default function Access() {
                 {/* Projects Section */}
                 {selectedUserDetails.salarie?.projets && selectedUserDetails.salarie.projets.length > 0 && (
                   <div className="bg-amber-50 p-6 rounded-lg">
-                    <h3 className="font-medium font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                       <FolderPlus className="h-5 w-5 text-amber-600" />
                       Projets Assignés ({selectedUserDetails.salarie.projets.length})
                     </h3>

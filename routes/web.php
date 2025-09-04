@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Http;
 use App\Http\Controllers\DirectionGeneraleController;
 use App\Http\Controllers\CommunicationDigitaleController;
 use App\Http\Controllers\EtudesTechniquesController;
@@ -21,6 +22,8 @@ use App\Models\Notification;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Broadcast;
 
+use Illuminate\Http\Request;
+//use ZipArchive;
 
 Route::get('/', function () {
     $user = auth()->user();
@@ -118,9 +121,7 @@ Route::middleware(['auth', 'verified', 'role:qualite-audit'])->group(function ()
         ->name('dashboard.qualite-audit');
 });
 
-// Ressources Humaines
 Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(function () {
-    
     Route::get('/ressources-humaines/dashboard', [RessourcesHumainesController::class, 'index'])
         ->name('dashboard.ressources-humaines');
 
@@ -140,7 +141,50 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
     Route::get('/ressources-humaines/materiels', [RessourcesHumainesController::class, 'materiels'])
         ->name('ressources-humaines.materiels');
 
-        
+    Route::get('/ressources-humaines/formations', [RessourcesHumainesController::class, 'formations'])
+        ->name('ressources-humaines.formations');
+
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/fetch-projets-direct',
+        [RessourcesHumainesController::class, 'fetchProjetsDirect']
+    )->name('ressources-humaines.fetch-projets-direct');
+
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/fetch-resultats-offres',
+        [RessourcesHumainesController::class, 'fetchResultatsOffres']
+    )->name('ressources-humaines.fetch-resultats-offres');
+
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/appel-offer',
+        [RessourcesHumainesController::class, 'appelOfferPage']
+    )->name('ressources-humaines.appel-offer');
+
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/appel-offers-data',
+        [RessourcesHumainesController::class, 'getAppelOffersData']
+    )->name('ressources-humaines.appel-offers-data');
+
+    // Lancer le script Selenium pour récupérer les bons de commande
+    Route::get('/ressources-humaines/fetch-bons-commande', [RessourcesHumainesController::class, 'fetchBonsCommande'])
+        ->name('ressources-humaines.fetch-bons-commande');
+
+    // Obtenir les données JSON des bons de commande
+    Route::get('/ressources-humaines/bons-commandes', [RessourcesHumainesController::class, 'getBonsCommandeData'])
+        ->name('ressources-humaines.bons-commandes');
+
+
+
+
+
+    Route::get('/ressources-humaines/sousTrais', [RessourcesHumainesController::class, 'SousTrais'])
+        ->name('SousTraitants.ressources-humaines');
+
+    Route::get('/ressources-humaines/projets-data', [RessourcesHumainesController::class, 'getProjetsData'])
+        ->name('ressources-humaines.projets-data');
+
+
+
+    // Routes CRUD pour les projets
     Route::post('/ressources-humaines/projets', [RessourcesHumainesController::class, 'store'])
         ->name('ressources-humaines.projets.store');
     Route::put('/ressources-humaines/projets/{projet}', [RessourcesHumainesController::class, 'update'])
@@ -171,44 +215,105 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
     Route::delete('/ressources-humaines/materiels/{materiel}', [RessourcesHumainesController::class, 'destroyMateriel'])
         ->name('ressources-humaines.materiels.destroy');
 
-    // Access management routes
-    Route::get('/ressources-humaines/access', [RessourcesHumainesController::class, 'access'])->name('ressources-humaines.access');
-    Route::post('/ressources-humaines/access', [RessourcesHumainesController::class, 'storeAccess'])->name('ressources-humaines.access.store');
-    Route::put('/ressources-humaines/access/{user}', [RessourcesHumainesController::class, 'updateAccess'])->name('ressources-humaines.access.update');
-    Route::delete('/ressources-humaines/access/{user}', [RessourcesHumainesController::class, 'destroyAccess'])->name('ressources-humaines.access.destroy');
+    Route::get('/ressources-humaines/maps', [RessourcesHumainesController::class, 'Maps'])
+        ->name('maps.ressources-humaines');
 
-    Route::post('/ressources-humaines/access/{salarie}/affecter-projets', [RessourcesHumainesController::class, 'affecterProjets'])->name('ressources-humaines.access.affecter-projets');
+    Route::get('/ressources-humaines/projets-csv', [RessourcesHumainesController::class, 'getProjetsCsv'])->name('ressources-humaines.projets-csv');
 
+    Route::get('/ressources-humaines/users', [RessourcesHumainesController::class, 'Users'])
+        ->name('users.ressources-humaines');
+    Route::get('/users/projets', [RessourcesHumainesController::class, 'getProjects'])->name('user.projects.ressources-humaines');
+    Route::get('/users/{user}', [RessourcesHumainesController::class, 'getUser'])->name('user.show.ressources-humaines');
+    Route::post('/users', [RessourcesHumainesController::class, 'storeUsers'])->name('user.store.ressources-humaines');
+    Route::put('/users/{salarie}', [RessourcesHumainesController::class, 'enableDisableUser'])->name('user.update.ressources-humaines');
+    Route::put('/userPass/{salarie}', [RessourcesHumainesController::class, 'updateUserPass'])->name('user.updatePass.ressources-humaines');
+    Route::put('/userProjet/{salarie}', [RessourcesHumainesController::class, 'affecteGrantUser'])->name('user.updateProject.ressources-humaines');
+
+    // Routes CRUD pour les formations
+    Route::post('/ressources-humaines/formations', [RessourcesHumainesController::class, 'storeFormation'])
+        ->name('ressources-humaines.formations.store');
+    Route::put('/ressources-humaines/formations/{formation}', [RessourcesHumainesController::class, 'updateFormation'])
+        ->name('ressources-humaines.formations.update');
+    Route::delete('/ressources-humaines/formations/{formation}', [RessourcesHumainesController::class, 'destroyFormation'])
+        ->name('ressources-humaines.formations.destroy');
+
+    //zip
+
+
+
+    Route::get('/ressources-humaines/list-dao-files', function (Request $request) {
+        $zipUrl = $request->query('zipPath');
+        if (!$zipUrl) return response()->json([], 400);
+
+        // Télécharger le ZIP temporairement
+        $tempZip = tempnam(sys_get_temp_dir(), 'dao');
+        file_put_contents($tempZip, file_get_contents($zipUrl));
+
+        $zip = new ZipArchive();
+        $files = [];
+
+        if ($zip->open($tempZip) === true) {
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $files[] = [
+                    'name' => $zip->getNameIndex($i),
+                    'path' => $zip->getNameIndex($i), // utilisé pour l'ouverture
+                ];
+            }
+            $zip->close();
+        }
+
+        unlink($tempZip); // supprimer fichier temporaire
+
+        return response()->json($files);
+    });
+
+
+    Route::get('/ressources-humaines/download-dao-file', function (Request $request) {
+        $zipUrl = $request->query('zipPath');
+        $filePath = $request->query('filePath');
+        if (!$zipUrl || !$filePath) return response('Paramètre manquant', 400);
+
+        $tempZip = tempnam(sys_get_temp_dir(), 'dao');
+        file_put_contents($tempZip, file_get_contents($zipUrl));
+
+        $zip = new ZipArchive();
+        $content = null;
+        if ($zip->open($tempZip) === true) {
+            $content = $zip->getFromName($filePath);
+            $zip->close();
+        }
+
+        unlink($tempZip);
+
+        if ($content === null) return response('Fichier introuvable', 404);
+
+        return response($content)
+            ->header('Content-Disposition', 'attachment; filename="' . basename($filePath) . '"');
+    });
+
+    // Lancer le script Selenium pour récupérer les résultats des bons de commande (ResultatBonCommande)
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/fetch-resultats-bon-commande',
+        [RessourcesHumainesController::class, 'fetchResultatsBonCommande']
+    )->name('ressources-humaines.fetch-resultats-bon-commande');
+
+    // Obtenir les données JSON des ResultatBonCommande
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/resultats-bon-commande',
+        [RessourcesHumainesController::class, 'getResultatsBonCommandeData']
+    )->name('ressources-humaines.resultats-bon-commande');
+
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(function () {
+        Route::get(
+            '/ressources-humaines/resultats-bon-commande-page',
+            [RessourcesHumainesController::class, 'resultatsBonCommandePage']
+        )->name('ressources-humaines.resultats-bon-commande-page');
+    });
+
+    //soustrait 
+    Route::get('/sousTrais', [RessourcesHumainesController::class, 'getSousTrais'])->name('sousTrais.get.ressources-humaines');
+    Route::post('/sousTrais', [RessourcesHumainesController::class, 'storeSousTrais'])->name('sousTrais.store.ressources-humaines');
 });
-
-
-
-// Add this route temporarily to test mail
-Route::get('/test-mail', function () {
-    try {
-        $user = new \App\Models\User([
-            'name' => 'Test User',
-            'email' => 'bahaeeddineghazi@gmail.com'
-        ]);
-        
-        $salarie = new \App\Models\Salarie([
-            'nom' => 'Test',
-            'prenom' => 'User',
-            'poste' => 'Developer',
-            'statut' => 'actif',
-            'date_embauche' => now()
-        ]);
-        
-        $mail = new \App\Mail\WelcomeEmployeeMail($user, $salarie, 'testpassword123');
-        \Illuminate\Support\Facades\Mail::to('your-test-email@gmail.com')->send($mail);
-        
-        return 'Test email sent successfully!';
-        
-    } catch (\Exception $e) {
-        return 'Error: ' . $e->getMessage();
-    }
-});
-
 
 // Suivi & Contrôle
 Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function () {
@@ -303,7 +408,7 @@ Route::get('/test-pusher', function () {
         'commentaire' => 'Ceci est un test temps réel',
         'type' => 'remplir_champs',
     ]);
-
+    
     event(new NewNotification($notif));
 
     return 'Notification envoyée !';
