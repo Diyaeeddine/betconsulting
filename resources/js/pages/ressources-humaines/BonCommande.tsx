@@ -12,6 +12,9 @@ const breadcrumbs = [
 
 type BonCommande = {
     id: number;
+    n_ordre?: string | null;
+    reference?: string | null;
+    date_heure_limite?: string | null;
     objet?: string | null;
     organisme?: string | null;
     ville_execution?: string | null;
@@ -24,9 +27,13 @@ type BonCommande = {
     chemin_fichiers?: string[] | null;
 };
 
-export default function BonsCommande() {
-    const [bonsCommande, setBonsCommande] = useState<BonCommande[]>([]);
-    const [loading, setLoading] = useState(true);
+interface Props {
+    bonsCommande: BonCommande[];
+}
+
+export default function BonsCommande({ bonsCommande: initialBonsCommande }: Props) {
+    const [bonsCommande, setBonsCommande] = useState<BonCommande[]>(initialBonsCommande || []);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const [daoFiles, setDaoFiles] = useState<{ name: string; path: string }[]>([]);
@@ -40,22 +47,22 @@ export default function BonsCommande() {
 
     const [refreshing, setRefreshing] = useState(false);
 
+    // initialise les données au montage, sans lancer Selenium
+    useEffect(() => {
+        setBonsCommande(initialBonsCommande || []);
+    }, [initialBonsCommande]);
+
     const fetchBonsCommande = () => {
         setLoading(true);
         axios
             .get('/ressources-humaines/bons-commandes')
             .then((res) => {
-                // S'assurer que c'est bien un tableau
                 const data = Array.isArray(res.data) ? res.data : res.data?.bonsCommande;
                 setBonsCommande(Array.isArray(data) ? data : []);
             })
             .catch((err) => setError(err.message))
             .finally(() => setLoading(false));
     };
-
-    useEffect(() => {
-        fetchBonsCommande();
-    }, []);
 
     const organismesList = Array.from(
         new Set((bonsCommande || []).map((b) => b.organisme).filter(Boolean))
@@ -68,15 +75,12 @@ export default function BonsCommande() {
         const matchOrganisme = filterOrganisme
             ? (b.organisme || '').toLowerCase().includes(filterOrganisme.toLowerCase())
             : true;
-
         const matchVille = filterVille
             ? (b.ville_execution || '').toLowerCase().includes(filterVille.toLowerCase())
             : true;
-
         const matchType = filterType
             ? (b.type || '').toLowerCase().includes(filterType.toLowerCase())
             : true;
-
         return matchOrganisme && matchVille && matchType;
     });
 
@@ -100,6 +104,7 @@ export default function BonsCommande() {
         window.open(`/ressources-humaines/download-dao-file?${params.toString()}`, '_blank');
     };
 
+    // ⚡ Bouton Actualiser : lance Selenium uniquement ici
     const handleRefresh = () => {
         setRefreshing(true);
         axios
@@ -202,16 +207,21 @@ export default function BonsCommande() {
                 {loading && <p>Chargement des bons de commande...</p>}
                 {error && <p className="text-red-500">{error}</p>}
 
+                {/* Affichage des bons de commande */}
                 {!loading && !error && filteredBons.length > 0 && (
                     <div className="space-y-6">
                         {filteredBons.map((bon, index) => (
                             <div key={index} className="border rounded-lg shadow-md bg-white">
-                                <div className="bg-green-600 text-white px-4 py-2 flex justify-between items-center">
+                                {/* En-tête avec nouveaux champs */}
+                                <div className="bg-blue-600 text-white px-4 py-2 flex justify-between items-center flex-wrap gap-2">
                                     <div>
-                                        <span className="font-bold">Objet :</span> {bon.objet || '---'}
+                                        <span className="font-bold">N° d'ordre :</span> {bon.n_ordre || '---'}
                                     </div>
                                     <div>
-                                        <span className="font-bold">Type :</span> {bon.type || '---'}
+                                        <span className="font-bold">Référence :</span> {bon.reference || '---'}
+                                    </div>
+                                    <div>
+                                        <span className="font-bold">Date/Heure limite :</span> {bon.date_heure_limite || '---'}
                                     </div>
                                 </div>
 
@@ -227,6 +237,15 @@ export default function BonsCommande() {
                                     </p>
                                     <p>
                                         <span className="font-bold">Visite des lieux :</span> {bon.visite_lieux || '---'}
+                                    </p>
+                                    <p>
+                                        <span className="font-bold">Soumission électronique :</span> {bon.soumission_electronique || '---'}
+                                    </p>
+                                    <p>
+                                        <span className="font-bold">Objet :</span> {bon.objet || '---'}
+                                    </p>
+                                    <p>
+                                        <span className="font-bold">Type :</span> {bon.type || '---'}
                                     </p>
                                 </div>
 
@@ -270,30 +289,37 @@ export default function BonsCommande() {
                     <div className="text-center py-8">
                         <p className="text-gray-500 text-lg">Aucun bon de commande trouvé</p>
                         <p className="text-gray-400 text-sm mt-2">
-                            Essayez d'actualiser ou de modifier vos filtres
+                            {bonsCommande.length === 0
+                                ? "Aucune donnée disponible. Cliquez sur 'Actualiser' pour récupérer les données."
+                                : "Essayez de modifier vos filtres pour voir plus de résultats."}
                         </p>
                     </div>
                 )}
 
+                {/* Modal pour les fichiers DAO */}
                 {showDaoFiles && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                        <div className="bg-white p-4 rounded max-h-full overflow-y-auto w-full max-w-md">
-                            <h3 className="font-bold mb-2">Fichiers D.A.O</h3>
-                            <ul className="space-y-1">
-                                {daoFiles.map((file, i) => (
-                                    <li key={i}>
-                                        <button
-                                            onClick={() => handleDownloadFile(file.path)}
-                                            className="text-blue-600 hover:underline"
-                                        >
-                                            {file.name}
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
+                        <div className="bg-white p-6 rounded-lg max-h-full overflow-y-auto w-full max-w-md">
+                            <h3 className="font-bold mb-4 text-lg">Fichiers D.A.O</h3>
+                            {daoFiles.length > 0 ? (
+                                <ul className="space-y-2">
+                                    {daoFiles.map((file, i) => (
+                                        <li key={i}>
+                                            <button
+                                                onClick={() => handleDownloadFile(file.path)}
+                                                className="text-blue-600 hover:underline w-full text-left p-2 hover:bg-blue-50 rounded"
+                                            >
+                                                📄 {file.name}
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <p className="text-gray-500">Aucun fichier trouvé dans cette archive</p>
+                            )}
                             <button
                                 onClick={() => setShowDaoFiles(false)}
-                                className="mt-4 bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
+                                className="mt-4 bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded w-full"
                             >
                                 Fermer
                             </button>
@@ -301,6 +327,7 @@ export default function BonsCommande() {
                     </div>
                 )}
 
+                {/* Loading overlay pour DAO */}
                 {loadingDao && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
                         <div className="flex flex-col items-center gap-2">

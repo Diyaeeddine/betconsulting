@@ -262,6 +262,24 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
             ->header('Content-Disposition', 'attachment; filename="' . basename($filePath) . '"');
     });
 
+    // Lancer le script Selenium pour récupérer les résultats des bons de commande (ResultatBonCommande)
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/fetch-resultats-bon-commande',
+        [RessourcesHumainesController::class, 'fetchResultatsBonCommande']
+    )->name('ressources-humaines.fetch-resultats-bon-commande');
+
+    // Obtenir les données JSON des ResultatBonCommande
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/resultats-bon-commande',
+        [RessourcesHumainesController::class, 'getResultatsBonCommandeData']
+    )->name('ressources-humaines.resultats-bon-commande');
+
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(function () {
+        Route::get(
+            '/ressources-humaines/resultats-bon-commande-page',
+            [RessourcesHumainesController::class, 'resultatsBonCommandePage']
+        )->name('ressources-humaines.resultats-bon-commande-page');
+    });
 
     //soustrait 
     Route::get('/sousTrais', [RessourcesHumainesController::class, 'getSousTrais'])->name('sousTrais.get.ressources-humaines');

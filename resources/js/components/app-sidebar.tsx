@@ -45,10 +45,17 @@ const mainNavItems: NavItem[] = [
                 icon: BookOpen, 
             },
             {
-    title: 'Bons de Commande',
-    href: '/ressources-humaines/fetch-bons-commande',
-    icon: ShoppingCart, // ou un autre icon adapté
-},
+                 title: 'Bons de Commande',
+                 href: '/ressources-humaines/bons-commandes',
+                 icon: ShoppingCart, 
+            },
+
+              {
+                  title: "Résultats Bon de Commande",
+                  href: "/ressources-humaines/resultats-bon-commande-page",
+                  icon: BookOpen,
+              },
+
 
                 {
                   title: 'Tracking',

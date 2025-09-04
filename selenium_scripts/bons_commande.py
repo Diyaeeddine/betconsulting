@@ -57,12 +57,27 @@ try:
     for item in result_items:
         bon_data = {}
         rows = item.find_elements(By.TAG_NAME, "tr")
+
         for row in rows:
             ths = row.find_elements(By.TAG_NAME, "th")
             tds = row.find_elements(By.TAG_NAME, "td")
-            if ths and tds:
+
+            # Pour les lignes avec seulement des th (ex: N° d'ordre, Référence, Date/Heure limite)
+            if ths and not tds:
+                for th in ths:
+                    key = th.text.split(":")[0].strip()
+                    span = th.find_elements(By.TAG_NAME, "span")
+                    value = " | ".join([s.text.strip() for s in span if s.text.strip()]) if span else ""
+                    bon_data[key] = value
+
+            # Pour les lignes classiques avec th et td
+            elif ths and tds:
                 key = ths[0].text.strip().replace(":", "")
                 value = " | ".join(td.text.strip() for td in tds)
+                # Inclure texte des spans dans le th
+                span_texts = [span.text.strip() for span in ths[0].find_elements(By.TAG_NAME, "span") if span.text.strip()]
+                if span_texts:
+                    value = " | ".join(span_texts + [value]) if value else " | ".join(span_texts)
                 bon_data[key] = value
 
         # Lien "Télécharger D.A.O"

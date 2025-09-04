@@ -12,16 +12,19 @@ class BonCommande extends Model
     protected $table = 'bons_commandes';
 
     protected $fillable = [
-        'observation',
-        'objet',
-        'visite_lieux',
-        'ville_execution',
-        'organisme',
-        'telechargement_dao',
-        'lien_cliquer_ici',
-        'type',
-        'soumission_electronique',
-        'chemin_fichiers', // Ajouté
+        'n_ordre',                 // N d'ordre
+        'reference',               // Référence
+        'date_heure_limite',       // Date/Heure limite
+        'observation',             // Obsérvation
+        'objet',                   // Objet
+        'visite_lieux',            // Visite des lieux
+        'ville_execution',         // Ville d'exécution
+        'organisme',               // Organisme
+        'telechargement_dao',      // Lien Télécharger D.A.O
+        'lien_cliquer_ici',        // Lien "Cliquer ici"
+        'type',                    // Type
+        'soumission_electronique', // Soumission électronique
+        'chemin_fichiers',         // Pour stocker les fichiers si besoin
     ];
 
     protected $casts = [
