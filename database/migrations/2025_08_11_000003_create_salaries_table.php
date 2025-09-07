@@ -18,8 +18,8 @@ return new class extends Migration {
             $table->enum('statut', ['actif', 'inactif'])->default('actif');
             $table->enum('emplacement', ['bureau','terrain'])
                   ->default('bureau');
-            $table->json('terrain_ids')->default('[]');
-            $table->json('projet_ids')->default('[]');; // Stores related project IDs
+            $table->json('terrain_ids');
+            $table->json('projet_ids'); // Stores related project IDs
             $table->timestamps();
         });
 

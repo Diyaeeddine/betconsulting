@@ -217,13 +217,26 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
 
 
 
-    Route::get('/suivi-controle/getTechs', [SuiviControleController::class, 'getTechs'])->name('getTechs.suivi-controle');
-    Route::get('/suivi-controle/getTechInfo/{id}', [SuiviControleController::class, 'getTechInfo'])->name('getTechInfo.suivi-controle');
-    Route::put('/suivi-controle/affectGrantTech', [SuiviControleController::class, 'affectGrantTech'])->name('affectGrantTech.suivi-controle');
-    Route::put('/suivi-controle/updateStatutTerr', [SuiviControleController::class, 'updateStatutTerr'])->name('updateStatutTerr.suivi-controle');
-    Route::post('/suivi-controle/ws-tech-data', [SuiviControleController::class, 'store_ws_data']);
-}); 
+    Route::get('/suivi-controle/fetch-data', [SuiviControleController::class, 'fetchData']);
+    Route::get('/suivi-controle/fetch-terrains', [SuiviControleController::class, 'fetchTerrains']);
+    Route::get('/suivi-controle/fetch-salarie/{id}', [SuiviControleController::class, 'fetchSalarieData']);
+    Route::post('/suivi-controle/terrain', [SuiviControleController::class, 'createTerrain']);
+    Route::put('/suivi-controle/terrain/{id}', [SuiviControleController::class, 'editTerrain']);
+    Route::delete('/suivi-controle/terrain/{id}', [SuiviControleController::class, 'deleteTerrain']);
+    Route::post('/suivi-controle/terrain/affect-grant', [SuiviControleController::class, 'affectGrantSalarie']);
+    Route::put('/suivi-controle/terrain/update-status', [SuiviControleController::class, 'updateStatusTerrs']);
 
+}); 
+// Route::middleware('auth.basic')->group(function () {
+//     Route::get('/suivi-controle/fetch-data', [SuiviControleController::class, 'fetchData']);
+//     Route::get('/suivi-controle/fetch-terrains', [SuiviControleController::class, 'fetchTerrains']);
+//     Route::get('/suivi-controle/fetch-salarie/{id}', [SuiviControleController::class, 'fetchSalarieData']);
+//     Route::post('/suivi-controle/terrain', [SuiviControleController::class, 'createTerrain']);
+//     Route::put('/suivi-controle/terrain/{id}', [SuiviControleController::class, 'editTerrain']);
+//     Route::delete('/suivi-controle/terrain/{id}', [SuiviControleController::class, 'deleteTerrain']);
+//     Route::post('/suivi-controle/terrain/affect-grant', [SuiviControleController::class, 'affectGrantSalarie']);
+//     Route::put('/suivi-controle/terrain/update-status', [SuiviControleController::class, 'updateStatusTerrs']);
+// });
 // Route::get('/dashboard', function () {
 //     $user = auth()->user();
 //     return match (true) {

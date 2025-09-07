@@ -12,27 +12,33 @@ return new class extends Migration
     public function up(): void
         {
         Schema::create('terrains', function (Blueprint $table) {
-        $table->id();
-        $table->string('name');
-        $table->text('description')->nullable();
-        $table->decimal('lat', 10, 7);
-        $table->decimal('long', 10, 7);
-        $table->decimal('radius', 8, 2)->nullable();
+            $table->id();
+            $table->string('name');
+            $table->text('description')->nullable();
 
-        $table->json('salarie_ids')->default('[]');
+            // Replacing lat/long with points (array of coordinates)
+            $table->json('points'); // e.g. [{"lat":..., "lng":...}, {...}, ...]
 
-        $table->enum('statut_tech', ['validé','terminé','en_cours','en_revision'])
-            ->default('en_revision');
-        $table->enum('statut_final', ['validé','terminé','en_cours','en_revision'])
-            ->default('en_revision');
+            // Surface in square meters or your preferred unit
+            $table->decimal('surface', 10, 2)->nullable();
 
-        $table->foreignId('projet_id')
-            ->constrained('projets')
-            ->onDelete('cascade');
+            $table->decimal('radius', 8, 2)->nullable();
 
-        $table->timestamps();
-        $table->index(['projet_id']);
-    });
+            $table->json('salarie_ids');
+
+            $table->enum('statut_tech', ['validé','terminé','en_cours','en_revision'])
+                ->default('en_revision');
+            $table->enum('statut_final', ['validé','terminé','en_cours','en_revision'])
+                ->default('en_revision');
+
+            $table->foreignId('projet_id')
+                ->constrained('projets')
+                ->onDelete('cascade');
+
+            $table->timestamps();
+            $table->index(['projet_id']);
+        });
+
 
     }
 

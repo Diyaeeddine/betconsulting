@@ -12,8 +12,8 @@ class Terrain extends Model
     protected $fillable = [
         'name',
         'description',
-        'lat',
-        'long',
+        'points',
+        'surface',
         'radius',
         'projet_id',
         'statut_tech',
@@ -22,21 +22,24 @@ class Terrain extends Model
     ];
 
     protected $casts = [
+        'points' => 'array',
         'salarie_ids' => 'array',
     ];
-
+    protected $attributes = [
+        'salarie_ids' => '[]',
+    ];
     public function projet()
     {
         return $this->belongsTo(Projet::class);
     }
 
-    // Convenience: fetch related Salarie models via JSON ids
     public function salaries()
     {
         return Salarie::query()
             ->whereIn('id', $this->salarie_ids ?? [])
             ->get();
     }
+
     public function updateStatuses(string $statutTech, string $statutFinal): bool
     {
         $this->statut_tech = $statutTech;

@@ -22,4 +22,12 @@ export default defineConfig({
             'ziggy-js': resolve(__dirname, 'vendor/tightenco/ziggy'),
         },
     },
+    server: {
+        host: '0.0.0.0',     // listen on all addresses (for Docker)
+        port: 5173,          // default Vite port
+        strictPort: true,    // fail if port is taken
+        hmr: {
+            host: 'localhost', // use your host machine, not [::1]
+        },
+    },
 });

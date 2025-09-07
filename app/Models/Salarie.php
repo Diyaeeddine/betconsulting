@@ -27,7 +27,10 @@ class Salarie extends Model
         'projet_ids' => 'array',
         'terrain_ids'=> 'array',
     ];
-
+    protected $attributes = [
+        'projet_ids' => '[]',
+        'terrain_ids' => '[]',
+    ];
     protected $hidden = [
         'password',
     ];

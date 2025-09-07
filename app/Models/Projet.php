@@ -31,7 +31,10 @@ class Projet extends Model
         'salarie_ids' => 'array',
         'terrain_ids' => 'array',
     ];
-
+    protected $attributes = [
+        'salarie_ids' => '[]',
+        'terrain_ids' => '[]',
+    ];
     public function responsable()
     {
         return $this->belongsTo(User::class, 'responsable_id');
