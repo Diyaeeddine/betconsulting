@@ -163,12 +163,14 @@ const extractErrorMessage = (errors: any): string => {
   
   return 'Erreur inconnue'
 }
+
 const breadcrumbs = [
   {
     title: "Dashboard Suivi & Contrôle des Travaux",
     href: "/suivi-controle/terrains",
   },
 ]
+
 export default function TerrainsManagement() {
   // States
   const [salaries, setSalaries] = useState<Salarie[]>([])
@@ -452,35 +454,84 @@ export default function TerrainsManagement() {
     setError(null)
   }
 
-  // Toggle assign/unassign salarie to terrain with Inertia router
+  // FIXED: Toggle assign/unassign salarie to terrain with proper state management
   const toggleSalarieAssignment = async (salarieId: number, terrainId: number) => {
-    const assignKey = `${salarieId}-${terrainId}`
-    setAssigningStates(prev => ({ ...prev, [assignKey]: true }))
-    setError(null)
-    
-    console.log('Toggling salarie assignment:', { salarieId, terrainId })
+    const assignKey = `${salarieId}-${terrainId}`;
+    setAssigningStates(prev => ({ ...prev, [assignKey]: true }));
+    setError(null);
 
-    router.post('/suivi-controle/terrain/affect-grant', 
-      { salarie_id: salarieId, terrain_id: terrainId },
-      {
-        headers: {
-          'X-Inertia': false // <== This is the fix!
-        },
-        onSuccess: () => {
-          console.log('Salarie assignment toggled successfully')
-          fetchAllData()
-        },
-        onError: (errors) => {
-          console.error('Assignment error:', errors)
-          setError("Erreur lors de l'affectation")
-        },
-        onFinish: () => {
-          setAssigningStates(prev => ({ ...prev, [assignKey]: false }))
-        }
-      }
-)
+    console.log('Toggling salarie assignment:', { salarieId, terrainId });
 
-  }
+    // Find current assignment state
+    const currentTerrain = terrains.find(t => t.id === terrainId);
+    const isCurrentlyAssigned = (currentTerrain?.salarie_ids || []).includes(salarieId);
+
+    try {
+      await new Promise((resolve, reject) => {
+        router.post('/suivi-controle/terrain/affect-grant', 
+          { salarie_id: salarieId, terrain_id: terrainId },
+          {
+            onSuccess: (page) => {
+              console.log('Salarie assignment toggled successfully');
+              
+              // IMMEDIATE STATE UPDATE - Update local state before refetching
+              if (isCurrentlyAssigned) {
+                // Remove from terrain
+                setTerrains(prev => prev.map(t => 
+                  t.id === terrainId 
+                    ? { ...t, salarie_ids: t.salarie_ids.filter(id => id !== salarieId) }
+                    : t
+                ));
+                // Update salarie state
+                setSalaries(prev => prev.map(s => 
+                  s.id === salarieId 
+                    ? { ...s, terrain_ids: (s.terrain_ids || []).filter(id => id !== terrainId) }
+                    : s
+                ));
+              } else {
+                // Add to terrain
+                setTerrains(prev => prev.map(t => 
+                  t.id === terrainId 
+                    ? { ...t, salarie_ids: [...(t.salarie_ids || []), salarieId] }
+                    : t
+                ));
+                // Update salarie state
+                setSalaries(prev => prev.map(s => 
+                  s.id === salarieId 
+                    ? { ...s, terrain_ids: [...(s.terrain_ids || []), terrainId] }
+                    : s
+                ));
+              }
+              
+              // Update selected terrain if it's the one being modified
+              if (selectedTerrain && selectedTerrain.id === terrainId) {
+                setSelectedTerrain(prev => prev ? {
+                  ...prev,
+                  salarie_ids: isCurrentlyAssigned 
+                    ? prev.salarie_ids.filter(id => id !== salarieId)
+                    : [...prev.salarie_ids, salarieId]
+                } : null);
+              }
+              
+              // Fetch fresh data to ensure synchronization
+              fetchAllData();
+              resolve(page);
+            },
+            onError: (errors) => {
+              console.error('Assignment error:', errors);
+              setError("Erreur lors de l'affectation");
+              reject(errors);
+            }
+          }
+        );
+      });
+
+    } catch (errors) {
+      console.error('Assignment promise error:', errors);
+    } finally {
+      setAssigningStates(prev => ({ ...prev, [assignKey]: false }));
+    }
+  };
 
   // Helper function to get field error
   const getFieldError = (fieldName: string): string | null => {
@@ -541,26 +592,59 @@ export default function TerrainsManagement() {
     ? terrains
     : terrains.filter(t => (t.salarie_ids || []).includes(selectedSalarie))
 
+  // FIXED: Function to get project names for a salarie based on actual project IDs
   const getSalarieProjectNames = (salarie: Salarie): string[] => {
     return projects
       .filter(p => (salarie.projet_ids || []).includes(p.id))
       .map(p => p.nom)
   }
 
+  // FIXED: Function to get terrain names for a salarie based on terrain IDs
   const getSalarieTerrainNames = (salarie: Salarie): string[] => {
     return terrains
       .filter(t => (salarie.terrain_ids || []).includes(t.id))
-      .map(t => t.name)
+      .map(t => t.name);
   }
 
-  // Function for salaries popup - shows terrain names and project names
-  const getSalarieDisponibilite = (salarie: Salarie): string => {
-    const terrainNames = getSalarieTerrainNames(salarie)
-    const projectNames = getSalarieProjectNames(salarie)
+  // FIXED: Function to return availability (terrain + project names) for a salarie
+  const getSalarieDisponibilite = (salarie: Salarie): JSX.Element => {
+    const salarieProjetIds = salarie.projet_ids || [];
+    const salarieTerrainIds = salarie.terrain_ids || [];
     
-    const allItems = [...terrainNames, ...projectNames]
-    return allItems.length > 0 ? allItems.join(', ') : 'Disponible'
-  }
+    if (salarieProjetIds.length === 0 && salarieTerrainIds.length === 0) {
+      return <div className="text-sm text-gray-500">Disponible</div>;
+    }
+
+    // Group terrains by their associated projects
+    const terrainsGroupedByProject: { [projectId: number]: string[] } = {};
+    
+    salarieTerrainIds.forEach(terrainId => {
+      const terrain = terrains.find(t => t.id === terrainId);
+      if (terrain) {
+        const projectId = terrain.projet_id;
+        if (!terrainsGroupedByProject[projectId]) {
+          terrainsGroupedByProject[projectId] = [];
+        }
+        terrainsGroupedByProject[projectId].push(terrain.name);
+      }
+    });
+
+    return (
+      <div className="space-y-2">
+        {salarieProjetIds.map((projectId) => {
+          const project = projects.find(p => p.id === projectId);
+          const projectTerrains = terrainsGroupedByProject[projectId] || [];
+          
+          return (
+            <div key={projectId} className="text-sm text-gray-600">
+              <div className="font-semibold">Projet: {project?.nom || 'Projet inconnu'}</div>
+              <div>Terrains: {projectTerrains.length > 0 ? projectTerrains.join(", ") : "Aucun terrain"}</div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   // Function for edit terrain popup - shows project and terrain counts
   const getSalarieProjectTerrainCounts = (salarie: Salarie): string => {
@@ -1117,110 +1201,114 @@ export default function TerrainsManagement() {
               </h3>
 
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">N°</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Téléphone</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Disponibilité</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {/* Assigned salaries first */}
-                    {salaries
-                      .filter(salarie => (selectedTerrain.salarie_ids || []).includes(salarie.id))
-                      .map((salarie, index) => {
-                        const assignKey = `${salarie.id}-${selectedTerrain.id}`
-                        const isAssigning = assigningStates[assignKey]
-                        
-                        return (
-                          <tr key={salarie.id} className="bg-green-50 hover:bg-green-100">
-                            <td className="px-4 py-3 text-sm">{index + 1}</td>
-                            <td className="px-4 py-3">
-                              <div className="text-sm font-medium text-gray-900">{salarie.nom} {salarie.prenom}</div>
-                              <div className="text-sm text-gray-500">{salarie.statut}</div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-1 text-sm text-gray-600">
-                                <Phone className="w-3 h-3" />
-                                {salarie.telephone}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {getSalarieDisponibilite(salarie)}
-                            </td>
-                            <td className="px-4 py-3">
-                              <button
-                                onClick={() => toggleSalarieAssignment(salarie.id, selectedTerrain.id)}
-                                disabled={isAssigning}
-                                className="inline-flex items-center gap-1 px-3 py-1 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors disabled:opacity-50"
-                              >
-                                {isAssigning ? (
-                                  <>
-                                    <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
-                                    Traitement...
-                                  </>
-                                ) : (
-                                  <>
-                                    <UserMinus className="w-3 h-3" />
-                                    Désaffecter
-                                  </>
-                                )}
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })}
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">N°</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Téléphone</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Disponibilité</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                  </tr>
+                </thead>
+               <tbody className="divide-y divide-gray-200">
+                  {/* Assigned salaries */}
+                  {salaries
+                    .filter(salarie => (selectedTerrain.salarie_ids || []).includes(salarie.id))
+                    .map((salarie, index) => {
+                      const assignKey = `${salarie.id}-${selectedTerrain.id}`;
+                      const isAssigning = assigningStates[assignKey];
 
-                    {/* Unassigned salaries */}
-                    {salaries
-                      .filter(salarie => !(selectedTerrain.salarie_ids || []).includes(salarie.id) && salarie.emplacement === 'terrain')
-                      .map((salarie, index) => {
-                        const assignKey = `${salarie.id}-${selectedTerrain.id}`
-                        const isAssigning = assigningStates[assignKey]
-                        
-                        return (
-                          <tr key={salarie.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm">{(selectedTerrain.salarie_ids || []).length + index + 1}</td>
-                            <td className="px-4 py-3">
-                              <div className="text-sm font-medium text-gray-900">{salarie.nom} {salarie.prenom}</div>
-                              <div className="text-sm text-gray-500">{salarie.statut}</div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-1 text-sm text-gray-600">
-                                <Phone className="w-3 h-3" />
-                                {salarie.telephone}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {getSalarieDisponibilite(salarie)}
-                            </td>
-                            <td className="px-4 py-3">
-                              <button
-                                onClick={() => toggleSalarieAssignment(salarie.id, selectedTerrain.id)}
-                                disabled={isAssigning}
-                                className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition-colors disabled:opacity-50"
-                              >
-                                {isAssigning ? (
-                                  <>
-                                    <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
-                                    Traitement...
-                                  </>
-                                ) : (
-                                  <>
-                                    <UserPlus className="w-3 h-3" />
-                                    Affecter
-                                  </>
-                                )}
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                  </tbody>
-                </table>
+                      return (
+                        <tr key={salarie.id} className="bg-green-50 hover:bg-green-100">
+                          <td className="px-4 py-3 text-sm">{index + 1}</td>
+                          <td className="px-4 py-3">
+                            <div className="text-sm font-medium text-gray-900">{salarie.nom} {salarie.prenom}</div>
+                            <div className="text-sm text-gray-500">{salarie.statut}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1 text-sm text-gray-600">
+                              <Phone className="w-3 h-3" />
+                              {salarie.telephone}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {getSalarieDisponibilite(salarie)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => toggleSalarieAssignment(salarie.id, selectedTerrain.id)}
+                              disabled={isAssigning}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors disabled:opacity-50"
+                            >
+                              {isAssigning ? (
+                                <>
+                                  <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
+                                  Traitement...
+                                </>
+                              ) : (
+                                <>
+                                  <UserMinus className="w-3 h-3" />
+                                  Retirer
+                                </>
+                              )}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                  {/* Unassigned salaries */}
+                  {salaries
+                    .filter(salarie => !(selectedTerrain.salarie_ids || []).includes(salarie.id) && salarie.emplacement === 'terrain')
+                    .map((salarie, index) => {
+                      const assignKey = `${salarie.id}-${selectedTerrain.id}`;
+                      const isAssigning = assigningStates[assignKey];
+
+                      return (
+                        <tr key={salarie.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm">{(selectedTerrain.salarie_ids || []).length + index + 1}</td>
+                          <td className="px-4 py-3">
+                            <div className="text-sm font-medium text-gray-900">{salarie.nom} {salarie.prenom}</div>
+                            <div className="text-sm text-gray-500">{salarie.statut}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1 text-sm text-gray-600">
+                              <Phone className="w-3 h-3" />
+                              {salarie.telephone}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {getSalarieDisponibilite(salarie)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => toggleSalarieAssignment(salarie.id, selectedTerrain.id)}
+                              disabled={isAssigning}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition-colors disabled:opacity-50"
+                            >
+                              {isAssigning ? (
+                                <>
+                                  <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
+                                  Traitement...
+                                </>
+                              ) : (
+                                <>
+                                  <UserPlus className="w-3 h-3" />
+                                  Affecter
+                                </>
+                              )}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+
+              </table>
+
+
+
               </div>
 
               <div className="flex justify-end pt-4 border-t mt-6">
