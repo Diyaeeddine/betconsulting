@@ -1,17 +1,18 @@
 "use client"
-
 import type React from "react"
 import { useState, useRef, useCallback, useEffect } from "react"
 import {
   Plus, Save, MapPin, Users, Map as MapIcon, Target,
   Eye, Edit2, Trash2, UserPlus, UserMinus, CheckCircle,
-  Clock, AlertCircle, XCircle, Navigation, Zap, Phone
+  Clock, AlertCircle, XCircle, Navigation, Zap, Phone, Upload,
+  FileText, Download, X
 } from "lucide-react"
 import { MapContainer, TileLayer, Polygon, Marker, Popup, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
+import JSZip from 'jszip'
+import { kml, gpx } from '@mapbox/togeojson'
 import AppLayout from "@/layouts/app-layout"
-
-import { Head, router } from "@inertiajs/react"
+import { Head, router, usePage } from "@inertiajs/react"
 import 'leaflet/dist/leaflet.css'
 
 // Fix for default markers in React Leaflet
@@ -79,6 +80,72 @@ interface Projet {
   terrain_ids?: number[]
 }
 
+interface MessageState {
+  type: 'success' | 'error' | 'info' | 'warning'
+  message: string
+  id: string
+}
+
+interface KMLData {
+  type: string
+  features: Array<{
+    type: string
+    properties: any
+    geometry: {
+      type: string
+      coordinates: any
+    }
+  }>
+}
+
+interface ParsedKMLTerrain {
+  name: string
+  description: string
+  points: Point[]
+  properties: any
+}
+
+// Input sanitization functions
+const sanitizeInput = {
+  // Remove HTML tags
+  removeHtmlTags: (input: string): string => {
+    return input.replace(/<[^>]*>/g, '').replace(/&[a-zA-Z0-9#]+;/g, '')
+  },
+  
+  // Remove URLs and links
+  removeUrls: (input: string): string => {
+    const urlRegex = /(?:https?:\/\/|www\.|[a-zA-Z0-9\-]+\.(?:com|org|net|edu|gov|mil|int|co|io|ai|me|tv|ly|app|dev|tech|info|biz|name|pro|museum|aero|coop|jobs|mobi|travel|xxx|xyz|online|site|website|blog|store|shop))[^\s]*/gi
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
+    return input.replace(urlRegex, '').replace(emailRegex, '')
+  },
+  
+  // Remove special characters that might be harmful
+  removeSpecialChars: (input: string): string => {
+    return input.replace(/[<>'"&]/g, '').replace(/javascript:/gi, '').replace(/on\w+=/gi, '')
+  },
+  
+  // Comprehensive text sanitization
+  sanitizeText: (input: string): string => {
+    if (!input || typeof input !== 'string') return ''
+    
+    let sanitized = input.trim()
+    sanitized = sanitizeInput.removeHtmlTags(sanitized)
+    sanitized = sanitizeInput.removeUrls(sanitized)
+    sanitized = sanitizeInput.removeSpecialChars(sanitized)
+    
+    // Remove multiple spaces and line breaks
+    sanitized = sanitized.replace(/\s+/g, ' ').trim()
+    
+    return sanitized
+  },
+  
+  // Sanitize numeric input
+  sanitizeNumber: (input: string): string => {
+    if (!input || typeof input !== 'string') return ''
+    return input.replace(/[^0-9.-]/g, '').trim()
+  }
+}
+
 // Custom hook for map click events with right-click support
 const MapClickHandler = ({
   isDrawingMode,
@@ -129,30 +196,45 @@ const createDrawingIcon = (index: number) => {
   })
 }
 
+// Text truncation component
+const TruncatedText = ({ text, maxLength = 50, className = "" }: { text: string, maxLength?: number, className?: string }) => {
+  if (!text) return <span className={className}>-</span>
+  
+  if (text.length <= maxLength) {
+    return <span className={className}>{text}</span>
+  }
+  
+  return (
+    <span className={`${className} cursor-help`} title={text}>
+      {text.substring(0, maxLength)}...
+    </span>
+  )
+}
+
 // Helper function to extract error message from various error formats
 const extractErrorMessage = (errors: any): string => {
   if (typeof errors === 'string') {
     return errors
   }
-  
+
   if (errors && typeof errors === 'object') {
     // Handle Laravel validation errors format
     if (errors.message) {
       return errors.message
     }
-    
+
     // Handle validation errors object
     if (errors.errors) {
       const errorMessages = Object.values(errors.errors).flat()
       return errorMessages.join(', ')
     }
-    
+
     // Handle direct errors object (field: [messages])
     const allMessages = Object.values(errors).flat().filter(msg => typeof msg === 'string')
     if (allMessages.length > 0) {
       return allMessages.join(', ')
     }
-    
+
     // Fallback to JSON string
     try {
       return JSON.stringify(errors)
@@ -160,7 +242,7 @@ const extractErrorMessage = (errors: any): string => {
       return 'Erreur inconnue'
     }
   }
-  
+
   return 'Erreur inconnue'
 }
 
@@ -172,6 +254,10 @@ const breadcrumbs = [
 ]
 
 export default function TerrainsManagement() {
+  // Get flash messages from Inertia page props
+  const { props } = usePage()
+  const flashMessages = (props as any).flash || {}
+
   // States
   const [salaries, setSalaries] = useState<Salarie[]>([])
   const [terrains, setTerrains] = useState<Terrain[]>([])
@@ -179,6 +265,13 @@ export default function TerrainsManagement() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string[]}>({})
+  const [messages, setMessages] = useState<MessageState[]>([])
+
+  // KML/KMZ related states
+  const [uploadedKMLData, setUploadedKMLData] = useState<ParsedKMLTerrain[]>([])
+  const [showKMLData, setShowKMLData] = useState(false)
+  const [isProcessingFile, setIsProcessingFile] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [selectedSalarie, setSelectedSalarie] = useState<number | null>(null)
   const [isDrawingMode, setIsDrawingMode] = useState<boolean>(false)
@@ -200,6 +293,190 @@ export default function TerrainsManagement() {
     salarie_ids: [] as number[]
   })
 
+  // Message handling functions
+  const addMessage = useCallback((type: MessageState['type'], message: string) => {
+    const id = Date.now().toString()
+    const newMessage: MessageState = { type, message, id }
+    setMessages(prev => [...prev, newMessage])
+
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+      setMessages(prev => prev.filter(msg => msg.id !== id))
+    }, 5000)
+  }, [])
+
+  const removeMessage = useCallback((id: string) => {
+    setMessages(prev => prev.filter(msg => msg.id !== id))
+  }, [])
+
+  // Handle flash messages from backend
+  useEffect(() => {
+    if (flashMessages.success) {
+      addMessage('success', flashMessages.success)
+    }
+    if (flashMessages.error) {
+      addMessage('error', flashMessages.error)
+    }
+    if (flashMessages.info) {
+      addMessage('info', flashMessages.info)
+    }
+    if (flashMessages.warning) {
+      addMessage('warning', flashMessages.warning)
+    }
+  }, [flashMessages, addMessage])
+
+  // KMZ/KML parsing functions
+  const parseKMLFile = async (file: File): Promise<ParsedKMLTerrain[]> => {
+    const isKMZ = file.name.toLowerCase().endsWith('.kmz')
+    const isKML = file.name.toLowerCase().endsWith('.kml')
+
+    if (!isKMZ && !isKML) {
+      throw new Error('Format de fichier non supporté. Veuillez utiliser un fichier KML ou KMZ.')
+    }
+
+    let kmlContent: string = ''
+
+    try {
+      if (isKMZ) {
+        // Handle KMZ (zipped KML)
+        const zip = new JSZip()
+        const zipData = await zip.loadAsync(file)
+        
+        // Find KML file in the zip
+        let kmlFile = null
+        for (const filename in zipData.files) {
+          if (filename.toLowerCase().endsWith('.kml')) {
+            kmlFile = zipData.files[filename]
+            break
+          }
+        }
+
+        if (!kmlFile) {
+          throw new Error('Aucun fichier KML trouvé dans l\'archive KMZ.')
+        }
+
+        kmlContent = await kmlFile.async('string')
+      } else {
+        // Handle KML directly
+        kmlContent = await file.text()
+      }
+
+      // Parse KML content
+      const parser = new DOMParser()
+      const kmlDoc = parser.parseFromString(kmlContent, 'text/xml')
+      
+      // Check for parsing errors
+      const parserError = kmlDoc.querySelector('parsererror')
+      if (parserError) {
+        throw new Error('Erreur de parsing du fichier KML: ' + parserError.textContent)
+      }
+
+      // Convert to GeoJSON using @mapbox/togeojson
+      const geoJSON = kml(kmlDoc) as KMLData
+
+      if (!geoJSON.features || geoJSON.features.length === 0) {
+        throw new Error('Aucune donnée géographique trouvée dans le fichier.')
+      }
+
+      // Parse features and convert to terrain format
+      const parsedTerrains: ParsedKMLTerrain[] = []
+
+      geoJSON.features.forEach((feature, index) => {
+        if (feature.geometry && feature.geometry.type === 'Polygon') {
+          const coordinates = feature.geometry.coordinates[0] // First ring of the polygon
+          
+          if (coordinates && coordinates.length >= 4) {
+            const points: Point[] = coordinates
+              .slice(0, -1) // Remove last point (same as first)
+              .map(([lng, lat]: [number, number]) => ({ lat, lng }))
+
+            const terrain: ParsedKMLTerrain = {
+              name: feature.properties?.name || `Terrain ${index + 1}`,
+              description: feature.properties?.description || `Terrain importé du fichier ${file.name}`,
+              points,
+              properties: feature.properties || {}
+            }
+
+            parsedTerrains.push(terrain)
+          }
+        } else if (feature.geometry && feature.geometry.type === 'Point') {
+          // Handle point features as circular terrains
+          const [lng, lat] = feature.geometry.coordinates
+          const radius = 50 // Default radius for point features
+          
+          // Create a simple square around the point
+          const points: Point[] = [
+            { lat: lat + 0.0005, lng: lng - 0.0005 },
+            { lat: lat + 0.0005, lng: lng + 0.0005 },
+            { lat: lat - 0.0005, lng: lng + 0.0005 },
+            { lat: lat - 0.0005, lng: lng - 0.0005 }
+          ]
+
+          const terrain: ParsedKMLTerrain = {
+            name: feature.properties?.name || `Point ${index + 1}`,
+            description: feature.properties?.description || `Point importé du fichier ${file.name}`,
+            points,
+            properties: { ...feature.properties, originalType: 'Point', centerLat: lat, centerLng: lng }
+          }
+
+          parsedTerrains.push(terrain)
+        }
+      })
+
+      if (parsedTerrains.length === 0) {
+        throw new Error('Aucun terrain utilisable trouvé dans le fichier. Seuls les polygones et points sont supportés.')
+      }
+
+      return parsedTerrains
+    } catch (error) {
+      console.error('Error parsing KML/KMZ file:', error)
+      throw error
+    }
+  }
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setIsProcessingFile(true)
+    setError(null)
+
+    try {
+      const parsedTerrains = await parseKMLFile(file)
+      setUploadedKMLData(parsedTerrains)
+      setShowKMLData(true)
+      addMessage('success', `${parsedTerrains.length} terrain(s) trouvé(s) dans le fichier ${file.name}`)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erreur lors du traitement du fichier'
+      addMessage('error', errorMessage)
+      setError(errorMessage)
+    } finally {
+      setIsProcessingFile(false)
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  const importTerrainFromKML = (kmlTerrain: ParsedKMLTerrain) => {
+    setCurrentPoints(kmlTerrain.points)
+    setTerrainFormData(prev => ({
+      ...prev,
+      name: sanitizeInput.sanitizeText(kmlTerrain.name),
+      description: sanitizeInput.sanitizeText(kmlTerrain.description),
+      radius: "100" // Default radius
+    }))
+    setShowCreatePopup(true)
+    setShowKMLData(false)
+    addMessage('info', `Terrain "${kmlTerrain.name}" chargé pour création`)
+  }
+
+  const clearKMLData = () => {
+    setUploadedKMLData([])
+    setShowKMLData(false)
+  }
+
   // Load data from API - FIXED VERSION with no dependencies to prevent infinite loops
   const fetchAllData = useCallback(async () => {
     setError(null)
@@ -209,11 +486,11 @@ export default function TerrainsManagement() {
         throw new Error(`Erreur réseau: ${response.status}`)
       }
       const data = await response.json()
-      
+
       // Destructure with default values
       const { terrains = [], projets = [], salaries = [] } = data
 
-      // Add project names to terrains
+      // Add project names to terrains and ensure proper salarie_ids array
       const terrainsWithProjects = terrains.map((terrain: any) => {
         const projet = projets.find((p: any) => p.id === terrain.projet_id)
         return { 
@@ -221,32 +498,40 @@ export default function TerrainsManagement() {
           projet_name: projet?.nom || "Projet inconnu",
           surface: Number(terrain.surface) || 0,
           radius: Number(terrain.radius) || 0,
-          salarie_ids: terrain.salarie_ids || []
+          salarie_ids: Array.isArray(terrain.salarie_ids) ? terrain.salarie_ids : []
         }
       })
+
+      // Ensure salaries have proper arrays for terrain_ids and projet_ids
+      const salariesWithIds = salaries.map((salarie: any) => ({
+        ...salarie,
+        terrain_ids: Array.isArray(salarie.terrain_ids) ? salarie.terrain_ids : [],
+        projet_ids: Array.isArray(salarie.projet_ids) ? salarie.projet_ids : []
+      }))
 
       console.log('Data fetched successfully:', {
         terrains: terrainsWithProjects.length,
         projets: projets.length,
-        salaries: salaries.length
+        salaries: salariesWithIds.length
       })
 
       setTerrains(terrainsWithProjects)
       setProjects(projets)
-      setSalaries(salaries)
+      setSalaries(salariesWithIds)
       
     } catch (err) {
       console.error("Erreur lors du chargement des données:", err)
       setError("Erreur lors du chargement des données. Veuillez réessayer.")
+      addMessage('error', 'Erreur lors du chargement des données')
     } finally {
       setLoading(false)
     }
-  }, []) // Empty dependency array to prevent infinite loops
+  }, [addMessage]) // Only addMessage as dependency
 
   useEffect(() => { fetchAllData() }, [fetchAllData])
-  
+
   // Check if any popup is open
-  const isAnyPopupOpen = showCreatePopup || showEditPopup || showSalariesPopup
+  const isAnyPopupOpen = showCreatePopup || showEditPopup || showSalariesPopup || showKMLData
 
   // Focus terrain on map
   const focusTerrainOnMap = (terrain: Terrain) => {
@@ -278,6 +563,7 @@ export default function TerrainsManagement() {
     setShowCreatePopup(false)
     setShowEditPopup(false)
     setShowSalariesPopup(false)
+    setShowKMLData(false)
     setError(null)
     setValidationErrors({})
   }
@@ -300,20 +586,44 @@ export default function TerrainsManagement() {
     setValidationErrors({})
   }
 
+  // Secure form handlers with input sanitization
+  const handleFormInputChange = (field: string, value: string) => {
+    let sanitizedValue: string
+
+    switch (field) {
+      case 'name':
+      case 'description':
+        sanitizedValue = sanitizeInput.sanitizeText(value)
+        break
+      case 'radius':
+        sanitizedValue = sanitizeInput.sanitizeNumber(value)
+        break
+      default:
+        sanitizedValue = value
+    }
+
+    setTerrainFormData(prev => ({ ...prev, [field]: sanitizedValue }))
+  }
+
   const handleCreateTerrain = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsSubmitting(true)
     setError(null)
     setValidationErrors({})
 
-    const payload = {
-      name: terrainFormData.name,
-      description: terrainFormData.description,
-      points: currentPoints,
-      surface: calculatePolygonArea(currentPoints),
-      radius: parseInt(terrainFormData.radius),
+    // Final sanitization before submission
+    const sanitizedData = {
+      name: sanitizeInput.sanitizeText(terrainFormData.name),
+      description: sanitizeInput.sanitizeText(terrainFormData.description),
+      radius: parseInt(sanitizeInput.sanitizeNumber(terrainFormData.radius)),
       projet_id: parseInt(terrainFormData.projet_id),
       salarie_ids: terrainFormData.salarie_ids,
+    }
+
+    const payload = {
+      ...sanitizedData,
+      points: currentPoints,
+      surface: calculatePolygonArea(currentPoints),
     }
 
     console.log('Creating terrain with payload:', payload)
@@ -324,6 +634,7 @@ export default function TerrainsManagement() {
         fetchAllData()
         setShowCreatePopup(false)
         clearDrawingAfterSave()
+        addMessage('success', 'Terrain créé avec succès')
       },
       onError: (errors) => {
         console.error('Create terrain error:', errors)
@@ -338,11 +649,16 @@ export default function TerrainsManagement() {
           if (hasValidationErrors) {
             setValidationErrors(errors)
             setError("Veuillez corriger les erreurs de saisie")
+            addMessage('error', 'Erreur de validation des données')
           } else {
-            setError(extractErrorMessage(errors))
+            const errorMsg = extractErrorMessage(errors)
+            setError(errorMsg)
+            addMessage('error', errorMsg)
           }
         } else {
-          setError(extractErrorMessage(errors))
+          const errorMsg = extractErrorMessage(errors)
+          setError(errorMsg)
+          addMessage('error', errorMsg)
         }
       },
       onFinish: () => {
@@ -358,13 +674,18 @@ export default function TerrainsManagement() {
     setError(null)
     setValidationErrors({})
 
+    // Final sanitization before submission
+    const sanitizedData = {
+      name: sanitizeInput.sanitizeText(terrainFormData.name),
+      description: sanitizeInput.sanitizeText(terrainFormData.description),
+      radius: parseInt(sanitizeInput.sanitizeNumber(terrainFormData.radius)),
+      salarie_ids: terrainFormData.salarie_ids,
+    }
+
     const payload = {
-      name: terrainFormData.name,
-      description: terrainFormData.description,
+      ...sanitizedData,
       points: currentPoints,
       surface: calculatePolygonArea(currentPoints),
-      radius: parseInt(terrainFormData.radius),
-      salarie_ids: terrainFormData.salarie_ids,
     }
 
     console.log('Updating terrain with payload:', payload)
@@ -376,6 +697,7 @@ export default function TerrainsManagement() {
         setShowEditPopup(false)
         setSelectedTerrain(null)
         clearDrawingAfterSave()
+        addMessage('success', 'Terrain modifié avec succès')
       },
       onError: (errors) => {
         console.error('Update terrain error:', errors)
@@ -390,11 +712,16 @@ export default function TerrainsManagement() {
           if (hasValidationErrors) {
             setValidationErrors(errors)
             setError("Veuillez corriger les erreurs de saisie")
+            addMessage('error', 'Erreur de validation des données')
           } else {
-            setError(extractErrorMessage(errors))
+            const errorMsg = extractErrorMessage(errors)
+            setError(errorMsg)
+            addMessage('error', errorMsg)
           }
         } else {
-          setError(extractErrorMessage(errors))
+          const errorMsg = extractErrorMessage(errors)
+          setError(errorMsg)
+          addMessage('error', errorMsg)
         }
       },
       onFinish: () => {
@@ -438,10 +765,13 @@ export default function TerrainsManagement() {
       onSuccess: (page) => {
         console.log('Terrain deleted successfully', page)
         fetchAllData() // Refetch data after successful deletion
+        addMessage('success', 'Terrain supprimé avec succès')
       },
       onError: (errors) => {
         console.error('Delete terrain error:', errors)
-        setError(extractErrorMessage(errors))
+        const errorMsg = extractErrorMessage(errors)
+        setError(errorMsg)
+        addMessage('error', errorMsg)
       },
     })
   }
@@ -488,6 +818,7 @@ export default function TerrainsManagement() {
                     ? { ...s, terrain_ids: (s.terrain_ids || []).filter(id => id !== terrainId) }
                     : s
                 ));
+                addMessage('success', 'Salarié retiré du terrain')
               } else {
                 // Add to terrain
                 setTerrains(prev => prev.map(t => 
@@ -501,6 +832,7 @@ export default function TerrainsManagement() {
                     ? { ...s, terrain_ids: [...(s.terrain_ids || []), terrainId] }
                     : s
                 ));
+                addMessage('success', 'Salarié affecté au terrain')
               }
               
               // Update selected terrain if it's the one being modified
@@ -519,7 +851,9 @@ export default function TerrainsManagement() {
             },
             onError: (errors) => {
               console.error('Assignment error:', errors);
-              setError("Erreur lors de l'affectation");
+              const errorMsg = "Erreur lors de l'affectation"
+              setError(errorMsg);
+              addMessage('error', errorMsg);
               reject(errors);
             }
           }
@@ -592,69 +926,66 @@ export default function TerrainsManagement() {
     ? terrains
     : terrains.filter(t => (t.salarie_ids || []).includes(selectedSalarie))
 
-  // FIXED: Function to get project names for a salarie based on actual project IDs
-  const getSalarieProjectNames = (salarie: Salarie): string[] => {
-    return projects
-      .filter(p => (salarie.projet_ids || []).includes(p.id))
-      .map(p => p.nom)
-  }
+  // FIXED: Function to get proper project and terrain information for salaries popup
+  const getSalarieAvailabilityDisplay = (salarie: Salarie): JSX.Element => {
+    const salarieProjects = projects.filter(p => (salarie.projet_ids || []).includes(p.id))
+    const salarieTerrains = terrains.filter(t => (salarie.terrain_ids || []).includes(t.id))
 
-  // FIXED: Function to get terrain names for a salarie based on terrain IDs
-  const getSalarieTerrainNames = (salarie: Salarie): string[] => {
-    return terrains
-      .filter(t => (salarie.terrain_ids || []).includes(t.id))
-      .map(t => t.name);
-  }
-
-  // FIXED: Function to return availability (terrain + project names) for a salarie
-  const getSalarieDisponibilite = (salarie: Salarie): JSX.Element => {
-    const salarieProjetIds = salarie.projet_ids || [];
-    const salarieTerrainIds = salarie.terrain_ids || [];
-    
-    if (salarieProjetIds.length === 0 && salarieTerrainIds.length === 0) {
-      return <div className="text-sm text-gray-500">Disponible</div>;
+    if (salarieProjects.length === 0 && salarieTerrains.length === 0) {
+      return <div className="text-sm text-green-600">Disponible</div>
     }
 
-    // Group terrains by their associated projects
-    const terrainsGroupedByProject: { [projectId: number]: string[] } = {};
-    
-    salarieTerrainIds.forEach(terrainId => {
-      const terrain = terrains.find(t => t.id === terrainId);
-      if (terrain) {
-        const projectId = terrain.projet_id;
-        if (!terrainsGroupedByProject[projectId]) {
-          terrainsGroupedByProject[projectId] = [];
-        }
-        terrainsGroupedByProject[projectId].push(terrain.name);
-      }
-    });
-
     return (
-      <div className="space-y-2">
-        {salarieProjetIds.map((projectId) => {
-          const project = projects.find(p => p.id === projectId);
-          const projectTerrains = terrainsGroupedByProject[projectId] || [];
+      <div className="space-y-1 text-sm">
+        {salarieProjects.map(project => {
+          // Find terrains for this project that the salarie is assigned to
+          const projectTerrains = salarieTerrains.filter(t => t.projet_id === project.id)
           
           return (
-            <div key={projectId} className="text-sm text-gray-600">
-              <div className="font-semibold">Projet: {project?.nom || 'Projet inconnu'}</div>
-              <div>Terrains: {projectTerrains.length > 0 ? projectTerrains.join(", ") : "Aucun terrain"}</div>
+            <div key={project.id} className="text-gray-600">
+              <div className="font-medium text-blue-700">{project.nom} {projectTerrains.length > 0 ? (
+                <div className="ml-4 text-xs">
+                  <span className="text-green-600">Terrains:</span> {projectTerrains.map(t => t.name).join(', ')}
+                </div>
+              ) : (
+                <div className="ml-4 text-xs text-gray-400">Aucun terrain assigné sur ce projet</div>
+              )}</div>
+              
             </div>
-          );
+          )
         })}
+        
+        {/* Show terrains that don't belong to assigned projects */}
+        {(() => {
+          const orphanTerrains = salarieTerrains.filter(t => 
+            !salarieProjects.some(p => p.id === t.projet_id)
+          )
+          
+          if (orphanTerrains.length > 0) {
+            return (
+              <div className="text-gray-600">
+                <div className="font-medium text-orange-600">Affecter ce Profil au Projet</div>
+                <div className="ml-4 text-xs">
+                  {orphanTerrains.map(t => `${t.name} (${t.projet_name})`).join(', ')}
+                </div>
+              </div>
+            )
+          }
+          return null
+        })()}
       </div>
-    );
-  };
+    )
+  }
 
   // Function for edit terrain popup - shows project and terrain counts
   const getSalarieProjectTerrainCounts = (salarie: Salarie): string => {
     const terrainCount = (salarie.terrain_ids || []).length
     const projectCount = (salarie.projet_ids || []).length
-    
+
     const parts = []
     if (projectCount > 0) parts.push(`${projectCount} projet${projectCount > 1 ? 's' : ''}`)
     if (terrainCount > 0) parts.push(`${terrainCount} terrain${terrainCount > 1 ? 's' : ''}`)
-    
+
     return parts.length > 0 ? parts.join(', ') : 'Disponible'
   }
 
@@ -670,477 +1001,802 @@ export default function TerrainsManagement() {
   }
 
   return (
-   <AppLayout breadcrumbs={breadcrumbs}>
-      
-    <div className="min-h-screen bg-gray-50 p-6">
+    <AppLayout breadcrumbs={breadcrumbs}>
+      <div className="min-h-screen bg-gray-50 p-6">
         <Head title="Dashboard Suivi & Contrôle des Travaux" />
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Error Display */}
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded flex justify-between items-center">
-            <span>{error}</span>
-            <button 
-              onClick={() => setError(null)}
-              className="text-red-700 hover:text-red-900 font-bold"
-            >
-              ×
-            </button>
-          </div>
-        )}
-        
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Users className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Salariés</p>
-                <p className="text-2xl font-bold text-gray-900">{salaries.length}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <MapIcon className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Terrains</p>
-                <p className="text-2xl font-bold text-gray-900">{terrains.length}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <Target className="w-5 h-5 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-600">Terrains Actifs</p>
-                <p className="text-2xl font-bold text-gray-900">{terrainsActifs.length}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <MapPin className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-600">Projets</p>
-                <p className="text-2xl font-bold text-gray-900">{projects.length}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Map Section */}
-        <div className={`bg-white rounded-lg shadow-md border border-gray-100 p-6 transition-opacity duration-300 ${
-          isAnyPopupOpen ? 'opacity-75' : 'opacity-100'
-        }`}>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">Carte</h2>
-            <div className="flex gap-3">
-              <select
-                value={selectedSalarie === null ? "" : selectedSalarie.toString()}
-                onChange={(e) => {
-                  const value = e.target.value
-                  setSelectedSalarie(value === "" ? null : Number(value))
-                  if (isDrawingMode) {
-                    cancelDrawing()
-                  }
-                }}
-                className="border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                disabled={isDrawingMode}
+        <div className="max-w-7xl mx-auto space-y-6">
+          {/* Messages Display */}
+          <div className="fixed top-4 right-4 z-50 space-y-2">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`px-4 py-3 rounded-lg shadow-lg flex items-center justify-between min-w-64 max-w-96 transition-all duration-300 ${
+                  message.type === 'success' ? 'bg-green-100 border border-green-400 text-green-700' :
+                  message.type === 'error' ? 'bg-red-100 border border-red-400 text-red-700' :
+                  message.type === 'warning' ? 'bg-yellow-100 border border-yellow-400 text-yellow-700' :
+                  'bg-blue-100 border border-blue-400 text-blue-700'
+                }`}
               >
-                <option value="">Tous les terrains</option>
-                {salaries.map(salarie => (
-                  <option key={salarie.id} value={salarie.id}>
-                    {salarie.nom} {salarie.prenom}
-                  </option>
-                ))}
-              </select>
+                <div className="flex items-center gap-2">
+                  {message.type === 'success' && <CheckCircle className="w-4 h-4" />}
+                  {message.type === 'error' && <XCircle className="w-4 h-4" />}
+                  {message.type === 'warning' && <AlertCircle className="w-4 h-4" />}
+                  {message.type === 'info' && <AlertCircle className="w-4 h-4" />}
+                  <span className="text-sm font-medium">{message.message}</span>
+                </div>
+                <button 
+                  onClick={() => removeMessage(message.id)}
+                  className="ml-3 hover:opacity-70 transition-opacity"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
 
-              {!isDrawingMode ? (
-                <button
-                  onClick={startDrawing}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                  disabled={isAnyPopupOpen}
-                >
-                  <Plus className="w-4 h-4" />
-                  Nouveau Terrain
-                </button>
-              ) : (
-                <button
-                  onClick={cancelDrawing}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Annuler
-                </button>
-              )}
+          {/* Error Display */}
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded flex justify-between items-center">
+              <span>{error}</span>
+              <button 
+                onClick={() => setError(null)}
+                className="text-red-700 hover:text-red-900 font-bold"
+              >
+                ×
+              </button>
+            </div>
+          )}
+          
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Users className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Total Profils</p>
+                  <p className="text-2xl font-bold text-gray-900">{salaries.length}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <MapIcon className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Total Terrains</p>
+                  <p className="text-2xl font-bold text-gray-900">{terrains.length}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <Target className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Terrains Actifs</p>
+                  <p className="text-2xl font-bold text-gray-900">{terrainsActifs.length}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <MapPin className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Projets</p>
+                  <p className="text-2xl font-bold text-gray-900">{projects.length}</p>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* React Leaflet Map */}
-          <div className={`w-full relative rounded-lg border-2 overflow-hidden ${
-            isDrawingMode ? 'border-green-500' : 'border-gray-300'
+          {/* Map Section */}
+          <div className={`bg-white rounded-lg shadow-md border border-gray-100 p-6 transition-opacity duration-300 ${
+            isAnyPopupOpen ? 'opacity-75' : 'opacity-100'
           }`}>
-            <MapContainer
-              center={[33.5731, -7.5898]}
-              zoom={13}
-              style={{ height: '500px', width: '100%' }}
-              ref={mapRef}
-              key={`map-${selectedSalarie}-${filteredTerrains.length}`}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">Carte</h2>
+              <div className="flex gap-3">
+                <select
+                  value={selectedSalarie === null ? "" : selectedSalarie.toString()}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setSelectedSalarie(value === "" ? null : Number(value))
+                    if (isDrawingMode) {
+                      cancelDrawing()
+                    }
+                  }}
+                  className="border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  disabled={isDrawingMode}
+                >
+                  <option value="">Tous les terrains</option>
+                  {salaries.map(salarie => (
+                    <option key={salarie.id} value={salarie.id}>
+                      {salarie.nom} {salarie.prenom}
+                    </option>
+                  ))}
+                </select>
 
-              <MapClickHandler
-                isDrawingMode={isDrawingMode}
-                onMapClick={handleMapClick}
-                onMapRightClick={handleMapRightClick}
-              />
+                {/* File Upload Button */}
+                <div className="relative">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".kml,.kmz"
+                    onChange={handleFileUpload}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    disabled={isDrawingMode || isProcessingFile}
+                  />
+                  <button
+                    className={`inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 ${
+                      isProcessingFile ? 'cursor-not-allowed' : 'cursor-pointer'
+                    }`}
+                    disabled={isDrawingMode || isProcessingFile}
+                  >
+                    {isProcessingFile ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Traitement...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4" />
+                        Import KMZ/KML
+                      </>
+                    )}
+                  </button>
+                </div>
 
-              {/* Display terrain polygons */}
-              {filteredTerrains.map(terrain => {
-                const colors = getPolygonColor(terrain.statut_tech)
-                return (
+                {!isDrawingMode ? (
+                  <button
+                    onClick={startDrawing}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                    disabled={isAnyPopupOpen}
+                  >
+                    <Plus className="w-4 h-4" />
+                    Nouveau Terrain
+                  </button>
+                ) : (
+                  <button
+                    onClick={cancelDrawing}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    Annuler
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* React Leaflet Map */}
+            <div className={`w-full relative rounded-lg border-2 overflow-hidden ${
+              isDrawingMode ? 'border-green-500' : 'border-gray-300'
+            }`}>
+              <MapContainer
+                center={[33.5731, -7.5898]}
+                zoom={13}
+                style={{ height: '500px', width: '100%' }}
+                ref={mapRef}
+                key={`map-${selectedSalarie}-${filteredTerrains.length}`}
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+
+                <MapClickHandler
+                  isDrawingMode={isDrawingMode}
+                  onMapClick={handleMapClick}
+                  onMapRightClick={handleMapRightClick}
+                />
+
+                {/* Display terrain polygons */}
+                {filteredTerrains.map(terrain => {
+                  const colors = getPolygonColor(terrain.statut_tech)
+                  return (
+                    <Polygon
+                      key={`polygon-${terrain.id}-${selectedSalarie}`}
+                      positions={terrain.points.map(p => [p.lat, p.lng])}
+                      pathOptions={{
+                        ...colors,
+                        weight: 2,
+                        opacity: 0.8,
+                        fillOpacity: 0.3
+                      }}
+                    >
+                      <Popup>
+                        <div className="p-2">
+                          <h3 className="font-semibold text-sm">#{terrain.id} - {terrain.name}</h3>
+                          <p className="text-xs text-gray-600 mb-2">{terrain.description}</p>
+                          <div className="space-y-1 text-xs">
+                            <div><strong>Projet:</strong> {terrain.projet_name}</div>
+                            <div><strong>Surface:</strong> {terrain.surface?.toLocaleString()} m²</div>
+                            <div><strong>Profils:</strong> {(terrain.salarie_ids || []).length}</div>
+                            <div><strong>Points:</strong> {terrain.points.length}</div>
+                            <div className="mt-2">
+                              {getStatusBadge(terrain.statut_tech)}
+                            </div>
+                          </div>
+                        </div>
+                      </Popup>
+                    </Polygon>
+                  )
+                })}
+
+                {/* Display KML data preview */}
+                {uploadedKMLData.map((kmlTerrain, index) => (
                   <Polygon
-                    key={`polygon-${terrain.id}-${selectedSalarie}`}
-                    positions={terrain.points.map(p => [p.lat, p.lng])}
+                    key={`kml-preview-${index}`}
+                    positions={kmlTerrain.points.map(p => [p.lat, p.lng])}
                     pathOptions={{
-                      ...colors,
-                      weight: 2,
-                      opacity: 0.8,
-                      fillOpacity: 0.3
+                      color: '#8b5cf6',
+                      fillColor: '#8b5cf6',
+                      weight: 3,
+                      opacity: 0.9,
+                      fillOpacity: 0.4,
+                      dashArray: '10, 5'
                     }}
                   >
                     <Popup>
                       <div className="p-2">
-                        <h3 className="font-semibold text-sm">#{terrain.id} - {terrain.name}</h3>
-                        <p className="text-xs text-gray-600 mb-2">{terrain.description}</p>
+                        <h3 className="font-semibold text-sm text-purple-700">[KML] {kmlTerrain.name}</h3>
+                        <p className="text-xs text-gray-600 mb-2">{kmlTerrain.description}</p>
                         <div className="space-y-1 text-xs">
-                          <div><strong>Projet:</strong> {terrain.projet_name}</div>
-                          <div><strong>Surface:</strong> {terrain.surface?.toLocaleString()} m²</div>
-                          <div><strong>Salariés:</strong> {(terrain.salarie_ids || []).length}</div>
-                          <div><strong>Points:</strong> {terrain.points.length}</div>
-                          <div className="mt-2">
-                            {getStatusBadge(terrain.statut_tech)}
-                          </div>
+                          <div><strong>Points:</strong> {kmlTerrain.points.length}</div>
+                          <div><strong>Surface:</strong> {calculatePolygonArea(kmlTerrain.points).toLocaleString()} m²</div>
                         </div>
+                        <button
+                          onClick={() => importTerrainFromKML(kmlTerrain)}
+                          className="mt-2 px-2 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700"
+                        >
+                          Importer ce terrain
+                        </button>
                       </div>
                     </Popup>
                   </Polygon>
-                )
-              })}
+                ))}
 
-              {/* Current drawing points */}
-              {isDrawingMode && currentPoints.map((point, index) => (
-                <Marker
-                  key={`drawing-${index}`}
-                  position={[point.lat, point.lng]}
-                  icon={createDrawingIcon(index)}
-                />
-              ))}
+                {/* Current drawing points */}
+                {isDrawingMode && currentPoints.map((point, index) => (
+                  <Marker
+                    key={`drawing-${index}`}
+                    position={[point.lat, point.lng]}
+                    icon={createDrawingIcon(index)}
+                  />
+                ))}
 
-              {/* Current drawing polygon preview */}
-              {isDrawingMode && currentPoints.length > 2 && (
-                <Polygon
-                  positions={currentPoints.map(p => [p.lat, p.lng])}
-                  pathOptions={{
-                    color: '#22c55e',
-                    fillColor: '#22c55e',
-                    weight: 2,
-                    opacity: 0.8,
-                    fillOpacity: 0.2,
-                    dashArray: '5, 5'
-                  }}
-                />
-              )}
-            </MapContainer>
+                {/* Current drawing polygon preview */}
+                {isDrawingMode && currentPoints.length > 2 && (
+                  <Polygon
+                    positions={currentPoints.map(p => [p.lat, p.lng])}
+                    pathOptions={{
+                      color: '#22c55e',
+                      fillColor: '#22c55e',
+                      weight: 2,
+                      opacity: 0.8,
+                      fillOpacity: 0.2,
+                      dashArray: '5, 5'
+                    }}
+                  />
+                )}
+              </MapContainer>
 
-            {/* Drawing mode indicator */}
-            {isDrawingMode && (
-              <div className="absolute top-4 right-4 z-[1000] bg-green-100 px-3 py-2 rounded-lg text-sm shadow-lg">
-                <div className="flex items-center gap-2">
-                  <Navigation className="w-4 h-4 text-green-600" />
-                  <span className="font-medium text-green-800">Mode Dessin Actif</span>
+              {/* Drawing mode indicator */}
+              {isDrawingMode && (
+                <div className="absolute top-4 right-4 z-[1000] bg-green-100 px-3 py-2 rounded-lg text-sm shadow-lg">
+                  <div className="flex items-center gap-2">
+                    <Navigation className="w-4 h-4 text-green-600" />
+                    <span className="font-medium text-green-800">Mode Dessin Actif</span>
+                  </div>
+                  <p className="text-xs text-green-600 mt-1">
+                    Points: {currentPoints.length} | Clic droit pour terminer (min 4 points)
+                  </p>
                 </div>
-                <p className="text-xs text-green-600 mt-1">
-                  Points: {currentPoints.length} | Clic droit pour terminer (min 4 points)
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Terrains Table */}
-        <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">
-              Liste des Terrains
-              {selectedSalarie && (
-                <span className="text-sm font-normal text-gray-500 ml-2">
-                  - Terrains assignés à {selectedSalarieData?.nom} {selectedSalarieData?.prenom}
-                </span>
               )}
-            </h2>
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom Terrain</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Projet</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Surface (m²)</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salariés</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredTerrains.map((terrain) => (
-                  <tr 
-                    key={terrain.id} 
-                    className="hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => focusTerrainOnMap(terrain)}
+          {/* KML Data Display Popup */}
+          {showKMLData && uploadedKMLData.length > 0 && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-y-auto m-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Données KMZ/KML importées ({uploadedKMLData.length} terrain{uploadedKMLData.length > 1 ? 's' : ''})
+                  </h3>
+                  <button
+                    onClick={clearKMLData}
+                    className="text-gray-400 hover:text-gray-600"
                   >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{terrain.name}</div>
-                      <div className="text-sm text-gray-500">{terrain.description}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{terrain.projet_name}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{terrain.surface?.toLocaleString()}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          showSalariesModal(terrain)
-                        }}
-                        className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
-                      >
-                        <Eye className="w-3 h-3" />
-                        {(terrain.salarie_ids || []).length}
-                      </button>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(terrain.statut_tech)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex space-x-2">
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="grid gap-4">
+                  {uploadedKMLData.map((kmlTerrain, index) => (
+                    <div key={index} className="border border-purple-200 rounded-lg p-4 bg-purple-50">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-purple-900">{kmlTerrain.name}</h4>
+                          <p className="text-sm text-gray-600 mt-1">{kmlTerrain.description}</p>
+                          <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
+                            <div><strong>Points:</strong> {kmlTerrain.points.length}</div>
+                            <div><strong>Surface:</strong> {calculatePolygonArea(kmlTerrain.points).toLocaleString()} m²</div>
+                          </div>
+                          {kmlTerrain.properties && Object.keys(kmlTerrain.properties).length > 0 && (
+                            <div className="mt-2">
+                              <strong className="text-sm">Propriétés:</strong>
+                              <div className="text-xs text-gray-600 mt-1">
+                                {Object.entries(kmlTerrain.properties)
+                                  .filter(([key]) => !['name', 'description'].includes(key))
+                                  .map(([key, value]) => (
+                                    <div key={key}>{key}: {String(value)}</div>
+                                  ))
+                                }
+                              </div>
+                            </div>
+                          )}
+                        </div>
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleEditTerrain(terrain)
-                          }}
-                          className="inline-flex items-center p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                          title="Modifier"
+                          onClick={() => importTerrainFromKML(kmlTerrain)}
+                          className="ml-4 inline-flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
                         >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteTerrain(terrain.id)
-                          }}
-                          className="inline-flex items-center p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
-                          title="Supprimer"
-                        >
-                          <Trash2 className="w-4 h-4" />
+                          <Download className="w-4 h-4" />
+                          Importer
                         </button>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                  ))}
+                </div>
 
-          {filteredTerrains.length === 0 && (
-            <div className="text-center py-12">
-              <div className="text-gray-500">
-                <MapIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun terrain</h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  {selectedSalarie
-                    ? "Ce salarié n'a aucun terrain assigné."
-                    : "Commencez par créer votre premier terrain sur la carte."
-                  }
-                </p>
+                <div className="flex justify-end gap-3 pt-4 border-t mt-6">
+                  <button
+                    onClick={clearKMLData}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Fermer
+                  </button>
+                </div>
               </div>
             </div>
           )}
-        </div>
 
-        {/* Create/Edit Terrain Popup */}
-        {(showCreatePopup || showEditPopup) && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                {showCreatePopup ? "Créer un terrain" : "Modifier le terrain"}
-              </h3>
+          {/* Terrains Table - Updated with text truncation */}
+          <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Liste des Terrains
+                {selectedSalarie && (
+                  <span className="text-sm font-normal text-gray-500 ml-2">
+                    - Terrains assignés à {selectedSalarieData?.nom} {selectedSalarieData?.prenom}
+                  </span>
+                )}
+              </h2>
+            </div>
 
-              <form onSubmit={showCreatePopup ? handleCreateTerrain : handleUpdateTerrain} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Nom du terrain *</label>
-                    <input
-                      type="text"
-                      value={terrainFormData.name}
-                      onChange={(e) => setTerrainFormData(prev => ({ ...prev, name: e.target.value }))}
-                      className={`mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 ${
-                        getFieldError('name') ? 'border-red-300' : ''
-                      }`}
-                      placeholder="Nom du terrain"
-                      required
-                      disabled={isSubmitting}
-                    />
-                    {getFieldError('name') && (
-                      <p className="mt-1 text-sm text-red-600">{getFieldError('name')}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Rayon (mètres) *</label>
-                    <input
-                      type="number"
-                      value={terrainFormData.radius}
-                      onChange={(e) => setTerrainFormData(prev => ({ ...prev, radius: e.target.value }))}
-                      className={`mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 ${
-                        getFieldError('radius') ? 'border-red-300' : ''
-                      }`}
-                      placeholder="Rayon en mètres"
-                      required
-                      disabled={isSubmitting}
-                    />
-                    {getFieldError('radius') && (
-                      <p className="mt-1 text-sm text-red-600">{getFieldError('radius')}</p>
-                    )}
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700">Description</label>
-                    <textarea
-                      value={terrainFormData.description}
-                      onChange={(e) => setTerrainFormData(prev => ({ ...prev, description: e.target.value }))}
-                      rows={3}
-                      className={`mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 ${
-                        getFieldError('description') ? 'border-red-300' : ''
-                      }`}
-                      placeholder="Description du terrain"
-                      disabled={isSubmitting}
-                    />
-                    {getFieldError('description') && (
-                      <p className="mt-1 text-sm text-red-600">{getFieldError('description')}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Projet *</label>
-                    <select
-                      value={terrainFormData.projet_id}
-                      onChange={(e) => setTerrainFormData(prev => ({ ...prev, projet_id: e.target.value }))}
-                      className={`mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 ${
-                        getFieldError('projet_id') ? 'border-red-300' : ''
-                      }`}
-                      required
-                      disabled={isSubmitting}
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom Terrain</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Projet</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Surface (m²)</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Profils</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredTerrains.map((terrain) => (
+                    <tr 
+                      key={terrain.id} 
+                      className="hover:bg-gray-50 transition-colors cursor-pointer"
+                      onClick={() => focusTerrainOnMap(terrain)}
                     >
-                      <option value="">Sélectionner un projet</option>
-                      {projects.map(project => (
-                        <option key={project.id} value={project.id}>
-                          {project.nom}
-                        </option>
-                      ))}
-                    </select>
-                    {getFieldError('projet_id') && (
-                      <p className="mt-1 text-sm text-red-600">{getFieldError('projet_id')}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Surface calculée automatiquement</label>
-                    <div className="mt-1 p-3 bg-gray-50 rounded-md">
-                      <p className="text-sm text-gray-600">{currentPoints.length} points définis</p>
-                      <p className="text-lg font-semibold text-green-600">
-                        Surface: {calculatePolygonArea(currentPoints).toLocaleString()} m²
-                      </p>
-                      {currentPoints.length > 0 && (
-                        <div className="mt-2 max-h-20 overflow-y-auto">
-                          {currentPoints.map((point, index) => (
-                            <div key={index} className="text-xs text-gray-400 font-mono">
-                              P{index + 1}: {point.lat.toFixed(6)}, {point.lng.toFixed(6)}
-                            </div>
-                          ))}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
+                          <TruncatedText text={terrain.name} maxLength={25} />
                         </div>
+                        <div className="text-sm text-gray-500">
+                          <TruncatedText text={terrain.description} maxLength={40} />
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          <TruncatedText text={terrain.projet_name || ""} maxLength={20} />
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{terrain.surface?.toLocaleString()}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            showSalariesModal(terrain)
+                          }}
+                          className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
+                        >
+                          <Eye className="w-3 h-3" />
+                          {(terrain.salarie_ids || []).length}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(terrain.statut_tech)}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditTerrain(terrain)
+                            }}
+                            className="inline-flex items-center p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            title="Modifier"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteTerrain(terrain.id)
+                            }}
+                            className="inline-flex items-center p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {filteredTerrains.length === 0 && (
+              <div className="text-center py-12">
+                <div className="text-gray-500">
+                  <MapIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun terrain</h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {selectedSalarie
+                      ? "Ce salarié n'a aucun terrain assigné."
+                      : "Commencez par créer votre premier terrain sur la carte."
+                    }
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Create/Edit Terrain Popup - Updated with secure inputs */}
+          {(showCreatePopup || showEditPopup) && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  {showCreatePopup ? "Créer un terrain" : "Modifier le terrain"}
+                </h3>
+
+                <form onSubmit={showCreatePopup ? handleCreateTerrain : handleUpdateTerrain} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Nom du terrain *</label>
+                      <input
+                        type="text"
+                        value={terrainFormData.name}
+                        onChange={(e) => handleFormInputChange('name', e.target.value)}
+                        className={`mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 ${
+                          getFieldError('name') ? 'border-red-300' : ''
+                        }`}
+                        placeholder="Nom du terrain (texte seulement)"
+                        required
+                        disabled={isSubmitting}
+                        maxLength={100}
+                      />
+                      {getFieldError('name') && (
+                        <p className="mt-1 text-sm text-red-600">{getFieldError('name')}</p>
+                      )}
+                      <p className="mt-1 text-xs text-gray-500">Caractères restants: {100 - terrainFormData.name.length}</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Rayon (mètres) *</label>
+                      <input
+                        type="number"
+                        value={terrainFormData.radius}
+                        onChange={(e) => handleFormInputChange('radius', e.target.value)}
+                        className={`mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 ${
+                          getFieldError('radius') ? 'border-red-300' : ''
+                        }`}
+                        placeholder="Rayon en mètres (chiffres seulement)"
+                        required
+                        disabled={isSubmitting}
+                        min="1"
+                        max="10000"
+                      />
+                      {getFieldError('radius') && (
+                        <p className="mt-1 text-sm text-red-600">{getFieldError('radius')}</p>
                       )}
                     </div>
-                    {getFieldError('points') && (
-                      <p className="mt-1 text-sm text-red-600">{getFieldError('points')}</p>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700">Description</label>
+                      <textarea
+                        value={terrainFormData.description}
+                        onChange={(e) => handleFormInputChange('description', e.target.value)}
+                        rows={3}
+                        className={`mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 ${
+                          getFieldError('description') ? 'border-red-300' : ''
+                        }`}
+                        placeholder="Description du terrain (texte seulement)"
+                        disabled={isSubmitting}
+                        maxLength={500}
+                      />
+                      {getFieldError('description') && (
+                        <p className="mt-1 text-sm text-red-600">{getFieldError('description')}</p>
+                      )}
+                      <p className="mt-1 text-xs text-gray-500">Caractères restants: {500 - terrainFormData.description.length}</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Projet *</label>
+                      <select
+                        value={terrainFormData.projet_id}
+                        onChange={(e) => setTerrainFormData(prev => ({ ...prev, projet_id: e.target.value }))}
+                        className={`mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 ${
+                          getFieldError('projet_id') ? 'border-red-300' : ''
+                        }`}
+                        required
+                        disabled={isSubmitting}
+                      >
+                        <option value="">Sélectionner un projet</option>
+                        {projects.map(project => (
+                          <option key={project.id} value={project.id}>
+                            {project.nom}
+                          </option>
+                        ))}
+                      </select>
+                      {getFieldError('projet_id') && (
+                        <p className="mt-1 text-sm text-red-600">{getFieldError('projet_id')}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Surface calculée automatiquement</label>
+                      <div className="mt-1 p-3 bg-gray-50 rounded-md">
+                        <p className="text-sm text-gray-600">{currentPoints.length} points définis</p>
+                        <p className="text-lg font-semibold text-green-600">
+                          Surface: {calculatePolygonArea(currentPoints).toLocaleString()} m²
+                        </p>
+                        {currentPoints.length > 0 && (
+                          <div className="mt-2 max-h-20 overflow-y-auto">
+                            {currentPoints.map((point, index) => (
+                              <div key={index} className="text-xs text-gray-400 font-mono">
+                                P{index + 1}: {point.lat.toFixed(6)}, {point.lng.toFixed(6)}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {getFieldError('points') && (
+                        <p className="mt-1 text-sm text-red-600">{getFieldError('points')}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Salaries Assignment - Updated to show project/terrain counts */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">Profils assignés</label>
+                    <div className="border rounded-md max-h-60 overflow-y-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Salarié</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email & Téléphone</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Disponibilité</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {salaries.filter(s => s.emplacement === 'terrain').map(salarie => (
+                            <tr key={salarie.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-2 text-sm">
+                                <TruncatedText text={`${salarie.nom} ${salarie.prenom}`} maxLength={20} />
+                              </td>
+                              <td className="px-4 py-2">
+                                <div className="text-xs text-gray-400">
+                                  <TruncatedText text={salarie.email} maxLength={25} />
+                                </div>
+                                <div className="text-xs text-gray-500 flex items-center gap-1">
+                                  <Phone className="w-3 h-3" />
+                                  {salarie.telephone}
+                                </div>
+                              </td>
+                              <td className="px-4 py-2 text-xs text-gray-500">
+                                {getSalarieProjectTerrainCounts(salarie)}
+                              </td>
+                              <td className="px-4 py-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const isSelected = terrainFormData.salarie_ids.includes(salarie.id)
+                                    setTerrainFormData(prev => ({
+                                      ...prev,
+                                      salarie_ids: isSelected
+                                        ? prev.salarie_ids.filter(id => id !== salarie.id)
+                                        : [...prev.salarie_ids, salarie.id]
+                                    }))
+                                  }}
+                                  className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors ${
+                                    terrainFormData.salarie_ids.includes(salarie.id)
+                                      ? "bg-red-100 text-red-700 hover:bg-red-200"
+                                      : "bg-green-100 text-green-700 hover:bg-green-200"
+                                  }`}
+                                >
+                                  {terrainFormData.salarie_ids.includes(salarie.id) ? (
+                                    <>
+                                      <UserMinus className="w-3 h-3" />
+                                      Retirer
+                                    </>
+                                  ) : (
+                                    <>
+                                      <UserPlus className="w-3 h-3" />
+                                      Affecter
+                                    </>
+                                  )}
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {getFieldError('salarie_ids') && (
+                      <p className="mt-1 text-sm text-red-600">{getFieldError('salarie_ids')}</p>
                     )}
                   </div>
-                </div>
 
-                {/* Salaries Assignment - Updated to show project/terrain counts */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">Salariés assignés</label>
-                  <div className="border rounded-md max-h-60 overflow-y-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Salarié</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email & Téléphone</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Projet</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {salaries.filter(s => s.emplacement === 'terrain').map(salarie => (
-                          <tr key={salarie.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-2 text-sm">{salarie.nom} {salarie.prenom}</td>
-                            <td className="px-4 py-2">
-                              <div className="text-xs text-gray-400">{salarie.email}</div>
-                              <div className="text-xs text-gray-500 flex items-center gap-1">
+                  <div className="flex justify-end gap-3 pt-4 border-t">
+                    <button
+                      type="button"
+                      onClick={handleCreateCancel}
+                      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                      disabled={isSubmitting}
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting || currentPoints.length < 4}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                      {isSubmitting ? (
+                        <div className="flex items-center space-x-2">
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>Enregistrement...</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center space-x-2">
+                          <Save className="w-4 h-4" />
+                          <span>{showCreatePopup ? "Créer" : "Modifier"}</span>
+                        </div>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Enhanced Salaries Assignment Popup - Fixed to show proper availability */}
+          {showSalariesPopup && selectedTerrain && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-6xl max-h-[80vh] overflow-y-auto m-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  Profils - Terrain #{selectedTerrain.id} - <TruncatedText text={selectedTerrain.name} maxLength={30} />
+                </h3>
+
+                <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">N°</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Téléphone</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Disponibilité</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                    </tr>
+                  </thead>
+                 <tbody className="divide-y divide-gray-200">
+                    {/* Assigned salaries */}
+                    {salaries
+                      .filter(salarie => (selectedTerrain.salarie_ids || []).includes(salarie.id))
+                      .map((salarie, index) => {
+                        const assignKey = `${salarie.id}-${selectedTerrain.id}`;
+                        const isAssigning = assigningStates[assignKey];
+
+                        return (
+                          <tr key={salarie.id} className="bg-green-50 hover:bg-green-100">
+                            <td className="px-4 py-3 text-sm">{index + 1}</td>
+                            <td className="px-4 py-3">
+                              <div className="text-sm font-medium text-gray-900">
+                                <TruncatedText text={`${salarie.nom} ${salarie.prenom}`} maxLength={25} />
+                              </div>
+                              <div className="text-sm text-gray-500">{salarie.statut}</div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1 text-sm text-gray-600">
                                 <Phone className="w-3 h-3" />
                                 {salarie.telephone}
                               </div>
                             </td>
-                            <td className="px-4 py-2 text-xs text-gray-500">
-                              {getSalarieProjectTerrainCounts(salarie)}
+                            <td className="px-4 py-3 text-sm text-gray-600 max-w-xs">
+                              {getSalarieAvailabilityDisplay(salarie)}
                             </td>
-                            <td className="px-4 py-2">
+                            <td className="px-4 py-3">
                               <button
-                                type="button"
-                                onClick={() => {
-                                  const isSelected = terrainFormData.salarie_ids.includes(salarie.id)
-                                  setTerrainFormData(prev => ({
-                                    ...prev,
-                                    salarie_ids: isSelected
-                                      ? prev.salarie_ids.filter(id => id !== salarie.id)
-                                      : [...prev.salarie_ids, salarie.id]
-                                  }))
-                                }}
-                                className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors ${
-                                  terrainFormData.salarie_ids.includes(salarie.id)
-                                    ? "bg-red-100 text-red-700 hover:bg-red-200"
-                                    : "bg-green-100 text-green-700 hover:bg-green-200"
-                                }`}
+                                onClick={() => toggleSalarieAssignment(salarie.id, selectedTerrain.id)}
+                                disabled={isAssigning}
+                                className="inline-flex items-center gap-1 px-3 py-1 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors disabled:opacity-50"
                               >
-                                {terrainFormData.salarie_ids.includes(salarie.id) ? (
+                                {isAssigning ? (
+                                  <>
+                                    <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
+                                    Traitement...
+                                  </>
+                                ) : (
                                   <>
                                     <UserMinus className="w-3 h-3" />
                                     Retirer
+                                  </>
+                                )}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                    {/* Unassigned salaries */}
+                    {salaries
+                      .filter(salarie => !(selectedTerrain.salarie_ids || []).includes(salarie.id) && salarie.emplacement === 'terrain')
+                      .map((salarie, index) => {
+                        const assignKey = `${salarie.id}-${selectedTerrain.id}`;
+                        const isAssigning = assigningStates[assignKey];
+
+                        return (
+                          <tr key={salarie.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm">{(selectedTerrain.salarie_ids || []).length + index + 1}</td>
+                            <td className="px-4 py-3">
+                              <div className="text-sm font-medium text-gray-900">
+                                <TruncatedText text={`${salarie.nom} ${salarie.prenom}`} maxLength={25} />
+                              </div>
+                              <div className="text-sm text-gray-500">{salarie.statut}</div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1 text-sm text-gray-600">
+                                <Phone className="w-3 h-3" />
+                                {salarie.telephone}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600 max-w-xs">
+                              {getSalarieAvailabilityDisplay(salarie)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <button
+                                onClick={() => toggleSalarieAssignment(salarie.id, selectedTerrain.id)}
+                                disabled={isAssigning}
+                                className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition-colors disabled:opacity-50"
+                              >
+                                {isAssigning ? (
+                                  <>
+                                    <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
+                                    Traitement...
                                   </>
                                 ) : (
                                   <>
@@ -1151,184 +1807,32 @@ export default function TerrainsManagement() {
                               </button>
                             </td>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {getFieldError('salarie_ids') && (
-                    <p className="mt-1 text-sm text-red-600">{getFieldError('salarie_ids')}</p>
-                  )}
+                        );
+                      })}
+                  </tbody>
+
+                </table>
+
                 </div>
 
-                <div className="flex justify-end gap-3 pt-4 border-t">
+                <div className="flex justify-end pt-4 border-t mt-6">
                   <button
                     type="button"
-                    onClick={handleCreateCancel}
+                    onClick={() => {
+                      setShowSalariesPopup(false)
+                      setSelectedTerrain(null)
+                    }}
                     className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
-                    disabled={isSubmitting}
                   >
-                    Annuler
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || currentPoints.length < 4}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-                  >
-                    {isSubmitting ? (
-                      <div className="flex items-center space-x-2">
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        <span>Enregistrement...</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center space-x-2">
-                        <Save className="w-4 h-4" />
-                        <span>{showCreatePopup ? "Créer" : "Modifier"}</span>
-                      </div>
-                    )}
+                    Fermer
                   </button>
                 </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Enhanced Salaries Assignment Popup - Updated to show terrain and project names */}
-        {showSalariesPopup && selectedTerrain && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-6xl max-h-[80vh] overflow-y-auto m-4">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                Salariés - Terrain #{selectedTerrain.id} - {selectedTerrain.name}
-              </h3>
-
-              <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">N°</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Téléphone</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Disponibilité</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
-                  </tr>
-                </thead>
-               <tbody className="divide-y divide-gray-200">
-                  {/* Assigned salaries */}
-                  {salaries
-                    .filter(salarie => (selectedTerrain.salarie_ids || []).includes(salarie.id))
-                    .map((salarie, index) => {
-                      const assignKey = `${salarie.id}-${selectedTerrain.id}`;
-                      const isAssigning = assigningStates[assignKey];
-
-                      return (
-                        <tr key={salarie.id} className="bg-green-50 hover:bg-green-100">
-                          <td className="px-4 py-3 text-sm">{index + 1}</td>
-                          <td className="px-4 py-3">
-                            <div className="text-sm font-medium text-gray-900">{salarie.nom} {salarie.prenom}</div>
-                            <div className="text-sm text-gray-500">{salarie.statut}</div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-1 text-sm text-gray-600">
-                              <Phone className="w-3 h-3" />
-                              {salarie.telephone}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-600">
-                            {getSalarieDisponibilite(salarie)}
-                          </td>
-                          <td className="px-4 py-3">
-                            <button
-                              onClick={() => toggleSalarieAssignment(salarie.id, selectedTerrain.id)}
-                              disabled={isAssigning}
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors disabled:opacity-50"
-                            >
-                              {isAssigning ? (
-                                <>
-                                  <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
-                                  Traitement...
-                                </>
-                              ) : (
-                                <>
-                                  <UserMinus className="w-3 h-3" />
-                                  Retirer
-                                </>
-                              )}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-
-                  {/* Unassigned salaries */}
-                  {salaries
-                    .filter(salarie => !(selectedTerrain.salarie_ids || []).includes(salarie.id) && salarie.emplacement === 'terrain')
-                    .map((salarie, index) => {
-                      const assignKey = `${salarie.id}-${selectedTerrain.id}`;
-                      const isAssigning = assigningStates[assignKey];
-
-                      return (
-                        <tr key={salarie.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm">{(selectedTerrain.salarie_ids || []).length + index + 1}</td>
-                          <td className="px-4 py-3">
-                            <div className="text-sm font-medium text-gray-900">{salarie.nom} {salarie.prenom}</div>
-                            <div className="text-sm text-gray-500">{salarie.statut}</div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-1 text-sm text-gray-600">
-                              <Phone className="w-3 h-3" />
-                              {salarie.telephone}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-600">
-                            {getSalarieDisponibilite(salarie)}
-                          </td>
-                          <td className="px-4 py-3">
-                            <button
-                              onClick={() => toggleSalarieAssignment(salarie.id, selectedTerrain.id)}
-                              disabled={isAssigning}
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition-colors disabled:opacity-50"
-                            >
-                              {isAssigning ? (
-                                <>
-                                  <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
-                                  Traitement...
-                                </>
-                              ) : (
-                                <>
-                                  <UserPlus className="w-3 h-3" />
-                                  Affecter
-                                </>
-                              )}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-
-              </table>
-
-
-
-              </div>
-
-              <div className="flex justify-end pt-4 border-t mt-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowSalariesPopup(false)
-                    setSelectedTerrain(null)
-                  }}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  Fermer
-                </button>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
+        </div>
       </div>
-    </div>
     </AppLayout>
   )
 }
