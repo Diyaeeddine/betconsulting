@@ -266,24 +266,29 @@ class SuiviControleController extends Controller
         return redirect()->back()->with('success', 'Terrain Updated');
     }
 
-    public function store_ws_data(Request $request)
+    public function storePosition(Request $request)
     {
-        $data = $request->validate([
-            'salarie_id'  => 'required|exists:salaries,id',
-            'lat'         => 'required|numeric',
-            'long'        => 'required|numeric',
-            'alt'         => 'nullable|numeric',
+        // Validate incoming data
+        $validated = $request->validate([
+            'salarie_id' => 'required|exists:salaries,id',
+            'lat' => 'required|numeric',
+            'long' => 'required|numeric',
+            'alt' => 'nullable|numeric',
             'recorded_at' => 'required|date',
         ]);
 
-        $record = WsTechData::create($data);
-
-        // Broadcast the event
-        event(new WsTechDataReceived($record->toArray()));
-
-        return response()->json([
-            'status' => 'ok',
-            'data'   => $record,
+        // Save position data to the database
+        $position = WsTechData::create([
+            'salarie_id' => $validated['salarie_id'],
+            'lat' => $validated['lat'],
+            'long' => $validated['long'],
+            'alt' => $validated['alt'],
+            'recorded_at' => $validated['recorded_at'],
         ]);
+
+        // Broadcast the new position data
+        broadcast(new WsTechDataReceived($position->toArray()));
+
+        return response()->json(['message' => 'Position saved and broadcasted']);
     }
 }

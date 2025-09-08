@@ -22,6 +22,6 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
-/.dockerignoer
+/.dockerignore
 /docker-compose.yml 
 /Dockerfile

@@ -17,6 +17,11 @@ use App\Http\Controllers\RessourcesHumainesController;
 use App\Http\Controllers\SuiviControleController;
 use App\Http\Controllers\ScreenshotController;
 
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Broadcast;
+use Illuminate\Support\Facades\Hash;
+use App\Models\Salarie;
+
 Route::get('/', function () {
     return redirect()->route('login');
 })->name('home');
@@ -227,6 +232,32 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
     Route::put('/suivi-controle/terrain/update-status', [SuiviControleController::class, 'updateStatusTerrs']);
 
 }); 
+
+Route::post('/broadcasting/auth', function (Request $request) {
+    $request->validate([
+        'email' => 'required|email',
+        'password' => 'required',
+        'channel_name' => 'required|string',
+        'socket_id' => 'required|string',
+    ]);
+
+    $user = Salarie::where('email', $request->email)->first();
+
+    if (! $user || ! Hash::check($request->password, $user->password)) {
+        return response()->json(['message' => 'Unauthorized'], 403);
+    }
+
+    // Validate that the user is allowed to join this channel
+    preg_match('/salarie\.(\d+)/', $request->channel_name, $matches);
+    $channelSalarieId = $matches[1] ?? null;
+
+    if ((int)$user->id !== (int)$channelSalarieId || $user->emplacement !== 'terrain') {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    // Simulate "logged in" user for broadcast
+    return Broadcast::auth($request->merge(['user_id' => $user->id]));
+});
 // Route::middleware('auth.basic')->group(function () {
 //     Route::get('/suivi-controle/fetch-data', [SuiviControleController::class, 'fetchData']);
 //     Route::get('/suivi-controle/fetch-terrains', [SuiviControleController::class, 'fetchTerrains']);
