@@ -10,25 +10,18 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable, HasRoles; // ✅ Added HasApiTokens
+    use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
     /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
      */
-    protected $appends = ['role'];
-
     protected $fillable = [
         'name',
         'email',
         'password',
     ];
-
-    public function getRoleAttribute()
-    {
-        return $this->getRoleNames()->first();
-    }
 
     /**
      * The attributes that should be hidden for serialization.
@@ -41,7 +34,7 @@ class User extends Authenticatable
     ];
 
     /**
-     * The attributes that should be cast.
+     * Get the attributes that should be cast.
      *
      * @return array<string, string>
      */
@@ -51,5 +44,26 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * Get user's primary role name
+     */
+    public function getRoleAttribute()
+    {
+        return $this->getRoleNames()->first();
+    }
+
+    /**
+     * Add role to JSON serialization
+     */
+    protected $appends = ['role'];
+
+    /**
+     * Check if user has specific role (helper method)
+     */
+    public function hasRole($role): bool
+    {
+        return $this->roles()->where('name', $role)->exists();
     }
 }
