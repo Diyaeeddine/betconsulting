@@ -15,6 +15,8 @@ return new class extends Migration
             $table->id();
             $table->json('salaries_ids'); // JSON column
             $table->string('statut');     // status as string
+            $table->string('message');
+            $table->timestamp('recorded_at');
             $table->timestamps();         // created_at and updated_at
         });
     }

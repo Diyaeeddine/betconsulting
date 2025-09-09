@@ -11,9 +11,12 @@ class SalariesDisponibility extends Model
     protected $fillable = [
         'salaries_ids',
         'statut',
+        'message',
+        'recorded_at' => 'datetime:c',
     ];
 
     protected $casts = [
         'salaries_ids' => 'array', // Cast JSON to array
     ];
 }
+

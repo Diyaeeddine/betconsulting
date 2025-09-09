@@ -7,6 +7,7 @@ use Inertia\Inertia;
 use App\Models\Salarie;
 use App\Models\Terrain;
 use App\Models\Projet;
+use App\Models\SalariesDisponibility;
 
 use Carbon\Carbon;
 
@@ -37,8 +38,9 @@ class SuiviControleController extends Controller
         $terrains = Terrain::all();
         $projets  = Projet::all();
         $salaries = Salarie::where('emplacement', 'terrain')->get();
+        $mssgs = SalariesDisponibility::where('statut', 'active')->get();
 
-        return response()->json(compact('terrains', 'projets', 'salaries'));
+        return response()->json(compact('terrains', 'projets', 'salaries','mssgs'));
     }
 
     public function fetchTerrains()
@@ -265,6 +267,18 @@ class SuiviControleController extends Controller
 
         return redirect()->back()->with('success', 'Terrain Updated');
     }
+
+    public function deactivateNotif($id)
+{
+    $disponibility = SalariesDisponibility::findOrFail($id);
+
+    // Switch statut to inactive
+    $disponibility->update([
+        'statut' => 'inactive',
+    ]);
+
+    return redirect()->back()->with('success', 'Disponibility marked as inactive.');
+}
 
     public function storePosition(Request $request)
     {

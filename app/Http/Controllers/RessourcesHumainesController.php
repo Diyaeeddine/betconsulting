@@ -3,11 +3,14 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+
 use App\Models\Projet;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Models\Materiel;
 use App\Models\Salarie;
+use App\Models\SalariesDisponibility;
 use App\Models\Progression;
 use App\Models\Profil;
 use App\Models\Formation;
@@ -708,9 +711,11 @@ class RessourcesHumainesController extends Controller
             'date_embauche'  => 'nullable|date',
             'nom_profil'     => 'required|in:bureau_etudes,construction,suivi_controle,support_gestion',
             'poste_profil'   => 'required|string|max:255',
+            'emplacement'    => 'required|in:Bureau,Terrain', // Validate emplacement
         ]);
 
         try {
+            // Create the Salarie with the new 'emplacement' field
             $salarie = Salarie::create([
                 'nom'             => $validatedData['nom'],
                 'prenom'          => $validatedData['prenom'],
@@ -720,29 +725,70 @@ class RessourcesHumainesController extends Controller
                 'date_embauche'   => $validatedData['date_embauche'] ?? null,
                 'statut'          => 'actif',
                 'projet_ids'      => json_encode([]),
+                'emplacement'     => $validatedData['emplacement'], // Save emplacement field
             ]);
 
+            // Create the Profil
             $profil = Profil::create([
                 'user_id'      => $salarie->id,
                 'nom_profil'   => $validatedData['nom_profil'],
                 'poste_profil' => $validatedData['poste_profil'],
             ]);
 
-            Log::info('Salarie created', ['salarie' => $salarie->toArray()]);
-            Log::info('Profil created',  ['profil'  => $profil->toArray()]);
-
             return redirect()->back()->with([
                 'success' => 'Employé créé avec succès.',
-                'created' => [
-                    'salarie' => $salarie->only(['id', 'nom', 'prenom', 'email', 'telephone', 'statut']),
-                    'profil'  => $profil->only(['id', 'user_id', 'nom_profil', 'poste_profil']),
-                ],
             ]);
         } catch (\Throwable $e) {
             Log::error('Error creating user', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return redirect()->back()->with('error', 'Erreur lors de la création de l\'employé.');
         }
     }
+
+
+   public function storeSalarieDisponibility(Request $request)
+    {
+        // Log the incoming request for debugging
+        Log::info('Incoming request data', $request->all());
+
+        // Validate the incoming request
+        $validatedData = $request->validate([
+            'salaries_ids'   => 'required|array|min:1',          
+            'salaries_ids.*' => 'integer|exists:users,id', // Validate each ID exists
+            'statut'         => 'required|string|in:active,inactive', // Validate allowed values
+            'message'        => 'required|string|max:255|min:1', // Ensure not empty
+        ]);
+
+        try {
+            // Log validation success
+            Log::info('Validation successful', $validatedData);
+
+            // Create the new availability record
+            $disponibility = SalariesDisponibility::create([
+                'salaries_ids' => $validatedData['salaries_ids'],
+                'statut'       => $validatedData['statut'],
+                'message'      => $validatedData['message'],
+                'recorded_at'  => now(),
+            ]);
+
+            Log::info('Availability record created', ['id' => $disponibility->id]);
+
+            // For Inertia.js, return redirect with success message
+            return redirect()->back()->with('success', 'Availability created successfully.');
+
+        } catch (\Exception $e) {
+            Log::error('Error creating salaries availability', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
+            ]);
+
+            return redirect()->back()
+                ->with('error', 'An error occurred while creating the availability.')
+                ->withInput();
+        }
+    }
+
+
 
     public function affecteGrantUser(Request $request, Salarie $salarie)
     {

@@ -5,7 +5,7 @@ import {
   Plus, Save, MapPin, Users, Map as MapIcon, Target,
   Eye, Edit2, Trash2, UserPlus, UserMinus, CheckCircle,
   Clock, AlertCircle, XCircle, Navigation, Zap, Phone, Upload,
-  FileText, Download, X
+  FileText, Download, X, Bell
 } from "lucide-react"
 import { MapContainer, TileLayer, Polygon, Marker, Popup, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
@@ -78,6 +78,16 @@ interface Projet {
   longitude?: number
   radius?: number
   terrain_ids?: number[]
+}
+
+interface SalariesDisponibility {
+  id: number
+  salaries_ids: number[]
+  statut: string
+  message: string
+  recorded_at: string
+  created_at?: string
+  updated_at?: string
 }
 
 interface MessageState {
@@ -196,6 +206,37 @@ const createDrawingIcon = (index: number) => {
   })
 }
 
+// Create terrain label icon
+const createTerrainLabelIcon = (terrain: Terrain) => {
+  const colors = getPolygonColor(terrain.statut_tech)
+  return L.divIcon({
+    className: 'custom-terrain-label',
+    html: `<div style="
+      background-color: ${colors.fillColor};
+      color: white;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: bold;
+      border: 1px solid white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      white-space: nowrap;
+    ">${terrain.name}</div>`,
+    iconSize: [40, 16],
+    iconAnchor: [20, 8],
+  })
+}
+
+// Helper function to get polygon color
+const getPolygonColor = (statut: string) => {
+  switch (statut) {
+    case 'en_cours': return { color: '#3b82f6', fillColor: '#3b82f6' }
+    case 'valide': return { color: '#10b981', fillColor: '#10b981' }
+    case 'en_revision': return { color: '#f59e0b', fillColor: '#f59e0b' }
+    default: return { color: '#6b7280', fillColor: '#6b7280' }
+  }
+}
+
 // Text truncation component
 const TruncatedText = ({ text, maxLength = 50, className = "" }: { text: string, maxLength?: number, className?: string }) => {
   if (!text) return <span className={className}>-</span>
@@ -246,6 +287,31 @@ const extractErrorMessage = (errors: any): string => {
   return 'Erreur inconnue'
 }
 
+// Helper function to format time ago
+const formatTimeAgo = (timestamp: string): string => {
+  const now = new Date()
+  const recorded = new Date(timestamp)
+  const diffInSeconds = Math.floor((now.getTime() - recorded.getTime()) / 1000)
+
+  if (diffInSeconds < 60) {
+    return `il y a ${diffInSeconds}s`
+     console.log(`il y a ${diffInSeconds}s`)
+  } else if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60)
+     console.log(`il y a ${minutes}min`)
+    return `il y a ${minutes}min`
+  } else if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600)
+     console.log(`il y a ${hours}h`)
+    return `il y a ${hours}h`
+  } else {
+    const days = Math.floor(diffInSeconds / 86400)
+    console.log(`il y a ${days}j`)
+    return `il y a ${days}j`
+  }
+  
+}
+
 const breadcrumbs = [
   {
     title: "Dashboard Suivi & Contrôle des Travaux",
@@ -262,10 +328,16 @@ export default function TerrainsManagement() {
   const [salaries, setSalaries] = useState<Salarie[]>([])
   const [terrains, setTerrains] = useState<Terrain[]>([])
   const [projects, setProjects] = useState<Projet[]>([])
+  const [notifications, setNotifications] = useState<SalariesDisponibility[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string[]}>({})
   const [messages, setMessages] = useState<MessageState[]>([])
+
+  // New states for notifications and filtering
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [selectedProjectFilter, setSelectedProjectFilter] = useState<number | null>(null)
+  const [deactivatingNotifications, setDeactivatingNotifications] = useState<{[key: number]: boolean}>({})
 
   // KML/KMZ related states
   const [uploadedKMLData, setUploadedKMLData] = useState<ParsedKMLTerrain[]>([])
@@ -324,6 +396,33 @@ export default function TerrainsManagement() {
       addMessage('warning', flashMessages.warning)
     }
   }, [flashMessages, addMessage])
+
+  // Notification deactivation handler
+  const deactivateNotification = async (notificationId: number) => {
+    setDeactivatingNotifications(prev => ({ ...prev, [notificationId]: true }))
+    
+    try {
+      await new Promise((resolve, reject) => {
+        router.put(`/suivi-controle/notif/${notificationId}`, {}, {
+          onSuccess: (page) => {
+            // Remove notification from local state
+            setNotifications(prev => prev.filter(n => n.id !== notificationId))
+            addMessage('success', 'Notification marquée comme lue')
+            resolve(page)
+          },
+          onError: (errors) => {
+            console.error('Deactivate notification error:', errors)
+            addMessage('error', 'Erreur lors de la désactivation de la notification')
+            reject(errors)
+          }
+        })
+      })
+    } catch (error) {
+      console.error('Notification deactivation error:', error)
+    } finally {
+      setDeactivatingNotifications(prev => ({ ...prev, [notificationId]: false }))
+    }
+  }
 
   // KMZ/KML parsing functions
   const parseKMLFile = async (file: File): Promise<ParsedKMLTerrain[]> => {
@@ -488,7 +587,7 @@ export default function TerrainsManagement() {
       const data = await response.json()
 
       // Destructure with default values
-      const { terrains = [], projets = [], salaries = [] } = data
+      const { terrains = [], projets = [], salaries = [], mssgs = [] } = data
 
       // Add project names to terrains and ensure proper salarie_ids array
       const terrainsWithProjects = terrains.map((terrain: any) => {
@@ -512,12 +611,14 @@ export default function TerrainsManagement() {
       console.log('Data fetched successfully:', {
         terrains: terrainsWithProjects.length,
         projets: projets.length,
-        salaries: salariesWithIds.length
+        salaries: salariesWithIds.length,
+        notifications: mssgs.length
       })
 
       setTerrains(terrainsWithProjects)
       setProjects(projets)
       setSalaries(salariesWithIds)
+      setNotifications(mssgs)
       
     } catch (err) {
       console.error("Erreur lors du chargement des données:", err)
@@ -531,7 +632,7 @@ export default function TerrainsManagement() {
   useEffect(() => { fetchAllData() }, [fetchAllData])
 
   // Check if any popup is open
-  const isAnyPopupOpen = showCreatePopup || showEditPopup || showSalariesPopup || showKMLData
+  const isAnyPopupOpen = showCreatePopup || showEditPopup || showSalariesPopup || showKMLData || showNotifications
 
   // Focus terrain on map
   const focusTerrainOnMap = (terrain: Terrain) => {
@@ -564,6 +665,7 @@ export default function TerrainsManagement() {
     setShowEditPopup(false)
     setShowSalariesPopup(false)
     setShowKMLData(false)
+    setShowNotifications(false)
     setError(null)
     setValidationErrors({})
   }
@@ -909,22 +1011,19 @@ export default function TerrainsManagement() {
     )
   }
 
-  const getPolygonColor = (statut: string) => {
-    switch (statut) {
-      case 'en_cours': return { color: '#3b82f6', fillColor: '#3b82f6' }
-      case 'valide': return { color: '#10b981', fillColor: '#10b981' }
-      case 'en_revision': return { color: '#f59e0b', fillColor: '#f59e0b' }
-      default: return { color: '#6b7280', fillColor: '#6b7280' }
-    }
-  }
-
   const selectedSalarieData = salaries.find(s => s.id === selectedSalarie)
   const terrainsActifs = terrains.filter(t => t.statut_tech === "en_cours" || t.statut_tech === "en_revision")
 
-  // Filter terrains based on selected salarie
-  const filteredTerrains = selectedSalarie === null
-    ? terrains
-    : terrains.filter(t => (t.salarie_ids || []).includes(selectedSalarie))
+  // Filter terrains based on selected salarie and project
+  let filteredTerrains = terrains
+  
+  if (selectedSalarie !== null) {
+    filteredTerrains = filteredTerrains.filter(t => (t.salarie_ids || []).includes(selectedSalarie))
+  }
+  
+  if (selectedProjectFilter !== null) {
+    filteredTerrains = filteredTerrains.filter(t => t.projet_id === selectedProjectFilter)
+  }
 
   // FIXED: Function to get proper project and terrain information for salaries popup
   const getSalarieAvailabilityDisplay = (salarie: Salarie): JSX.Element => {
@@ -1005,8 +1104,105 @@ export default function TerrainsManagement() {
       <div className="min-h-screen bg-gray-50 p-6">
         <Head title="Dashboard Suivi & Contrôle des Travaux" />
         <div className="max-w-7xl mx-auto space-y-6">
+          {/* Header with Notifications */}
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-gray-900">Dashboard Suivi & Contrôle</h1>
+            
+            {/* Notifications Button */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className={`relative p-2 rounded-lg transition-colors ${
+                  showNotifications ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Bell className="w-6 h-6" />
+                {notifications.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-medium">
+                    {notifications.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Notifications Popup */}
+          {showNotifications && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto m-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Notifications ({notifications.length})
+                  </h3>
+                  <button
+                    onClick={() => setShowNotifications(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {notifications.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Bell className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                      <p>Aucune notification</p>
+                    </div>
+                  ) : (
+                    notifications.map((notification) => (
+                      <div
+                        key={notification.id}
+                        className={`border border-gray-200 rounded-lg p-4 cursor-pointer transition-colors hover:bg-gray-50 ${
+                          deactivatingNotifications[notification.id] ? 'opacity-50' : ''
+                        }`}
+                        onClick={() => !deactivatingNotifications[notification.id] && deactivateNotification(notification.id)}
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex items-center gap-2 text-sm font-medium text-blue-600">
+                            <Users className="w-4 h-4" />
+                            <span>{notification.salaries_ids.length} Nouveaux Profils à Affecter</span>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (!deactivatingNotifications[notification.id]) {
+                                deactivateNotification(notification.id)
+                              }
+                            }}
+                            disabled={deactivatingNotifications[notification.id]}
+                            className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                          >
+                            {deactivatingNotifications[notification.id] ? (
+                              <div className="w-4 h-4 border border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              <X className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                        <div className="text-sm text-gray-700 mb-2">{notification.message}</div>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <Clock className="w-3 h-3" />
+                          <span>{formatTimeAgo(notification.recorded_at)}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="flex justify-end pt-4 border-t mt-6">
+                  <button
+                    onClick={() => setShowNotifications(false)}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Messages Display */}
-          <div className="fixed top-4 right-4 z-50 space-y-2">
+          <div className="fixed top-4 right-4 z-40 space-y-2">
             {messages.map((message) => (
               <div
                 key={message.id}
@@ -1117,10 +1313,30 @@ export default function TerrainsManagement() {
                   className="border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                   disabled={isDrawingMode}
                 >
-                  <option value="">Tous les terrains</option>
+                  <option value="">Tous les profils</option>
                   {salaries.map(salarie => (
                     <option key={salarie.id} value={salarie.id}>
                       {salarie.nom} {salarie.prenom}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={selectedProjectFilter === null ? "" : selectedProjectFilter.toString()}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setSelectedProjectFilter(value === "" ? null : Number(value))
+                    if (isDrawingMode) {
+                      cancelDrawing()
+                    }
+                  }}
+                  className="border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  disabled={isDrawingMode}
+                >
+                  <option value="">Tous les projets</option>
+                  {projects.map(project => (
+                    <option key={project.id} value={project.id}>
+                      {project.nom}
                     </option>
                   ))}
                 </select>
@@ -1184,7 +1400,7 @@ export default function TerrainsManagement() {
                 zoom={13}
                 style={{ height: '500px', width: '100%' }}
                 ref={mapRef}
-                key={`map-${selectedSalarie}-${filteredTerrains.length}`}
+                key={`map-${selectedSalarie}-${selectedProjectFilter}-${filteredTerrains.length}`}
               >
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -1200,33 +1416,71 @@ export default function TerrainsManagement() {
                 {/* Display terrain polygons */}
                 {filteredTerrains.map(terrain => {
                   const colors = getPolygonColor(terrain.statut_tech)
+                  // Calculate center point for label
+                  const centerLat = terrain.points.reduce((sum, p) => sum + p.lat, 0) / terrain.points.length
+                  const centerLng = terrain.points.reduce((sum, p) => sum + p.lng, 0) / terrain.points.length
+                  
                   return (
-                    <Polygon
-                      key={`polygon-${terrain.id}-${selectedSalarie}`}
-                      positions={terrain.points.map(p => [p.lat, p.lng])}
-                      pathOptions={{
-                        ...colors,
-                        weight: 2,
-                        opacity: 0.8,
-                        fillOpacity: 0.3
-                      }}
-                    >
-                      <Popup>
-                        <div className="p-2">
-                          <h3 className="font-semibold text-sm">#{terrain.id} - {terrain.name}</h3>
-                          <p className="text-xs text-gray-600 mb-2">{terrain.description}</p>
-                          <div className="space-y-1 text-xs">
-                            <div><strong>Projet:</strong> {terrain.projet_name}</div>
-                            <div><strong>Surface:</strong> {terrain.surface?.toLocaleString()} m²</div>
-                            <div><strong>Profils:</strong> {(terrain.salarie_ids || []).length}</div>
-                            <div><strong>Points:</strong> {terrain.points.length}</div>
-                            <div className="mt-2">
-                              {getStatusBadge(terrain.statut_tech)}
+                    <div key={`terrain-group-${terrain.id}`}>
+                      <Polygon
+                        positions={terrain.points.map(p => [p.lat, p.lng])}
+                        pathOptions={{
+                          ...colors,
+                          weight: 2,
+                          opacity: 0.8,
+                          fillOpacity: 0.3
+                        }}
+                      >
+                        <Popup>
+                          <div className="p-2">
+                            <h3 className="font-semibold text-sm">#{terrain.id} - {terrain.name}</h3>
+                            <p className="text-xs text-gray-600 mb-2">{terrain.description}</p>
+                            <div className="space-y-1 text-xs">
+                              <div><strong>Projet:</strong> {terrain.projet_name}</div>
+                              <div><strong>Surface:</strong> {terrain.surface?.toLocaleString()} m²</div>
+                              <div><strong>Profils:</strong> {(terrain.salarie_ids || []).length}</div>
+                              <div><strong>Points:</strong> {terrain.points.length}</div>
+                              <div className="mt-2">
+                                {getStatusBadge(terrain.statut_tech)}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </Popup>
-                    </Polygon>
+                        </Popup>
+                      </Polygon>
+                      
+                      {/* Terrain Label */}
+                      <Marker
+                        position={[centerLat, centerLng]}
+                        icon={createTerrainLabelIcon(terrain)}
+                      >
+                        <Popup>
+                          <div className="p-2">
+                            <h3 className="font-semibold text-sm">#{terrain.id} - {terrain.name}</h3>
+                            <p className="text-xs text-gray-600 mb-2">{terrain.description}</p>
+                            <div className="space-y-1 text-xs">
+                              <div><strong>Projet:</strong> {terrain.projet_name}</div>
+                              <div><strong>Surface:</strong> {terrain.surface?.toLocaleString()} m²</div>
+                              <div><strong>Profils Assignés:</strong> {(terrain.salarie_ids || []).length}</div>
+                              <div><strong>Statut:</strong> {getStatusBadge(terrain.statut_tech)}</div>
+                            </div>
+                            <div className="mt-2 flex gap-2">
+                              <button
+                                onClick={() => handleEditTerrain(terrain)}
+                                className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                              >
+                                Modifier
+                              </button>
+                              <button
+                                onClick={() => showSalariesModal(terrain)}
+                                className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+                              >
+                                Profils ({(terrain.salarie_ids || []).length})
+                              </button>
+                            </div>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    </div>
                   )
                 })}
 
@@ -1373,9 +1627,11 @@ export default function TerrainsManagement() {
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">
                 Liste des Terrains
-                {selectedSalarie && (
+                {(selectedSalarie || selectedProjectFilter) && (
                   <span className="text-sm font-normal text-gray-500 ml-2">
-                    - Terrains assignés à {selectedSalarieData?.nom} {selectedSalarieData?.prenom}
+                    - Filtré par {selectedSalarie ? `profil: ${selectedSalarieData?.nom} ${selectedSalarieData?.prenom}` : ''} 
+                    {selectedSalarie && selectedProjectFilter ? ' et ' : ''}
+                    {selectedProjectFilter ? `projet: ${projects.find(p => p.id === selectedProjectFilter)?.nom}` : ''}
                   </span>
                 )}
               </h2>
@@ -1465,8 +1721,8 @@ export default function TerrainsManagement() {
                   <MapIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                   <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun terrain</h3>
                   <p className="mt-1 text-sm text-gray-500">
-                    {selectedSalarie
-                      ? "Ce salarié n'a aucun terrain assigné."
+                    {selectedSalarie || selectedProjectFilter
+                      ? "Aucun terrain trouvé avec les filtres sélectionnés."
                       : "Commencez par créer votre premier terrain sur la carte."
                     }
                   </p>

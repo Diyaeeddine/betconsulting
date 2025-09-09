@@ -169,6 +169,7 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
     Route::get('/users/projets', [RessourcesHumainesController::class, 'getProjects'])->name('user.projects.ressources-humaines');
     Route::get('/users/{user}', [RessourcesHumainesController::class, 'getUser'])->name('user.show.ressources-humaines');
     Route::post('/users', [RessourcesHumainesController::class, 'storeUsers'])->name('user.store.ressources-humaines');
+    Route::post('/usersDisp', [RessourcesHumainesController::class, 'storeSalarieDisponibility'])->name('user.storeDisp.ressources-humaines');
     Route::put('/users/{salarie}', [RessourcesHumainesController::class, 'enableDisableUser'])->name('user.update.ressources-humaines');
     Route::put('/userPass/{salarie}', [RessourcesHumainesController::class, 'updateUserPass'])->name('user.updatePass.ressources-humaines');
     Route::put('/userProjet/{salarie}', [RessourcesHumainesController::class, 'affecteGrantUser'])->name('user.updateProject.ressources-humaines');
@@ -227,6 +228,7 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
     Route::get('/suivi-controle/fetch-salarie/{id}', [SuiviControleController::class, 'fetchSalarieData']);
     Route::post('/suivi-controle/terrain', [SuiviControleController::class, 'createTerrain']);
     Route::put('/suivi-controle/terrain/{id}', [SuiviControleController::class, 'editTerrain']);
+    Route::put('/suivi-controle/notif/{id}', [SuiviControleController::class, 'deactivateNotif']);
     Route::delete('/suivi-controle/terrain/{id}', [SuiviControleController::class, 'deleteTerrain']);
     Route::post('/suivi-controle/terrain/affect-grant', [SuiviControleController::class, 'affectGrantSalarie']);
     Route::put('/suivi-controle/terrain/update-status', [SuiviControleController::class, 'updateStatusTerrs']);
