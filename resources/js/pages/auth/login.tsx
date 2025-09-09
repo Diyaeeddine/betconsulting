@@ -89,12 +89,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
             >
               Bet<span className="text-white">Consulting</span>
             </h1>
-            <p
-              className={`text-lg md:text-xl text-white max-w-2xl mx-auto leading-relaxed transition-all duration-1000 delay-300 ${isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}
-            >
-              Gestion intégrée des services <span className="font-semibold text-blue-300">comptables </span>&{" "}
-              <span className="font-semibold text-blue-300">d'audit</span>
-            </p>
+          
             <div
               className={`mt-6 flex justify-center transition-all duration-1000 delay-500 ${isLoaded ? "opacity-100 scale-100" : "opacity-0 scale-75"}`}
             >
