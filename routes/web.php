@@ -217,9 +217,10 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
 
 // Salarie
 Route::middleware(['auth', 'verified', 'role:salarie'])->group(function () {
-    Route::get('/salarie/dashboard', [SuiviControleController::class, 'index'])
+    Route::get('/salarie/dashboard', [SalarieController::class, 'index'])
         ->name('dashboard.salarie');
 });
+
 
 Route::get('/dashboard', function () {
     $user = auth()->user();

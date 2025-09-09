@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use Inertia\Inertia;
 
-class QualiteAuditController extends Controller
+class SalarieController extends Controller
 {
     public function index()
     {
