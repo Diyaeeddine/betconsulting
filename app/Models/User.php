@@ -2,15 +2,15 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
+use Laravel\Sanctum\HasApiTokens;
+
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasRoles;
+    use HasApiTokens, HasFactory, Notifiable, HasRoles; // ✅ Added HasApiTokens
 
     /**
      * The attributes that are mass assignable.
@@ -23,14 +23,12 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
-        
     ];
 
-     public function getRoleAttribute()
+    public function getRoleAttribute()
     {
         return $this->getRoleNames()->first();
     }
-
 
     /**
      * The attributes that should be hidden for serialization.
@@ -43,7 +41,7 @@ class User extends Authenticatable
     ];
 
     /**
-     * Get the attributes that should be cast.
+     * The attributes that should be cast.
      *
      * @return array<string, string>
      */
