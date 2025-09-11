@@ -7,7 +7,9 @@ use Inertia\Inertia;
 use App\Models\Salarie;
 use App\Models\Terrain;
 use App\Models\Projet;
-use App\Models\SalariesDisponibility;
+use App\Models\Profil;
+use App\Models\plan;
+use App\Models\Notification;
 
 use Carbon\Carbon;
 
@@ -37,8 +39,28 @@ class SuiviControleController extends Controller
     {
         $terrains = Terrain::all();
         $projets  = Projet::all();
-        $salaries = Salarie::where('emplacement', 'terrain')->get();
-        $mssgs = SalariesDisponibility::where('statut', 'active')->get();
+        $salaries = Salarie::where('statut', 'actif')->get();
+        $allProfils = Profil::all();
+
+        // Map each salarie to their profils manually
+        $salaries->transform(function ($salarie) use ($allProfils) {
+            $salarie->profils = $allProfils
+                ->where('user_id', $salarie->id)
+                ->values() // reset array indices
+                ->map(function ($profil) {
+                    // Optional: transform profil object as needed
+                    return [
+                        'id' => $profil->id,
+                        'nom_profil' => $profil->nom_profil,
+                        'poste_profil' => $profil->poste_profil,
+                    ];
+                });
+            return $salarie;
+        });
+
+       $mssgs = Notification::where('receiver', 'suivi-controle')
+        ->where('statut', 'actif')
+        ->get();
 
         return response()->json(compact('terrains', 'projets', 'salaries','mssgs'));
     }
@@ -89,6 +111,44 @@ class SuiviControleController extends Controller
             'wsData'   => $wsData,
         ]);
     }
+
+    public function updateProjetSalaries(Request $request)
+    {
+        $validated = $request->validate([
+            'projet_id' => 'required|exists:projets,id',
+            'name' => 'required|string',
+            'salarie_ids' => 'required|array',
+            'salarie_ids.*' => 'exists:salaries,id',
+        ]);
+
+        $projet = Projet::where('id', $validated['projet_id'])
+                        ->where('nom', $validated['name'])
+                        ->first();
+
+        if (!$projet) {
+            return redirect()->back()->with('error', 'Projet not found or name mismatch.');
+        }
+
+        // 1. Assign the salarie_ids to the projet (if needed)
+        $projet->salarie_ids = $validated['salarie_ids'];
+        $projet->save();
+
+        // 2. Add this projet ID to each selected salarie's projet_ids (if not already present)
+        \App\Models\Salarie::whereIn('id', $validated['salarie_ids'])->get()->each(function ($salarie) use ($projet) {
+            $currentProjetIds = is_array($salarie->projet_ids) ? $salarie->projet_ids : [];
+
+            // Avoid duplicates
+            if (!in_array($projet->id, $currentProjetIds)) {
+                $currentProjetIds[] = $projet->id;
+                $salarie->projet_ids = $currentProjetIds;
+                $salarie->save();
+            }
+        });
+
+        return redirect()->back()->with('success', 'Projet and salaries updated successfully.');
+    }
+
+
 
 
     public function createTerrain(Request $request)
@@ -249,37 +309,124 @@ class SuiviControleController extends Controller
         }
     }
 
-    public function updateStatusTerrs(Request $request)
-    {
-        $validated = $request->validate([
-            'terrains'               => 'required|array',
-            'terrains.*.id'          => 'required|exists:terrains,id',
-            'terrains.*.statut_tech' => 'required|in:validé,terminé,en_cours,en_revision',
-            'terrains.*.statut_final' => 'required|in:validé,terminé,en_cours,en_revision',
-        ]);
-
-        foreach ($validated['terrains'] as $data) {
-            Terrain::where('id', $data['id'])->update([
-                'statut_tech'  => $data['statut_tech'],
-                'statut_final' => $data['statut_final'],
-            ]);
-        }
-
-        return redirect()->back()->with('success', 'Terrain Updated');
-    }
+    
 
     public function deactivateNotif($id)
-{
-    $disponibility = SalariesDisponibility::findOrFail($id);
+    {
+        $disponibility = Notification::findOrFail($id);
 
-    // Switch statut to inactive
-    $disponibility->update([
-        'statut' => 'inactive',
-    ]);
+        // Switch statut to inactive
+        $disponibility->update([
+            'statut' => 'inactive',
+        ]);
 
-    return redirect()->back()->with('success', 'Disponibility marked as inactive.');
-}
+        return redirect()->back()->with('success', 'Disponibility marked as inactive.');
+    }
 
+
+    ######################################################
+    public function Planing()
+    {
+        return Inertia::render('suivi-controle/Planings');
+
+    }
+
+    public function fetchDataPlanings()
+    {
+        $plans = Plan::with('projet')->latest()->get();
+        $terrains = Terrain::all();
+        $projets  = Projet::all();
+        $salaries = Salarie::where('statut', 'actif')->get();
+        $allProfils = Profil::all();
+
+        // Map each salarie to their profils manually
+        $salaries->transform(function ($salarie) use ($allProfils) {
+            $salarie->profils = $allProfils
+                ->where('user_id', $salarie->id)
+                ->values() // reset array indices
+                ->map(function ($profil) {
+                    // Optional: transform profil object as needed
+                    return [
+                        'id' => $profil->id,
+                        'nom_profil' => $profil->nom_profil,
+                        'poste_profil' => $profil->poste_profil,
+                    ];
+                });
+            return $salarie;
+        });
+
+       $mssgs = Notification::where('receiver', 'suivi-controle')
+        ->where('statut', 'actif')
+        ->get();
+
+        return response()->json(compact('plans','terrains', 'projets', 'salaries','mssgs'));
+    }
+
+    public function createPlan(Request $request)
+    {
+        $validated = $request->validate([
+            'projet_id' => 'required|exists:projets,id',
+            'date' => 'required|date',
+            'mssg' => 'nullable|string',
+            'description' => 'nullable|string',
+            'terrains_ids' => 'nullable|array',
+            'terrains_ids.*' => 'integer|exists:terrains,id',
+            'salarie_ids' => 'nullable|array',
+            'salarie_ids.*' => 'integer|exists:salaries,id',
+            'statut' => 'required|string',
+        ]);
+
+        $plan = Plan::create([
+            'projet_id' => $validated['projet_id'],
+            'date' => $validated['date'],
+            'mssg' => $validated['mssg'] ?? null,
+            'description' => $validated['description'] ?? null,
+            'terrains_ids' => $validated['terrains_ids'] ?? [],
+            'salarie_ids' => $validated['salarie_ids'] ?? [],
+            'statut' => $validated['statut'],
+        ]);
+
+        return redirect()->back()->with('success', 'Plan Crée');
+    }
+
+    public function updatePlan(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'projet_id' => 'required|exists:projets,id',
+            'date' => 'required|date',
+            'mssg' => 'nullable|string',
+            'description' => 'nullable|string',
+            'terrains_ids' => 'nullable|array',
+            'terrains_ids.*' => 'integer|exists:terrains,id',
+            'salarie_ids' => 'nullable|array',
+            'salarie_ids.*' => 'integer|exists:salaries,id',
+            'statut' => 'required|string',
+        ]);
+
+        $plan = Plan::findOrFail($id);
+
+        $plan->update([
+            'projet_id' => $validated['projet_id'],
+            'date' => $validated['date'],
+            'mssg' => $validated['mssg'] ?? null,
+            'description' => $validated['description'] ?? null,
+            'terrains_ids' => $validated['terrains_ids'] ?? [],
+            'salarie_ids' => $validated['salarie_ids'] ?? [],
+            'statut' => $validated['statut'],
+        ]);
+
+        return redirect()->back()->with('success', 'Plan Updated');
+    }
+
+    public function deletePlan($id)
+    {
+        $plan = Plan::findOrFail($id);
+        $plan->delete();
+
+         return redirect()->back()->with('success', 'Plan Deleted');
+    }
+
+    ######################################################
     public function storePosition(Request $request)
     {
         // Validate incoming data

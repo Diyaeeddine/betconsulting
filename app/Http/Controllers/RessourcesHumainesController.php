@@ -4,13 +4,15 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Carbon;
 
 use App\Models\Projet;
 use App\Models\User;
+use App\Models\Terrain;
 use App\Models\Vehicule;
 use App\Models\Materiel;
 use App\Models\Salarie;
-use App\Models\SalariesDisponibility;
+use App\Models\Notification;
 use App\Models\Progression;
 use App\Models\Profil;
 use App\Models\Formation;
@@ -570,9 +572,23 @@ class RessourcesHumainesController extends Controller
             'radius' => 'nullable|numeric',
             'responsable_id' => 'required|exists:users,id',
             'type_projet' => 'required|in:suivi,etude,controle',
+            'rh_needs' => 'required|array',
         ]);
 
+        // Create the projet
         $projet = Projet::create($validated);
+
+        // Calculate total number of profiles needed
+        $totalProfiles = collect($validated['rh_needs'])->sum('number');
+
+        // Create the notification
+        Notification::create([
+            'sender' => 'ressources-humaines',
+            'receiver' => 'suivi-controle',
+            'message' => "Nouveau Projet - {$validated['nom']}, Veuillez Commencer L'affectaion de {$totalProfiles} Profils!",
+            'statut' => 'actif',
+            'recorded_at' => Carbon::now(),
+        ]);
 
         return redirect()->back()->with('success', 'Projet ajouté avec succès.');
     }
@@ -601,11 +617,29 @@ class RessourcesHumainesController extends Controller
         return redirect()->back()->with('success', 'Projet mis à jour avec succès.');
     }
 
-    public function destroy(Projet $projet)
+  public function destroy(Projet $projet)
     {
+        // 1. Delete all terrains linked to this projet
+        Terrain::where('projet_id', $projet->id)->delete();
+
+        // 2. Remove this projet ID from all salaries' projet_ids
+        Salarie::all()->each(function ($salarie) use ($projet) {
+            if (is_array($salarie->projet_ids)) {
+                $salarie->projet_ids = array_values(array_filter(
+                    $salarie->projet_ids,
+                    fn($id) => $id != $projet->id
+                ));
+                $salarie->save();
+            }
+        });
+
+        // 3. Delete the projet itself
         $projet->delete();
+
+        // 4. Redirect back with success message
         return redirect()->back()->with('success', 'Projet supprimé avec succès.');
     }
+
 
 
     public function Users()
@@ -745,48 +779,6 @@ class RessourcesHumainesController extends Controller
     }
 
 
-   public function storeSalarieDisponibility(Request $request)
-    {
-        // Log the incoming request for debugging
-        Log::info('Incoming request data', $request->all());
-
-        // Validate the incoming request
-        $validatedData = $request->validate([
-            'salaries_ids'   => 'required|array|min:1',          
-            'salaries_ids.*' => 'integer|exists:users,id', // Validate each ID exists
-            'statut'         => 'required|string|in:active,inactive', // Validate allowed values
-            'message'        => 'required|string|max:255|min:1', // Ensure not empty
-        ]);
-
-        try {
-            // Log validation success
-            Log::info('Validation successful', $validatedData);
-
-            // Create the new availability record
-            $disponibility = SalariesDisponibility::create([
-                'salaries_ids' => $validatedData['salaries_ids'],
-                'statut'       => $validatedData['statut'],
-                'message'      => $validatedData['message'],
-                'recorded_at'  => now(),
-            ]);
-
-            Log::info('Availability record created', ['id' => $disponibility->id]);
-
-            // For Inertia.js, return redirect with success message
-            return redirect()->back()->with('success', 'Availability created successfully.');
-
-        } catch (\Exception $e) {
-            Log::error('Error creating salaries availability', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'request_data' => $request->all()
-            ]);
-
-            return redirect()->back()
-                ->with('error', 'An error occurred while creating the availability.')
-                ->withInput();
-        }
-    }
 
 
 

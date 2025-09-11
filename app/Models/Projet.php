@@ -25,15 +25,18 @@ class Projet extends Model
         'longitude',
         'radius',
         'terrain_ids',
+        'rh_needs'
     ];
 
     protected $casts = [
         'salarie_ids' => 'array',
         'terrain_ids' => 'array',
+        'rh_needs' => 'array',
     ];
     protected $attributes = [
         'salarie_ids' => '[]',
         'terrain_ids' => '[]',
+        'rh_needs' => '[]',
     ];
     public function responsable()
     {

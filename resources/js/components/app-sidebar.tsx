@@ -4,7 +4,7 @@ import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { LayoutGrid,MapPin } from 'lucide-react';
+import { Calendar, LayoutGrid,MapPin } from 'lucide-react';
 import BetconsultingDashLogo from './betconsulting-dash-logo';
 import {
   Users, Route,Car,Wrench, BookOpen} from "lucide-react"
@@ -90,6 +90,11 @@ const mainNavItems: NavItem[] = [
             title: 'Terrains',
             href: '/suivi-controle/terrains',
             icon: MapPin,
+            },
+            {
+            title: 'Planings',
+            href: '/suivi-controle/Planing',
+            icon: Calendar,
             },
         ]
         : []),

@@ -4,7 +4,7 @@ import type React from "react"
 import { useState } from "react"
 import AppLayout from "@/layouts/app-layout"
 import { Head, router } from "@inertiajs/react"
-import { Plus, Save, Lock, Users, UserCheck, UserX, Shield, Eye, UserPlus } from "lucide-react"
+import { Plus, Save, Lock, Users, UserCheck, UserX, Shield, Eye } from "lucide-react"
 
 interface Projet {
 id: number
@@ -122,7 +122,6 @@ export default function RessourcesHumainesUsers({ users = [], projects = [] }: R
   const [showAddPopup, setShowAddPopup] = useState<boolean>(false)
   const [showPasswordPopup, setShowPasswordPopup] = useState<boolean>(false)
   const [showProjectPopup, setShowProjectPopup] = useState<boolean>(false)
-  const [showAffecterPopup, setShowAffecterPopup] = useState<boolean>(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
   const [passwordError, setPasswordError] = useState<string>("")
@@ -130,11 +129,6 @@ export default function RessourcesHumainesUsers({ users = [], projects = [] }: R
   const [userProjects, setUserProjects] = useState<Projet[]>([])
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [projectsError, setProjectsError] = useState<string | null>(null)
-
-  // Affecter popup states
-  const [affectedSalaries, setAffectedSalaries] = useState<User[]>([])
-  const [affecterMessage, setAffecterMessage] = useState<string>("")
-  const [availableProjects, setAvailableProjects] = useState<Projet[]>([])
 
   const [addFormData, setAddFormData] = useState({
   nom: "",
@@ -363,118 +357,6 @@ export default function RessourcesHumainesUsers({ users = [], projects = [] }: R
   }
   }
 
-  // Affecter handlers
-  const handleOpenAffecterPopup = async () => {
-  setShowAffecterPopup(true)
-  setAffectedSalaries([])
-  setAffecterMessage("")
-
-  // Fetch projects with status "en_attente" or "en_cours"
-  try {
-  const response = await fetch(`/users/projets`, {
-  method: "GET",
-  headers: {
-  Accept: "application/json",
-  },
-  credentials: "same-origin",
-  })
-
-  if (response.ok) {
-  const projectsData: Projet[] = await response.json()
-  const filteredProjects = projectsData.filter(
-  project => project.statut === "en_attente" || project.statut === "en_cours"
-  )
-  setAvailableProjects(filteredProjects)
-  }
-  } catch (error) {
-  console.error("Error fetching projects:", error)
-  setAvailableProjects([])
-  }
-  }
-
-  const handleCloseAffecterPopup = () => {
-  setShowAffecterPopup(false)
-  setAffectedSalaries([])
-  setAffecterMessage("")
-  setAvailableProjects([])
-  }
-
-  const handleAffecterSalary = (salary: User) => {
-  if (!affectedSalaries.find(s => s.id === salary.id)) {
-  setAffectedSalaries(prev => [...prev, salary])
-  }
-  }
-
-  const handleRetirerFromAffected = (salaryId: number) => {
-  setAffectedSalaries(prev => prev.filter(s => s.id !== salaryId))
-  }
-
-  const handleSubmitAffectation = async () => {
-  // Enhanced validation with user feedback
-  if (affectedSalaries.length === 0) {
-    alert("Veuillez sélectionner au moins un salarié")
-    return
-  }
-
-  if (!affecterMessage.trim() || affecterMessage.trim().length < 5) {
-    alert("Veuillez saisir un message d'au moins 5 caractères")
-    return
-  }
-
-  setIsSubmitting(true)
-
-  const payload = {
-    salaries_ids: affectedSalaries.map(s => s.id),
-    statut: 'active', // Make sure this matches validation rules
-    message: affecterMessage.trim()
-  }
-
-  console.log('[AFFECTATION] Sending payload:', payload)
-
-  router.post("/usersDisp", payload, {
-    onStart: () => {
-      console.log("[AFFECTATION] Request started")
-    },
-    onSuccess: (page: any) => {
-      console.log("[AFFECTATION] Success response:", page?.props?.flash)
-      handleCloseAffecterPopup()
-      // Show success message if available
-      if (page?.props?.flash?.success) {
-        alert(page.props.flash.success)
-      }
-    },
-    onError: (errors) => {
-      console.error("[AFFECTATION] Validation/Server errors:", errors)
-      
-      // Handle validation errors gracefully
-      let errorMessage = "Une erreur s'est produite lors de l'affectation."
-      
-      if (typeof errors === 'object' && errors !== null) {
-        // Extract first validation error
-        const firstError = Object.values(errors)[0]
-        if (Array.isArray(firstError) && firstError.length > 0) {
-          errorMessage = firstError[0]
-        } else if (typeof firstError === 'string') {
-          errorMessage = firstError
-        }
-      }
-      
-      alert(errorMessage)
-    },
-    onFinish: () => {
-      console.log("[AFFECTATION] Request finished")
-      setIsSubmitting(false)
-    },
-  })
-  }
-
-  // Get projects for a specific salary where they are a member
-  const getSalaryProjects = (salary: User): Projet[] => {
-  return availableProjects.filter(project => 
-  project.salarie_ids?.includes(salary.id)
-  )
-  }
-
   function getRemainingTime(dateFin: string | undefined) {
   if (!dateFin) return ""
   const endDate = new Date(dateFin)
@@ -510,9 +392,6 @@ export default function RessourcesHumainesUsers({ users = [], projects = [] }: R
   )
   }
 
-  // Get active users
-  const activeUsers = users.filter(user => user.statut === "actif")
-
 return (
 <AppLayout breadcrumbs={breadcrumbs}>
 <Head title="Dashboard Ressources Humaines & Gestion des Compétences" />
@@ -526,13 +405,6 @@ return (
         <p className="text-gray-600 mt-1">Gérez tous les salariés de l'entreprise</p>
       </div>
       <div className="flex gap-3">
-        <button
-          onClick={handleOpenAffecterPopup}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-md"
-        >
-          <UserPlus className="w-4 h-4" />
-          Affecter
-        </button>
         <button
           onClick={() => setShowAddPopup(true)}
           className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md"
@@ -673,159 +545,6 @@ return (
         </div>
       )}
     </div>
-
-    {/* Affecter Popup Modal */}
-    {showAffecterPopup && (
-      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 w-full max-w-7xl max-h-[90vh] overflow-y-auto m-4">
-          <h3 className="text-lg font-medium text-gray-900 mb-6">Affecter des Salariés</h3>
-          
-          <div className="space-y-6">
-            {/* Message section - Full width at the top */}
-            <div className="w-full">
-              <h4 className="text-md font-medium text-gray-800 mb-4">Message</h4>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Message d'affectation *
-                </label>
-                <textarea
-                  value={affecterMessage}
-                  onChange={(e) => setAffecterMessage(e.target.value)}
-                  className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Entrez votre message d'affectation (minimum 5 caractères)..."
-                  required
-                  minLength={5}
-                />
-                <p className="mt-1 text-sm text-gray-500">
-                  {affecterMessage.length}/255 caractères
-                </p>
-              </div>
-            </div>
-
-            {/* Salariés Actifs section - Full width in the middle */}
-            <div className="w-full">
-              <h4 className="text-md font-medium text-gray-800 mb-4">Salariés Actifs</h4>
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">N°</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nom Complet</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Téléphone</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Disponibilité</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {activeUsers.map((user, index) => {
-                      const userProjects = getSalaryProjects(user)
-                      const isAlreadyAffected = affectedSalaries.find(s => s.id === user.id)
-                      
-                      return (
-                        <tr key={user.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm text-gray-900">{index + 1}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900">{user.nom} {user.prenom}</td>
-                          <td className="px-4 py-3 text-sm text-gray-500">{user.telephone}</td>
-                          <td className="px-4 py-3 text-sm">
-                            {userProjects.length > 0 ? (
-                              <div className="space-y-1">
-                                {userProjects.map(project => (
-                                  <div key={project.id} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                                    {project.nom} ({project.statut.replace('_', ' ')})
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-green-600 text-xs">Disponible</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <button
-                              onClick={() => handleAffecterSalary(user)}
-                              disabled={!!isAlreadyAffected}
-                              className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                                isAlreadyAffected
-                                  ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                                  : "bg-green-600 text-white hover:bg-green-700"
-                              }`}
-                            >
-                              {isAlreadyAffected ? "Affecté" : "Affecter"}
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Salariés Affectés section - Full width at the bottom */}
-            <div className="w-full">
-              <h4 className="text-md font-medium text-gray-800 mb-4">Salariés Affectés ({affectedSalaries.length})</h4>
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">N°</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nom Complet</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {affectedSalaries.map((user, index) => (
-                      <tr key={user.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm text-gray-900">{index + 1}</td>
-                        <td className="px-4 py-3 text-sm text-gray-900">{user.nom} {user.prenom}</td>
-                        <td className="px-4 py-3">
-                          <button
-                            onClick={() => handleRetirerFromAffected(user.id)}
-                            className="px-3 py-1 bg-red-600 text-white text-xs font-medium rounded hover:bg-red-700 transition-colors"
-                          >
-                            Retirer
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {affectedSalaries.length === 0 && (
-                  <div className="text-center py-8 text-gray-500 text-sm">
-                    Aucun salarié affecté
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Footer buttons */}
-          <div className="flex justify-end gap-3 pt-6 border-t mt-6">
-            <button
-              type="button"
-              onClick={handleCloseAffecterPopup}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
-              disabled={isSubmitting}
-            >
-              Annuler
-            </button>
-            <button
-              onClick={handleSubmitAffectation}
-              disabled={isSubmitting || affectedSalaries.length === 0 || !affecterMessage.trim() || affecterMessage.trim().length < 5}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
-            >
-              {isSubmitting ? (
-                <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Enregistrement...</span>
-                </div>
-              ) : (
-                "Enregistrer"
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    )}
 
     {/* Add User Popup Modal */}
     {showAddPopup && (

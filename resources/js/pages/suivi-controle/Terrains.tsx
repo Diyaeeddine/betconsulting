@@ -46,6 +46,12 @@ interface Terrain {
   projet_name?: string
 }
 
+interface Profil {
+  id: number
+  nom: string
+  poste: string
+}
+
 interface Salarie {
   id: number
   nom: string
@@ -59,6 +65,13 @@ interface Salarie {
   emplacement?: string
   terrain_ids?: number[]
   projet_ids?: number[]
+  profils?: Profil[]
+}
+
+interface RhNeed {
+  profilename: string
+  profileposte: string
+  number: number
 }
 
 interface Projet {
@@ -78,6 +91,8 @@ interface Projet {
   longitude?: number
   radius?: number
   terrain_ids?: number[]
+  rh_needs?: RhNeed[]
+  salarie_ids?: number[]
 }
 
 interface SalariesDisponibility {
@@ -114,6 +129,70 @@ interface ParsedKMLTerrain {
   points: Point[]
   properties: any
 }
+
+// Profils and postes data
+const profilsPostes = [
+  {
+    value: "bureau_etudes",
+    label: "Bureau d'Études Techniques (BET)",
+    postes: [
+      "Ingénieur structure (béton, acier, bois)",
+      "Ingénieur génie civil",
+      "Ingénieur électricité / électricité industrielle",
+      "Ingénieur thermique / énergétique",
+      "Ingénieur fluides (HVAC, plomberie, CVC)",
+      "Ingénieur géotechnique",
+      "Dessinateur projeteur / DAO (Autocad, Revit, Tekla)",
+      "Technicien bureau d'études",
+      "Chargé d'études techniques",
+      "Ingénieur environnement / développement durable",
+      "Ingénieur calcul de structures",
+      "Architecte"
+    ],
+  },
+  {
+    value: "construction",
+    label: "Construction",
+    postes: [
+      "Chef de chantier",
+      "Conducteur de travaux",
+      "Ingénieur travaux / Ingénieur chantier",
+      "Conducteur d'engins",
+      "Chef d'équipe",
+      "Technicien travaux",
+      "Manœuvre / Ouvrier spécialisé",
+      "Coordinateur sécurité chantier (SST, prévention)",
+      "Métreur / Économiste de la construction"
+    ],
+  },
+  {
+    value: "suivi_controle",
+    label: "Suivi et Contrôle",
+    postes: [
+      "Contrôleur technique",
+      "Chargé de suivi qualité",
+      "Chargé de suivi sécurité",
+      "Inspecteur de chantier",
+      "Responsable HSE (Hygiène, Sécurité, Environnement)",
+      "Technicien contrôle qualité",
+      "Planificateur / Chargé de planning",
+      "Responsable logistique chantier"
+    ],
+  },
+  {
+    value: "support_gestion",
+    label: "Support et Gestion",
+    postes: [
+      "Responsable administratif chantier",
+      "Assistant de projet",
+      "Responsable achats / approvisionnement",
+      "Responsable qualité",
+      "Gestionnaire de contrats",
+      "Chargé de communication",
+      "Responsable financier / comptable chantier"
+    ],
+  },
+]
 
 // Input sanitization functions
 const sanitizeInput = {
@@ -299,7 +378,7 @@ const formatTimeAgo = (timestamp: string): string => {
   } else if (diffInSeconds < 3600) {
     const minutes = Math.floor(diffInSeconds / 60)
      console.log(`il y a ${minutes}min`)
-    return `il y a ${minutes}min`
+    return `il y a ${minutes} min`
   } else if (diffInSeconds < 86400) {
     const hours = Math.floor(diffInSeconds / 3600)
      console.log(`il y a ${hours}h`)
@@ -336,8 +415,18 @@ export default function TerrainsManagement() {
 
   // New states for notifications and filtering
   const [showNotifications, setShowNotifications] = useState(false)
+  const [showProjectsPopup, setShowProjectsPopup] = useState(false)
   const [selectedProjectFilter, setSelectedProjectFilter] = useState<number | null>(null)
   const [deactivatingNotifications, setDeactivatingNotifications] = useState<{[key: number]: boolean}>({})
+
+  // New states for project salaries popup
+  const [showProjectSalariesPopup, setShowProjectSalariesPopup] = useState(false)
+  const [selectedProject, setSelectedProject] = useState<Projet | null>(null)
+  const [affectedSalaries, setAffectedSalaries] = useState<number[]>([])
+  const [isSubmittingProjectSalaries, setIsSubmittingProjectSalaries] = useState(false)
+  const [projectRhNeedsState, setProjectRhNeedsState] = useState<RhNeed[]>([])
+  // New state to track original project data for comparison
+  const [originalProjectData, setOriginalProjectData] = useState<{salarie_ids: number[], rh_needs: RhNeed[]} | null>(null)
 
   // KML/KMZ related states
   const [uploadedKMLData, setUploadedKMLData] = useState<ParsedKMLTerrain[]>([])
@@ -345,13 +434,12 @@ export default function TerrainsManagement() {
   const [isProcessingFile, setIsProcessingFile] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [selectedSalarie, setSelectedSalarie] = useState<number | null>(null)
+  const [selectedTerrain, setSelectedTerrain] = useState<Terrain | null>(null)
   const [isDrawingMode, setIsDrawingMode] = useState<boolean>(false)
   const [currentPoints, setCurrentPoints] = useState<Point[]>([])
   const [showCreatePopup, setShowCreatePopup] = useState<boolean>(false)
   const [showEditPopup, setShowEditPopup] = useState<boolean>(false)
   const [showSalariesPopup, setShowSalariesPopup] = useState<boolean>(false)
-  const [selectedTerrain, setSelectedTerrain] = useState<Terrain | null>(null)
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
   const [assigningStates, setAssigningStates] = useState<{[key: string]: boolean}>({})
 
@@ -397,7 +485,215 @@ export default function TerrainsManagement() {
     }
   }, [flashMessages, addMessage])
 
-  // Notification deactivation handler
+  // ENHANCED: Project salaries popup handlers with proper state management
+  const openProjectSalariesPopup = (projet: Projet) => {
+    // Get the latest project data to ensure we have current state
+    const currentProject = projects.find(p => p.id === projet.id) || projet
+    
+    setSelectedProject(currentProject)
+    // Set initial affected salaries from current project state
+    const currentAffectedSalaries = currentProject.salarie_ids || []
+    setAffectedSalaries([...currentAffectedSalaries])
+    
+    // Deep copy the RH needs to avoid mutations
+    const currentRhNeeds = currentProject.rh_needs ? JSON.parse(JSON.stringify(currentProject.rh_needs)) : []
+    setProjectRhNeedsState(currentRhNeeds)
+    
+    // Store original data for comparison and reset calculations
+    setOriginalProjectData({
+      salarie_ids: [...currentAffectedSalaries],
+      rh_needs: JSON.parse(JSON.stringify(currentRhNeeds))
+    })
+    
+    setShowProjectSalariesPopup(true)
+    setShowNotifications(false)
+    setShowProjectsPopup(false)
+  }
+
+  const handleProjectRowClick = (projet: Projet) => {
+    openProjectSalariesPopup(projet)
+  }
+
+  // FIXED: Enhanced toggle function that properly handles assignment/removal
+  const toggleSalarieInProject = (salarieId: number) => {
+    setAffectedSalaries(prev => {
+      const isCurrentlyAffected = prev.includes(salarieId)
+      
+      if (isCurrentlyAffected) {
+        // REMOVE from affected - always allow removal
+        const salarie = salaries.find(s => s.id === salarieId)
+        if (salarie?.profils?.[0] && originalProjectData) {
+          // Find if this salarie was originally assigned
+          const wasOriginallyAssigned = originalProjectData.salarie_ids.includes(salarieId)
+          
+          if (wasOriginallyAssigned) {
+            // If originally assigned, restore the need count when removing
+            const profile = salarie.profils[0]
+            setProjectRhNeedsState(prevNeeds => 
+              prevNeeds.map(need => 
+                need.profilename === profile.nom && need.profileposte === profile.poste
+                  ? { ...need, number: need.number + 1 }
+                  : need
+              )
+            )
+          }
+        }
+        
+        console.log(`Removing salary ${salarieId} from project`)
+        return prev.filter(id => id !== salarieId)
+      } else {
+        // ADD to affected - check if there's available need
+        const salarie = salaries.find(s => s.id === salarieId)
+        if (salarie?.profils?.[0]) {
+          const profile = salarie.profils[0]
+          const needIndex = projectRhNeedsState.findIndex(
+            need => need.profilename === profile.nom && 
+                   need.profileposte === profile.poste && 
+                   need.number > 0
+          )
+          
+          if (needIndex >= 0) {
+            // Decrease the need count when adding
+            setProjectRhNeedsState(prevNeeds => 
+              prevNeeds.map((need, idx) => 
+                idx === needIndex
+                  ? { ...need, number: need.number - 1 }
+                  : need
+              )
+            )
+            console.log(`Adding salary ${salarieId} to project`)
+            return [...prev, salarieId]
+          } else {
+            // Still allow assignment even if no explicit need
+            console.log(`Adding salary ${salarieId} to project (no specific need requirement)`)
+            addMessage('info', 'Profil ajouté sans besoin spécifique')
+            return [...prev, salarieId]
+          }
+        }
+        return [...prev, salarieId]
+      }
+    })
+  }
+
+  // ENHANCED: Submit function with better error handling and state updates
+  const submitProjectSalaries = async () => {
+    if (!selectedProject) return
+
+    setIsSubmittingProjectSalaries(true)
+
+    const payload = {
+      projet_id: selectedProject.id,
+      name: selectedProject.nom,
+      salarie_ids: affectedSalaries
+    }
+
+    console.log('Submitting project salaries:', payload)
+
+    try {
+      await new Promise((resolve, reject) => {
+        router.put('/suivi-controle/ProjetSals', payload, {
+          onSuccess: (page) => {
+            addMessage('success', 'Affectations enregistrées avec succès')
+            
+            // Update local project state immediately
+            setProjects(prev => prev.map(p => 
+              p.id === selectedProject.id 
+                ? { ...p, salarie_ids: [...affectedSalaries] }
+                : p
+            ))
+            
+            // Update local salaries state
+            setSalaries(prev => prev.map(salarie => {
+              const wasInProject = (originalProjectData?.salarie_ids || []).includes(salarie.id)
+              const isNowInProject = affectedSalaries.includes(salarie.id)
+              
+              let newProjetIds = [...(salarie.projet_ids || [])]
+              
+              if (wasInProject && !isNowInProject) {
+                // Remove from project
+                newProjetIds = newProjetIds.filter(id => id !== selectedProject.id)
+              } else if (!wasInProject && isNowInProject) {
+                // Add to project
+                if (!newProjetIds.includes(selectedProject.id)) {
+                  newProjetIds.push(selectedProject.id)
+                }
+              }
+              
+              return {
+                ...salarie,
+                projet_ids: newProjetIds
+              }
+            }))
+            
+            setShowProjectSalariesPopup(false)
+            setSelectedProject(null)
+            setAffectedSalaries([])
+            setOriginalProjectData(null)
+            
+            // Refresh data to ensure consistency
+            fetchAllData()
+            resolve(page)
+          },
+          onError: (errors) => {
+            console.error('Submit project salaries error:', errors)
+            const errorMsg = extractErrorMessage(errors)
+            addMessage('error', errorMsg)
+            reject(errors)
+          }
+        })
+      })
+    } catch (error) {
+      console.error('Project salaries submission error:', error)
+    } finally {
+      setIsSubmittingProjectSalaries(false)
+    }
+  }
+
+  const getProfileLabel = (profileName: string): string => {
+    const profile = profilsPostes.find(p => p.value === profileName)
+    return profile?.label || profileName
+  }
+
+  const getSalarieDisplayName = (salarie: Salarie): string => {
+    if (salarie.profils && salarie.profils.length > 0) {
+      const profil = salarie.profils[0]
+      return `${profil.poste} - ${profil.nom}`
+    }
+    return `${salarie.nom} ${salarie.prenom}`
+  }
+
+  // FIXED: Calculate total remaining positions needed (not number of need types)
+  const getTotalRemainingPositions = (): number => {
+    if (!originalProjectData) return 0
+    
+    const totalOriginalNeeds = originalProjectData.rh_needs.reduce((sum, need) => sum + need.number, 0)
+    const totalCurrentAssignments = affectedSalaries.length
+    
+    return Math.max(0, totalOriginalNeeds - totalCurrentAssignments)
+  }
+
+  // ENHANCED: Function to check if a salarie can be affected (for UI feedback)
+  const canSalarieBeAffected = (salarie: Salarie): boolean => {
+    // Always allow if already affected (for removal)
+    if (affectedSalaries.includes(salarie.id)) {
+      return true
+    }
+    
+    // Allow assignment if there are available needs or if no specific needs requirement
+    if (salarie.profils?.[0]) {
+      const profile = salarie.profils[0]
+      const hasAvailableNeed = projectRhNeedsState.some(
+        need => need.profilename === profile.nom && 
+               need.profileposte === profile.poste && 
+               need.number > 0
+      )
+      return hasAvailableNeed || projectRhNeedsState.length === 0
+    }
+    
+    return true // Always allow if no specific profile requirement
+  }
+
+  // Notification deactivation handler - only for X button
   const deactivateNotification = async (notificationId: number) => {
     setDeactivatingNotifications(prev => ({ ...prev, [notificationId]: true }))
     
@@ -605,18 +901,27 @@ export default function TerrainsManagement() {
       const salariesWithIds = salaries.map((salarie: any) => ({
         ...salarie,
         terrain_ids: Array.isArray(salarie.terrain_ids) ? salarie.terrain_ids : [],
-        projet_ids: Array.isArray(salarie.projet_ids) ? salarie.projet_ids : []
+        projet_ids: Array.isArray(salarie.projet_ids) ? salarie.projet_ids : [],
+        profils: Array.isArray(salarie.profils) ? salarie.profils : [],
+        salarie_ids: Array.isArray(salarie.salarie_ids) ? salarie.salarie_ids : []
+      }))
+
+      // Process projects with rh_needs and salarie_ids
+      const projectsWithNeeds = projets.map((projet: any) => ({
+        ...projet,
+        rh_needs: Array.isArray(projet.rh_needs) ? projet.rh_needs : [],
+        salarie_ids: Array.isArray(projet.salarie_ids) ? projet.salarie_ids : []
       }))
 
       console.log('Data fetched successfully:', {
         terrains: terrainsWithProjects.length,
-        projets: projets.length,
+        projets: projectsWithNeeds.length,
         salaries: salariesWithIds.length,
         notifications: mssgs.length
       })
 
       setTerrains(terrainsWithProjects)
-      setProjects(projets)
+      setProjects(projectsWithNeeds)
       setSalaries(salariesWithIds)
       setNotifications(mssgs)
       
@@ -632,7 +937,7 @@ export default function TerrainsManagement() {
   useEffect(() => { fetchAllData() }, [fetchAllData])
 
   // Check if any popup is open
-  const isAnyPopupOpen = showCreatePopup || showEditPopup || showSalariesPopup || showKMLData || showNotifications
+  const isAnyPopupOpen = showCreatePopup || showEditPopup || showSalariesPopup || showKMLData || showNotifications || showProjectSalariesPopup || showProjectsPopup
 
   // Focus terrain on map
   const focusTerrainOnMap = (terrain: Terrain) => {
@@ -666,6 +971,8 @@ export default function TerrainsManagement() {
     setShowSalariesPopup(false)
     setShowKMLData(false)
     setShowNotifications(false)
+    setShowProjectSalariesPopup(false)
+    setShowProjectsPopup(false)
     setError(null)
     setValidationErrors({})
   }
@@ -1011,27 +1318,22 @@ export default function TerrainsManagement() {
     )
   }
 
-  const selectedSalarieData = salaries.find(s => s.id === selectedSalarie)
   const terrainsActifs = terrains.filter(t => t.statut_tech === "en_cours" || t.statut_tech === "en_revision")
 
-  // Filter terrains based on selected salarie and project
+  // Filter terrains based on selected project only (removed salarie filtering)
   let filteredTerrains = terrains
-  
-  if (selectedSalarie !== null) {
-    filteredTerrains = filteredTerrains.filter(t => (t.salarie_ids || []).includes(selectedSalarie))
-  }
   
   if (selectedProjectFilter !== null) {
     filteredTerrains = filteredTerrains.filter(t => t.projet_id === selectedProjectFilter)
   }
 
-  // FIXED: Function to get proper project and terrain information for salaries popup
+  // FIXED: Function to get proper project and terrain information for salaries popup - SAME AS TERRAIN POPUP
   const getSalarieAvailabilityDisplay = (salarie: Salarie): JSX.Element => {
     const salarieProjects = projects.filter(p => (salarie.projet_ids || []).includes(p.id))
     const salarieTerrains = terrains.filter(t => (salarie.terrain_ids || []).includes(t.id))
 
     if (salarieProjects.length === 0 && salarieTerrains.length === 0) {
-      return <div className="text-sm text-green-600">Disponible</div>
+      return <div className="text-sm text-green-600 font-medium">✓ Disponible</div>
     }
 
     return (
@@ -1042,14 +1344,14 @@ export default function TerrainsManagement() {
           
           return (
             <div key={project.id} className="text-gray-600">
-              <div className="font-medium text-blue-700">{project.nom} {projectTerrains.length > 0 ? (
-                <div className="ml-4 text-xs">
+              <div className="font-medium text-blue-700">{project.nom}</div>
+              {projectTerrains.length > 0 ? (
+                <div className="ml-2 text-xs">
                   <span className="text-green-600">Terrains:</span> {projectTerrains.map(t => t.name).join(', ')}
                 </div>
               ) : (
-                <div className="ml-4 text-xs text-gray-400">Aucun terrain assigné sur ce projet</div>
-              )}</div>
-              
+                <div className="ml-2 text-xs text-orange-600">Projet assigné - Aucun terrain</div>
+              )}
             </div>
           )
         })}
@@ -1063,8 +1365,8 @@ export default function TerrainsManagement() {
           if (orphanTerrains.length > 0) {
             return (
               <div className="text-gray-600">
-                <div className="font-medium text-orange-600">Affecter ce Profil au Projet</div>
-                <div className="ml-4 text-xs">
+                <div className="font-medium text-orange-600">Terrains sans projet assigné:</div>
+                <div className="ml-2 text-xs">
                   {orphanTerrains.map(t => `${t.name} (${t.projet_name})`).join(', ')}
                 </div>
               </div>
@@ -1127,79 +1429,80 @@ export default function TerrainsManagement() {
           </div>
 
           {/* Notifications Popup */}
-          {showNotifications && (
-            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto m-4">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">
-                    Notifications ({notifications.length})
-                  </h3>
-                  <button
-                    onClick={() => setShowNotifications(false)}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
+        {showNotifications && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto m-4">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Notifications ({notifications.length})
+                </h3>
+                <button
+                  onClick={() => setShowNotifications(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
 
-                <div className="space-y-4">
-                  {notifications.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <Bell className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                      <p>Aucune notification</p>
-                    </div>
-                  ) : (
-                    notifications.map((notification) => (
-                      <div
-                        key={notification.id}
-                        className={`border border-gray-200 rounded-lg p-4 cursor-pointer transition-colors hover:bg-gray-50 ${
-                          deactivatingNotifications[notification.id] ? 'opacity-50' : ''
-                        }`}
-                        onClick={() => !deactivatingNotifications[notification.id] && deactivateNotification(notification.id)}
-                      >
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center gap-2 text-sm font-medium text-blue-600">
-                            <Users className="w-4 h-4" />
-                            <span>{notification.salaries_ids.length} Nouveaux Profils à Affecter</span>
-                          </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              if (!deactivatingNotifications[notification.id]) {
-                                deactivateNotification(notification.id)
-                              }
-                            }}
-                            disabled={deactivatingNotifications[notification.id]}
-                            className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
-                          >
-                            {deactivatingNotifications[notification.id] ? (
-                              <div className="w-4 h-4 border border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                            ) : (
-                              <X className="w-4 h-4" />
-                            )}
-                          </button>
+              <div className="space-y-4">
+                {notifications.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Bell className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p>Aucune notification</p>
+                  </div>
+                ) : (
+                  notifications.map((notification) => (
+                    <div
+                      key={notification.id}
+                      className={`border border-gray-200 rounded-lg p-4 transition-colors ${
+                        deactivatingNotifications[notification.id] ? 'opacity-50' : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="text-sm font-semibold text-gray-800">
+                          {notification.sender} :
                         </div>
-                        <div className="text-sm text-gray-700 mb-2">{notification.message}</div>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <Clock className="w-3 h-3" />
-                          <span>{formatTimeAgo(notification.recorded_at)}</span>
-                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!deactivatingNotifications[notification.id]) {
+                              deactivateNotification(notification.id);
+                            }
+                          }}
+                          disabled={deactivatingNotifications[notification.id]}
+                          className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                        >
+                          {deactivatingNotifications[notification.id] ? (
+                            <div className="w-4 h-4 border border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                          ) : (
+                            <X className="w-4 h-4" />
+                          )}
+                        </button>
                       </div>
-                    ))
-                  )}
-                </div>
 
-                <div className="flex justify-end pt-4 border-t mt-6">
-                  <button
-                    onClick={() => setShowNotifications(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    Fermer
-                  </button>
-                </div>
+                      <div className="text-sm text-gray-700 mb-4">{notification.message}</div>
+
+                      <div className="flex justify-end text-xs text-gray-500">
+                        <Clock className="w-3 h-3 mr-1" />
+                        <span><strong>{formatTimeAgo(notification.recorded_at)}</strong></span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="flex justify-end pt-4 border-t mt-6">
+                <button
+                  onClick={() => setShowNotifications(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Fermer
+                </button>
               </div>
             </div>
-          )}
+          </div>
+        )}
+
 
           {/* Messages Display */}
           <div className="fixed top-4 right-4 z-40 space-y-2">
@@ -1251,8 +1554,8 @@ export default function TerrainsManagement() {
                   <Users className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Total Profils</p>
-                  <p className="text-2xl font-bold text-gray-900">{salaries.length}</p>
+                  <p className="text-sm font-medium text-gray-600">Profiles Disponibles</p>
+                  <p className="text-2xl font-bold text-gray-900">{salaries.filter(s => s.emplacement === 'terrain').length}</p>
                 </div>
               </div>
             </div>
@@ -1281,46 +1584,122 @@ export default function TerrainsManagement() {
               </div>
             </div>
 
-            <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
+            <div 
+              className="bg-white rounded-lg p-6 shadow-md border border-gray-100 cursor-pointer hover:shadow-lg transition-shadow"
+              onClick={() => setShowProjectsPopup(true)}
+            >
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-purple-100 rounded-lg">
                   <MapPin className="w-5 h-5 text-purple-600" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Projets</p>
+                  <p className="text-sm font-medium text-gray-600">Total Projets</p>
                   <p className="text-2xl font-bold text-gray-900">{projects.length}</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Map Section */}
+          {/* Projects Popup - UPDATED to show as TABLE */}
+          {showProjectsPopup && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-7xl max-h-[80vh] overflow-y-auto m-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Liste des Projets ({projects.length})
+                  </h3>
+                  <button
+                    onClick={() => setShowProjectsPopup(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom Projet</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Début</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Fin</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Besoins RH</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Profils Affectés</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {projects.map((project) => (
+                        <tr 
+                          key={project.id} 
+                          className="hover:bg-gray-50 cursor-pointer transition-colors"
+                          onClick={() => handleProjectRowClick(project)}
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">
+                              <TruncatedText text={project.nom} maxLength={30} />
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm text-gray-600 max-w-xs">
+                              <TruncatedText text={project.description} maxLength={60} />
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {getStatusBadge(project.statut)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {new Date(project.date_debut).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {new Date(project.date_fin).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              {(project.rh_needs || []).reduce((sum, need) => sum + need.number, 0)} postes
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              {(project.salarie_ids || []).length} affectés
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {projects.length === 0 && (
+                  <div className="text-center py-12">
+                    <div className="text-gray-500">
+                      <MapPin className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                      <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun projet</h3>
+                      <p className="mt-1 text-sm text-gray-500">Aucun projet trouvé dans le système.</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-4 border-t mt-6">
+                  <button
+                    onClick={() => setShowProjectsPopup(false)}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Map Section - Updated without profile filter */}
           <div className={`bg-white rounded-lg shadow-md border border-gray-100 p-6 transition-opacity duration-300 ${
             isAnyPopupOpen ? 'opacity-75' : 'opacity-100'
           }`}>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold text-gray-900">Carte</h2>
               <div className="flex gap-3">
-                <select
-                  value={selectedSalarie === null ? "" : selectedSalarie.toString()}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    setSelectedSalarie(value === "" ? null : Number(value))
-                    if (isDrawingMode) {
-                      cancelDrawing()
-                    }
-                  }}
-                  className="border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                  disabled={isDrawingMode}
-                >
-                  <option value="">Tous les profils</option>
-                  {salaries.map(salarie => (
-                    <option key={salarie.id} value={salarie.id}>
-                      {salarie.nom} {salarie.prenom}
-                    </option>
-                  ))}
-                </select>
-
                 <select
                   value={selectedProjectFilter === null ? "" : selectedProjectFilter.toString()}
                   onChange={(e) => {
@@ -1391,16 +1770,16 @@ export default function TerrainsManagement() {
               </div>
             </div>
 
-            {/* React Leaflet Map */}
+            {/* React Leaflet Map - Centered on Morocco */}
             <div className={`w-full relative rounded-lg border-2 overflow-hidden ${
               isDrawingMode ? 'border-green-500' : 'border-gray-300'
             }`}>
               <MapContainer
-                center={[33.5731, -7.5898]}
-                zoom={13}
+                center={[31.7917, -7.0926]}
+                zoom={6}
                 style={{ height: '500px', width: '100%' }}
                 ref={mapRef}
-                key={`map-${selectedSalarie}-${selectedProjectFilter}-${filteredTerrains.length}`}
+                key={`map-${selectedProjectFilter}-${filteredTerrains.length}`}
               >
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -1557,6 +1936,205 @@ export default function TerrainsManagement() {
             </div>
           </div>
 
+          {/* FIXED: Project Salaries Popup - Updated with correct availability display and fixed RH calculation */}
+          {showProjectSalariesPopup && selectedProject && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-7xl max-h-[90vh] overflow-y-auto m-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Affectation Profils - Projet: <TruncatedText text={selectedProject.nom} maxLength={30} />
+                    <span className="text-sm font-normal text-gray-500 ml-2">
+                      (Profils affectés: {affectedSalaries.length})
+                    </span>
+                  </h3>
+                  <button
+                    onClick={() => setShowProjectSalariesPopup(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                {/* Project Selection */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Sélectionner un projet</label>
+                  <select
+                    value={selectedProject.id}
+                    onChange={(e) => {
+                      const projectId = parseInt(e.target.value)
+                      const project = projects.find(p => p.id === projectId)
+                      if (project) {
+                        openProjectSalariesPopup(project)
+                      }
+                    }}
+                    className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {projects.map(project => (
+                      <option key={project.id} value={project.id}>
+                        {project.nom}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+              
+
+                {/* Two Tables Side by Side */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* ALL Salaries Table - FIXED with same display as terrain salaries */}
+                  <div>
+                    <h4 className="text-md font-medium text-gray-900 mb-3">
+                      Tous les Salariés ({affectedSalaries.length} affectés sur {salaries.length})
+                    </h4>
+                    <div className="border rounded-md max-h-96 overflow-y-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">N°</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Téléphone</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Disponibilité</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {salaries
+                            .filter(s => s.emplacement === 'terrain')
+                            .map((salarie, index) => {
+                              const isAffected = affectedSalaries.includes(salarie.id)
+                              const canAffect = canSalarieBeAffected(salarie)
+
+                              return (
+                                <tr key={salarie.id} className={isAffected ? "bg-green-50 border-l-4 border-green-400" : "hover:bg-gray-50"}>
+                                  <td className="px-3 py-3 text-sm font-medium">{index + 1}</td>
+                                  <td className="px-3 py-3">
+                                    <div className="text-sm font-medium text-gray-900">
+                                      <TruncatedText text={`${salarie.nom} ${salarie.prenom}`} maxLength={20} />
+                                    </div>
+                                    <div className="text-xs text-gray-500">{salarie.statut}</div>
+                                    {salarie.profils?.[0] && (
+                                      <div className="text-xs text-blue-600">
+                                        {salarie.profils[0].poste}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <div className="flex items-center gap-1 text-sm text-gray-600">
+                                      <Phone className="w-3 h-3" />
+                                      {salarie.telephone}
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-3 text-sm max-w-xs">
+                                    {getSalarieAvailabilityDisplay(salarie)}
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <button
+                                      onClick={() => toggleSalarieInProject(salarie.id)}
+                                      className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors ${
+                                        isAffected
+                                          ? "bg-red-100 text-red-700 hover:bg-red-200"
+                                          : canAffect
+                                          ? "bg-green-100 text-green-700 hover:bg-green-200"
+                                          : "bg-gray-100 text-gray-400"
+                                      }`}
+                                    >
+                                      {isAffected ? (
+                                        <>
+                                          <UserMinus className="w-3 h-3" />
+                                          Retirer
+                                        </>
+                                      ) : (
+                                        <>
+                                          <UserPlus className="w-3 h-3" />
+                                          Affecter
+                                        </>
+                                      )}
+                                    </button>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* FIXED: RH Needs Table - Shows only original needs, removed restant column */}
+                  <div>
+                    <h4 className="text-md font-medium text-gray-900 mb-3">
+                      Besoins RH ({getTotalRemainingPositions()} postes restants)
+                    </h4>
+                    <div className="border rounded-md max-h-96 overflow-y-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Profil</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Poste</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {(originalProjectData?.rh_needs || []).map((originalNeed, index) => {
+                            const currentNeed = projectRhNeedsState.find(
+                              need => need.profilename === originalNeed.profilename && 
+                                      need.profileposte === originalNeed.profileposte
+                            ) || { ...originalNeed, number: 0 }
+                            
+                            const isCompleted = currentNeed.number === 0
+
+                            return (
+                              <tr key={index} className={isCompleted ? "bg-green-50" : "hover:bg-gray-50"}>
+                                <td className="px-4 py-2 text-xs">
+                                  <TruncatedText text={getProfileLabel(originalNeed.profilename)} maxLength={25} />
+                                </td>
+                                <td className="px-4 py-2 text-xs">
+                                  <TruncatedText text={originalNeed.profileposte} maxLength={30} />
+                                </td>
+                                <td className="px-4 py-2 text-sm">
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    {originalNeed.number}
+                                  </span>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end gap-3 pt-6 border-t mt-6">
+                  <button
+                    onClick={() => setShowProjectSalariesPopup(false)}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                    disabled={isSubmittingProjectSalaries}
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={submitProjectSalaries}
+                    disabled={isSubmittingProjectSalaries}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    {isSubmittingProjectSalaries ? (
+                      <div className="flex items-center space-x-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>Enregistrement...</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center space-x-2">
+                        <Save className="w-4 h-4" />
+                        <span>Enregistrer ({affectedSalaries.length})</span>
+                      </div>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* KML Data Display Popup */}
           {showKMLData && uploadedKMLData.length > 0 && (
             <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
@@ -1622,16 +2200,14 @@ export default function TerrainsManagement() {
             </div>
           )}
 
-          {/* Terrains Table - Updated with text truncation */}
+          {/* Terrains Table - Updated with text truncation and removed profile filter display */}
           <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">
                 Liste des Terrains
-                {(selectedSalarie || selectedProjectFilter) && (
+                {selectedProjectFilter && (
                   <span className="text-sm font-normal text-gray-500 ml-2">
-                    - Filtré par {selectedSalarie ? `profil: ${selectedSalarieData?.nom} ${selectedSalarieData?.prenom}` : ''} 
-                    {selectedSalarie && selectedProjectFilter ? ' et ' : ''}
-                    {selectedProjectFilter ? `projet: ${projects.find(p => p.id === selectedProjectFilter)?.nom}` : ''}
+                    - Filtré par projet: {projects.find(p => p.id === selectedProjectFilter)?.nom}
                   </span>
                 )}
               </h2>
@@ -1721,7 +2297,7 @@ export default function TerrainsManagement() {
                   <MapIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                   <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun terrain</h3>
                   <p className="mt-1 text-sm text-gray-500">
-                    {selectedSalarie || selectedProjectFilter
+                    {selectedProjectFilter
                       ? "Aucun terrain trouvé avec les filtres sélectionnés."
                       : "Commencez par créer votre premier terrain sur la carte."
                     }
@@ -1860,7 +2436,9 @@ export default function TerrainsManagement() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                          {salaries.filter(s => s.emplacement === 'terrain').map(salarie => (
+                          {salaries
+                          .filter(s => s.emplacement === 'terrain')
+                          .map(salarie => (
                             <tr key={salarie.id} className="hover:bg-gray-50">
                               <td className="px-4 py-2 text-sm">
                                 <TruncatedText text={`${salarie.nom} ${salarie.prenom}`} maxLength={20} />
@@ -1950,125 +2528,85 @@ export default function TerrainsManagement() {
             </div>
           )}
 
-          {/* Enhanced Salaries Assignment Popup - Fixed to show proper availability */}
+          {/* Enhanced Salaries Assignment Popup - UPDATED with specific format */}
           {showSalariesPopup && selectedTerrain && (
             <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg p-6 w-full max-w-6xl max-h-[80vh] overflow-y-auto m-4">
+              <div className="bg-white rounded-lg p-6 w-full max-w-7xl max-h-[80vh] overflow-y-auto m-4">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">
                   Profils - Terrain #{selectedTerrain.id} - <TruncatedText text={selectedTerrain.name} maxLength={30} />
                 </h3>
 
                 <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">N°</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Téléphone</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Disponibilité</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
-                    </tr>
-                  </thead>
-                 <tbody className="divide-y divide-gray-200">
-                    {/* Assigned salaries */}
-                    {salaries
-                      .filter(salarie => (selectedTerrain.salarie_ids || []).includes(salarie.id))
-                      .map((salarie, index) => {
-                        const assignKey = `${salarie.id}-${selectedTerrain.id}`;
-                        const isAssigning = assigningStates[assignKey];
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">N°</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Téléphone</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Disponibilité</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {/* ALL salaries including assigned and unassigned */}
+                      {salaries
+                        .filter(salarie => salarie.emplacement === 'terrain')
+                        .map((salarie, index) => {
+                          const assignKey = `${salarie.id}-${selectedTerrain.id}`;
+                          const isAssigning = assigningStates[assignKey];
+                          const isAssigned = (selectedTerrain.salarie_ids || []).includes(salarie.id);
 
-                        return (
-                          <tr key={salarie.id} className="bg-green-50 hover:bg-green-100">
-                            <td className="px-4 py-3 text-sm">{index + 1}</td>
-                            <td className="px-4 py-3">
-                              <div className="text-sm font-medium text-gray-900">
-                                <TruncatedText text={`${salarie.nom} ${salarie.prenom}`} maxLength={25} />
-                              </div>
-                              <div className="text-sm text-gray-500">{salarie.statut}</div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-1 text-sm text-gray-600">
-                                <Phone className="w-3 h-3" />
-                                {salarie.telephone}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600 max-w-xs">
-                              {getSalarieAvailabilityDisplay(salarie)}
-                            </td>
-                            <td className="px-4 py-3">
-                              <button
-                                onClick={() => toggleSalarieAssignment(salarie.id, selectedTerrain.id)}
-                                disabled={isAssigning}
-                                className="inline-flex items-center gap-1 px-3 py-1 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors disabled:opacity-50"
-                              >
-                                {isAssigning ? (
-                                  <>
-                                    <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
-                                    Traitement...
-                                  </>
-                                ) : (
-                                  <>
-                                    <UserMinus className="w-3 h-3" />
-                                    Retirer
-                                  </>
-                                )}
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-
-                    {/* Unassigned salaries */}
-                    {salaries
-                      .filter(salarie => !(selectedTerrain.salarie_ids || []).includes(salarie.id) && salarie.emplacement === 'terrain')
-                      .map((salarie, index) => {
-                        const assignKey = `${salarie.id}-${selectedTerrain.id}`;
-                        const isAssigning = assigningStates[assignKey];
-
-                        return (
-                          <tr key={salarie.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm">{(selectedTerrain.salarie_ids || []).length + index + 1}</td>
-                            <td className="px-4 py-3">
-                              <div className="text-sm font-medium text-gray-900">
-                                <TruncatedText text={`${salarie.nom} ${salarie.prenom}`} maxLength={25} />
-                              </div>
-                              <div className="text-sm text-gray-500">{salarie.statut}</div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-1 text-sm text-gray-600">
-                                <Phone className="w-3 h-3" />
-                                {salarie.telephone}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600 max-w-xs">
-                              {getSalarieAvailabilityDisplay(salarie)}
-                            </td>
-                            <td className="px-4 py-3">
-                              <button
-                                onClick={() => toggleSalarieAssignment(salarie.id, selectedTerrain.id)}
-                                disabled={isAssigning}
-                                className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition-colors disabled:opacity-50"
-                              >
-                                {isAssigning ? (
-                                  <>
-                                    <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
-                                    Traitement...
-                                  </>
-                                ) : (
-                                  <>
-                                    <UserPlus className="w-3 h-3" />
-                                    Affecter
-                                  </>
-                                )}
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                  </tbody>
-
-                </table>
-
+                          return (
+                            <tr key={salarie.id} className={isAssigned ? "bg-green-50 hover:bg-green-100" : "hover:bg-gray-50"}>
+                              <td className="px-4 py-3 text-sm font-medium">{index + 1}</td>
+                              <td className="px-4 py-3">
+                                <div className="text-sm font-medium text-gray-900">
+                                  <TruncatedText text={`${salarie.nom} ${salarie.prenom}`} maxLength={25} />
+                                </div>
+                                <div className="text-sm text-gray-500">{salarie.statut}</div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-1 text-sm text-gray-600">
+                                  <Phone className="w-3 h-3" />
+                                  {salarie.telephone}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-600 max-w-xs">
+                                {getSalarieAvailabilityDisplay(salarie)}
+                              </td>
+                              <td className="px-4 py-3">
+                                <button
+                                  onClick={() => toggleSalarieAssignment(salarie.id, selectedTerrain.id)}
+                                  disabled={isAssigning}
+                                  className={`inline-flex items-center gap-1 px-3 py-1 text-sm font-medium rounded transition-colors disabled:opacity-50 ${
+                                    isAssigned
+                                      ? "bg-red-600 text-white hover:bg-red-700"
+                                      : "bg-green-600 text-white hover:bg-green-700"
+                                  }`}
+                                >
+                                  {isAssigning ? (
+                                    <>
+                                      <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
+                                      Traitement...
+                                    </>
+                                  ) : isAssigned ? (
+                                    <>
+                                      <UserMinus className="w-3 h-3" />
+                                      Retirer
+                                    </>
+                                  ) : (
+                                    <>
+                                      <UserPlus className="w-3 h-3" />
+                                      Affecter
+                                    </>
+                                  )}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
                 </div>
 
                 <div className="flex justify-end pt-4 border-t mt-6">

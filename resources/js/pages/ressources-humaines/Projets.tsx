@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Head, useForm, router } from '@inertiajs/react';
-import { Plus, Edit, Trash2, Eye, MapPin, Calendar, DollarSign } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, MapPin, Calendar, DollarSign, Users, Minus } from 'lucide-react';
 
 const breadcrumbs = [
     {
@@ -14,9 +14,78 @@ const breadcrumbs = [
     },
 ];
 
+const profilsPostes = [
+    {
+        value: "bureau_etudes",
+        label: "Bureau d'Études Techniques (BET)",
+        postes: [
+            "Ingénieur structure (béton, acier, bois)",
+            "Ingénieur génie civil",
+            "Ingénieur électricité / électricité industrielle",
+            "Ingénieur thermique / énergétique",
+            "Ingénieur fluides (HVAC, plomberie, CVC)",
+            "Ingénieur géotechnique",
+            "Dessinateur projeteur / DAO (Autocad, Revit, Tekla)",
+            "Technicien bureau d'études",
+            "Chargé d'études techniques",
+            "Ingénieur environnement / développement durable",
+            "Ingénieur calcul de structures",
+            "Architecte"
+        ],
+    },
+    {
+        value: "construction",
+        label: "Construction",
+        postes: [
+            "Chef de chantier",
+            "Conducteur de travaux",
+            "Ingénieur travaux / Ingénieur chantier",
+            "Conducteur d'engins",
+            "Chef d'équipe",
+            "Technicien travaux",
+            "Manœuvre / Ouvrier spécialisé",
+            "Coordinateur sécurité chantier (SST, prévention)",
+            "Métreur / Économiste de la construction"
+        ],
+    },
+    {
+        value: "suivi_controle",
+        label: "Suivi et Contrôle",
+        postes: [
+            "Contrôleur technique",
+            "Chargé de suivi qualité",
+            "Chargé de suivi sécurité",
+            "Inspecteur de chantier",
+            "Responsable HSE (Hygiène, Sécurité, Environnement)",
+            "Technicien contrôle qualité",
+            "Planificateur / Chargé de planning",
+            "Responsable logistique chantier"
+        ],
+    },
+    {
+        value: "support_gestion",
+        label: "Support et Gestion",
+        postes: [
+            "Responsable administratif chantier",
+            "Assistant de projet",
+            "Responsable achats / approvisionnement",
+            "Responsable qualité",
+            "Gestionnaire de contrats",
+            "Chargé de communication",
+            "Responsable financier / comptable chantier"
+        ],
+    },
+];
+
 interface User {
     id: number;
     name: string;
+}
+
+interface RHNeed {
+    profilename: string;
+    profileposte: string;
+    number: number;
 }
 
 interface Projet {
@@ -36,6 +105,7 @@ interface Projet {
     responsable_id: number;
     type_projet: 'suivi' | 'etude' | 'controle';
     responsable: User;
+    rh_needs?: RHNeed[];
     created_at: string;
     updated_at: string;
 }
@@ -50,43 +120,45 @@ export default function Projets({ projets, users }: Props) {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [editingProjet, setEditingProjet] = useState<Projet | null>(null);
     const [deletingProjet, setDeletingProjet] = useState<Projet | null>(null);
+    const [rhNeeds, setRhNeeds] = useState<RHNeed[]>([]);
     const mapRef = useRef<HTMLDivElement>(null);
     const mapInstanceRef = useRef<any>(null);
     const markerRef = useRef<any>(null);
 
- type FormData = {
-    nom: string;
-    description: string;
-    budget_total: string;
-    budget_utilise: string;
-    date_debut: string;
-    date_fin: string;
-    statut: 'en_attente' | 'en_cours' | 'termine';
-    client: string;
-    lieu_realisation: string;
-    latitude: string;
-    longitude: string;
-    radius: string;
-    responsable_id: string;
-    type_projet: 'suivi' | 'etude' | 'controle';
-};
+    type FormData = {
+        nom: string;
+        description: string;
+        budget_total: string;
+        budget_utilise: string;
+        date_debut: string;
+        date_fin: string;
+        statut: 'en_attente' | 'en_cours' | 'termine';
+        client: string;
+        lieu_realisation: string;
+        latitude: string;
+        longitude: string;
+        radius: string;
+        responsable_id: string;
+        type_projet: 'suivi' | 'etude' | 'controle';
+        rh_needs?: RHNeed[];
+    };
 
-const { data, setData, post, put, processing, errors, reset } = useForm<FormData>({
-    nom: '',
-    description: '',
-    budget_total: '',
-    budget_utilise: '',
-    date_debut: '',
-    date_fin: '',
-    statut: 'en_attente', 
-    client: '',
-    lieu_realisation: '',
-    latitude: '',
-    longitude: '',
-    radius: '',
-    responsable_id: '',
-    type_projet: 'suivi', 
-});
+    const { data, setData, post, put, processing, errors, reset } = useForm<FormData>({
+        nom: '',
+        description: '',
+        budget_total: '',
+        budget_utilise: '',
+        date_debut: '',
+        date_fin: '',
+        statut: 'en_attente',
+        client: '',
+        lieu_realisation: '',
+        latitude: '',
+        longitude: '',
+        radius: '',
+        responsable_id: '',
+        type_projet: 'suivi',
+    });
 
     // Initialize map when modal opens
     useEffect(() => {
@@ -94,7 +166,7 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
             // Load Leaflet dynamically
             const loadLeaflet = async () => {
                 const L = await import('leaflet');
-                
+
                 // Fix for default markers
                 delete (L.Icon.Default.prototype as any)._getIconUrl;
                 L.Icon.Default.mergeOptions({
@@ -108,9 +180,8 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                 const lng = data.longitude ? parseFloat(data.longitude) : -7.0926;
 
                 if (mapRef.current) {
-                mapInstanceRef.current = L.map(mapRef.current).setView([lat, lng], 6);
+                    mapInstanceRef.current = L.map(mapRef.current).setView([lat, lng], 6);
                 }
-
 
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: ' &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -125,7 +196,7 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                 // Handle map clicks
                 mapInstanceRef.current.on('click', (e: any) => {
                     const { lat, lng } = e.latlng;
-                    
+
                     // Update form data
                     setData('latitude', lat.toString());
                     setData('longitude', lng.toString());
@@ -179,6 +250,7 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
     const openCreateModal = () => {
         reset();
         setEditingProjet(null);
+        setRhNeeds([]);
         setShowModal(true);
     };
 
@@ -199,6 +271,7 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
             responsable_id: projet.responsable_id.toString(),
             type_projet: projet.type_projet,
         });
+        setRhNeeds(projet.rh_needs || []);
         setEditingProjet(projet);
         setShowModal(true);
     };
@@ -208,24 +281,79 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
         setShowDeleteModal(true);
     };
 
+    const addRhNeed = (profilename: string, profileposte: string) => {
+        const existing = rhNeeds.find(need => need.profilename === profilename && need.profileposte === profileposte);
+        if (existing) {
+            setRhNeeds(rhNeeds.map(need =>
+                need.profilename === profilename && need.profileposte === profileposte
+                    ? { ...need, number: need.number + 1 }
+                    : need
+            ));
+        } else {
+            setRhNeeds([...rhNeeds, { profilename, profileposte, number: 1 }]);
+        }
+    };
+
+    const removeRhNeed = (profilename: string, profileposte: string) => {
+        const existing = rhNeeds.find(need => need.profilename === profilename && need.profileposte === profileposte);
+        if (existing && existing.number > 1) {
+            setRhNeeds(rhNeeds.map(need =>
+                need.profilename === profilename && need.profileposte === profileposte
+                    ? { ...need, number: need.number - 1 }
+                    : need
+            ));
+        } else {
+            setRhNeeds(rhNeeds.filter(need => !(need.profilename === profilename && need.profileposte === profileposte)));
+        }
+    };
+
+    const getRhNeedCount = (profilename: string, profileposte: string) => {
+        const need = rhNeeds.find(need => need.profilename === profilename && need.profileposte === profileposte);
+        return need ? need.number : 0;
+    };
+
+    const getTotalRhNeeds = () => {
+        return rhNeeds.reduce((total, need) => total + need.number, 0);
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        
+
+        // Filter out RH needs with 0 quantity and ensure we have the right structure
+        const rhNeedsData = rhNeeds.filter(need => need.number > 0);
+
         if (editingProjet) {
-            put(`/ressources-humaines/projets/${editingProjet.id}`, {
+            const updateData = { ...data };
+            delete updateData.rh_needs;
+
+            router.put(`/ressources-humaines/projets/${editingProjet.id}`, updateData, {
                 onSuccess: () => {
                     setShowModal(false);
                     setEditingProjet(null);
+                    setRhNeeds([]);
                     reset();
-                    window.location.reload(); // Force page reload
+                    // window.location.reload();
                 }
             });
         } else {
-            post('/ressources-humaines/projets', {
+            const createData = {
+                ...data,
+                rh_needs: rhNeedsData
+            };
+
+            // Debug log to see what we're sending
+            console.log('Sending data:', createData);
+            console.log('RH Needs:', rhNeedsData);
+
+            router.post('/ressources-humaines/projets', createData, {
                 onSuccess: () => {
                     setShowModal(false);
+                    setRhNeeds([]);
                     reset();
-                    window.location.reload(); // Force page reload
+                    // window.location.reload();
+                },
+                onError: (errors) => {
+                    console.error('Error creating project:', errors);
                 }
             });
         }
@@ -237,7 +365,7 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                 onSuccess: () => {
                     setShowDeleteModal(false);
                     setDeletingProjet(null);
-                    window.location.reload(); // Force page reload
+                    window.location.reload();
                 }
             });
         }
@@ -249,7 +377,7 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
             termine: 'bg-green-100 text-green-800 border-green-200',
             en_attente: 'bg-yellow-100 text-yellow-800 border-yellow-200'
         };
-        
+
         const statusLabels = {
             en_cours: 'En Cours',
             termine: 'Terminé',
@@ -303,7 +431,7 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Gestion des Projets - Ressources Humaines" />
-            
+
             {/* Load Leaflet CSS */}
             <link
                 rel="stylesheet"
@@ -311,7 +439,7 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                 integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
                 crossOrigin=""
             />
-            
+
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-6">
                 {/* Header */}
                 <div className="flex justify-between items-center">
@@ -513,11 +641,11 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                 {/* Modal */}
                 {showModal && (
                     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4">
+                        <div className="bg-white rounded-lg p-6 w-full max-w-6xl max-h-[90vh] overflow-y-auto m-4">
                             <h3 className="text-lg font-medium text-gray-900 mb-4">
                                 {editingProjet ? 'Modifier le projet' : 'Nouveau projet'}
                             </h3>
-                            
+
                             <form onSubmit={handleSubmit} className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div>
@@ -729,12 +857,107 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                                     </div>
                                 </div>
 
+                                {/* HR Needs Section */}
+                                <div className="border-t pt-6">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <Users className="w-5 h-5 text-blue-600" />
+                                        <h4 className="text-lg font-medium text-gray-900">
+                                             Besoins en Ressources Humaines
+                                        </h4>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {profilsPostes.map((profil) => (
+                                            <div key={profil.value} className="border border-gray-200 rounded-lg p-4">
+                                                <h5 className="text-md font-medium text-gray-800 mb-3">{profil.label}</h5>
+                                                <div className="overflow-x-auto">
+                                                    <table className="min-w-full text-sm">
+                                                        <thead>
+                                                            <tr className="border-b border-gray-200">
+                                                                <th className="text-left py-2 text-xs font-medium text-gray-500">N°</th>
+                                                                <th className="text-left py-2 text-xs font-medium text-gray-500">Poste</th>
+                                                                <th className="text-left py-2 text-xs font-medium text-gray-500">Nombre</th>
+                                                                {!editingProjet && (
+                                                                    <th className="text-left py-2 text-xs font-medium text-gray-500">Actions</th>
+                                                                )}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {profil.postes.map((poste, index) => {
+                                                                const count = getRhNeedCount(profil.value, poste);
+                                                                const hasCount = count > 0;
+
+                                                                // For editing mode, only show positions with saved data
+                                                                if (editingProjet && !hasCount) return null;
+
+                                                                return (
+                                                                    <tr key={index} className="border-b border-gray-100">
+                                                                        <td className="py-2 text-gray-700">{index + 1}</td>
+                                                                        <td className="py-2 text-gray-700">{poste}</td>
+                                                                        <td className="py-2">
+                                                                            <span className={`px-2 py-1 rounded text-sm font-medium ${hasCount ? 'bg-blue-100 text-blue-800' : 'text-gray-400'
+                                                                                }`}>
+                                                                                {count}
+                                                                            </span>
+                                                                        </td>
+                                                                        {!editingProjet && (
+                                                                            <td className="py-2">
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => removeRhNeed(profil.value, poste)}
+                                                                                        disabled={count === 0}
+                                                                                        className="p-1 text-red-600 hover:bg-red-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                                    >
+                                                                                        <Minus className="w-3 h-3" />
+                                                                                    </button>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => addRhNeed(profil.value, poste)}
+                                                                                        className="p-1 text-green-600 hover:bg-green-100 rounded"
+                                                                                    >
+                                                                                        <Plus className="w-3 h-3" />
+                                                                                    </button>
+                                                                                </div>
+                                                                            </td>
+                                                                        )}
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                            {editingProjet && profil.postes.filter(poste => getRhNeedCount(profil.value, poste) > 0).length === 0 && (
+                                                                <tr>
+                                                                    <td colSpan={4} className="py-4 text-center text-gray-500 italic">
+                                                                        Aucun besoin RH enregistré pour ce profil
+                                                                    </td>
+                                                                </tr>
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Total */}
+                                    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-lg font-medium text-gray-900">
+                                                Total des besoins RH:
+                                            </span>
+                                            <span className="text-xl font-bold text-blue-600">
+                                                {getTotalRhNeeds()} personne{getTotalRhNeeds() !== 1 ? 's' : ''}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div className="flex justify-end gap-3 pt-4 border-t">
                                     <button
                                         type="button"
                                         onClick={() => {
                                             setShowModal(false);
                                             setEditingProjet(null);
+                                            setRhNeeds([]);
                                             reset();
                                         }}
                                         className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
@@ -771,7 +994,7 @@ const { data, setData, post, put, processing, errors, reset } = useForm<FormData
                                     </p>
                                 </div>
                             </div>
-                            
+
                             <p className="text-gray-700 mb-6">
                                 Êtes-vous sûr de vouloir supprimer le projet <strong>"{deletingProjet.nom}"</strong> ?
                             </p>
