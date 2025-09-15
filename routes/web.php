@@ -213,7 +213,6 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
 });
 
 
-// Suivi & Contrôle
 Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function () {
     Route::get('/suivi-controle/dashboard', [SuiviControleController::class, 'index'])
         ->name('dashboard.suivi-controle');

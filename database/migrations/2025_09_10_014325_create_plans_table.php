@@ -13,7 +13,8 @@ return new class extends Migration
     {
         Schema::create('plans', function (Blueprint $table) {
             $table->id(); // id (primary key)
-            $table->date('date'); // date
+            $table->date('date_debut');
+            $table->date('date_fin');   
             $table->string('mssg')->nullable(); // mssg (nullable string)
             $table->text('description')->nullable(); // description (nullable text)
             $table->json('terrains_ids')->nullable(); // terrains_ids (json)

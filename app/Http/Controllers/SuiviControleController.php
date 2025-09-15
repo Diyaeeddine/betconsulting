@@ -366,7 +366,8 @@ class SuiviControleController extends Controller
     {
         $validated = $request->validate([
             'projet_id' => 'required|exists:projets,id',
-            'date' => 'required|date',
+            'date_debut' => 'required|date',
+            'date_fin' => 'required|date|after_or_equal:date_debut',
             'mssg' => 'nullable|string',
             'description' => 'nullable|string',
             'terrains_ids' => 'nullable|array',
@@ -378,7 +379,8 @@ class SuiviControleController extends Controller
 
         $plan = Plan::create([
             'projet_id' => $validated['projet_id'],
-            'date' => $validated['date'],
+            'date_debut' => $validated['date_debut'],
+            'date_fin' => $validated['date_fin'],
             'mssg' => $validated['mssg'] ?? null,
             'description' => $validated['description'] ?? null,
             'terrains_ids' => $validated['terrains_ids'] ?? [],
@@ -386,14 +388,16 @@ class SuiviControleController extends Controller
             'statut' => $validated['statut'],
         ]);
 
-        return redirect()->back()->with('success', 'Plan Crée');
+        return redirect()->back()->with('success', 'Plan créé avec succès');
     }
+
 
     public function updatePlan(Request $request, $id)
     {
         $validated = $request->validate([
             'projet_id' => 'required|exists:projets,id',
-            'date' => 'required|date',
+            'date_debut' => 'required|date',
+            'date_fin' => 'required|date|after_or_equal:date_debut',
             'mssg' => 'nullable|string',
             'description' => 'nullable|string',
             'terrains_ids' => 'nullable|array',
@@ -407,7 +411,8 @@ class SuiviControleController extends Controller
 
         $plan->update([
             'projet_id' => $validated['projet_id'],
-            'date' => $validated['date'],
+            'date_debut' => $validated['date_debut'],
+            'date_fin' => $validated['date_fin'],
             'mssg' => $validated['mssg'] ?? null,
             'description' => $validated['description'] ?? null,
             'terrains_ids' => $validated['terrains_ids'] ?? [],
@@ -415,8 +420,9 @@ class SuiviControleController extends Controller
             'statut' => $validated['statut'],
         ]);
 
-        return redirect()->back()->with('success', 'Plan Updated');
+        return redirect()->back()->with('success', 'Plan mis à jour avec succès');
     }
+
 
     public function deletePlan($id)
     {

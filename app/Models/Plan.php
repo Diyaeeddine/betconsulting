@@ -8,7 +8,8 @@ class Plan extends Model
 {
     
     protected $fillable = [
-        'date',
+        'date_debut',
+        'date_fin',
         'mssg',
         'description',
         'terrains_ids',
@@ -21,7 +22,8 @@ class Plan extends Model
     protected $casts = [
         'terrains_ids' => 'array',
         'salarie_ids' => 'array',
-        'date' => 'date',
+        'date_debut' => 'date',
+        'date_fin' => 'date',
     ];
 
     public function projet()

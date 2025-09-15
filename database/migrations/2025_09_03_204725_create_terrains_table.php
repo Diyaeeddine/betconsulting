@@ -20,7 +20,7 @@ return new class extends Migration
             $table->json('points'); // e.g. [{"lat":..., "lng":...}, {...}, ...]
 
             // Surface in square meters or your preferred unit
-            $table->decimal('surface', 10, 2)->nullable();
+            $table->decimal('surface', 20, 2)->nullable();
 
             $table->decimal('radius', 8, 2)->nullable();
 
