@@ -427,142 +427,219 @@ export default function PlanningManagement() {
         }
     }
 
-  // PDF Export functionality
+  // Enhanced PDF Export functionality with 14 pages
   const exportToPDF = async () => {
     try {
       addMessage('info', 'Génération du PDF en cours...');
-      
-      // Create PDF content
+
       const { jsPDF } = await import('jspdf');
-      const pdf = new jsPDF('landscape', 'mm', 'a4');
-      
-      // Title page
-      pdf.setFontSize(24);
-      pdf.text('Calendrier de Planification', 20, 30);
-      pdf.setFontSize(16);
-      pdf.text(`Année ${currentYear}`, 20, 45);
-      pdf.setFontSize(12);
-      pdf.text(`Généré le ${new Date().toLocaleDateString('fr-FR')}`, 20, 55);
-      
-      // Yearly overview
-      pdf.addPage();
-      pdf.setFontSize(18);
-      pdf.text(`Vue d'ensemble - Année ${currentYear}`, 20, 20);
-      
+      const pdf = new jsPDF('portrait', 'mm', 'a4');
+
       const monthNames = [
         'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
         'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
       ];
-      
-      let yPos = 35;
-      
-      // Summary by month
-      monthNames.forEach((monthName, monthIndex) => {
-        const monthPlans = getFilteredPlansForPeriod(currentYear, monthIndex);
-        pdf.setFontSize(12);
-        pdf.text(`${monthName}: ${monthPlans.length} plans`, 20, yPos);
-        
-        // List first 3 plans
-        monthPlans.slice(0, 3).forEach((plan, planIndex) => {
-          const duration = getPlanDuration(plan.date_debut, plan.date_fin);
-          pdf.setFontSize(10);
-          pdf.text(`  • ${plan.mssg || plan.description || 'Plan'} (${duration}j) - ${plan.projet.nom}`, 25, yPos + 5 + (planIndex * 4));
-        });
-        
-        if (monthPlans.length > 3) {
-          pdf.setFontSize(10);
-          pdf.text(`  • +${monthPlans.length - 3} autres plans`, 25, yPos + 5 + (3 * 4));
-        }
-        
-        yPos += monthPlans.length > 0 ? Math.min(monthPlans.length, 3) * 4 + 15 : 10;
-        
-        if (yPos > 180) {
-          pdf.addPage();
-          yPos = 20;
-        }
-      });
-      
-      // Monthly detailed calendars
-      for (let monthIndex = 0; monthIndex < 12; monthIndex++) {
-        const monthPlans = getFilteredPlansForPeriod(currentYear, monthIndex);
-        
-        if (monthPlans.length === 0) continue;
-        
-        pdf.addPage();
-        pdf.setFontSize(16);
-        pdf.text(`${monthNames[monthIndex]} ${currentYear}`, 20, 20);
-        
-        // Plans for this month
-        pdf.setFontSize(12);
-        pdf.text(`Plans du mois (${monthPlans.length}):`, 20, 35);
-        
-        yPos = 45;
-        
-        monthPlans.forEach((plan, index) => {
-          const duration = getPlanDuration(plan.date_debut, plan.date_fin);
-          const startDate = new Date(plan.date_debut).toLocaleDateString('fr-FR');
-          const endDate = new Date(plan.date_fin).toLocaleDateString('fr-FR');
-          
-          pdf.setFontSize(11);
-          pdf.text(`${index + 1}. ${plan.mssg || plan.description || 'Plan'}`, 25, yPos);
-          pdf.setFontSize(9);
-          pdf.text(`   Projet: ${plan.projet.nom}`, 25, yPos + 5);
-          pdf.text(`   Période: ${startDate} - ${endDate} (${duration}j)`, 25, yPos + 10);
-          pdf.text(`   Statut: ${getStatusConfig(plan.statut).label}`, 25, yPos + 15);
-          
-          if (plan.salarie_ids.length > 0) {
-            const salarieNames = getSalarieDetails(plan.salarie_ids).map(s => s.fullName).slice(0, 3).join(', ');
-            pdf.text(`   Salariés: ${salarieNames}${plan.salarie_ids.length > 3 ? ` +${plan.salarie_ids.length - 3}` : ''}`, 25, yPos + 20);
-          }
-          
-          if (plan.terrains_ids.length > 0) {
-            const terrainNames = getTerrainDetails(plan.terrains_ids).map(t => t.name).slice(0, 3).join(', ');
-            pdf.text(`   Terrains: ${terrainNames}${plan.terrains_ids.length > 3 ? ` +${plan.terrains_ids.length - 3}` : ''}`, 25, yPos + 25);
-          }
-          
-          yPos += 35;
-          
-          if (yPos > 170) {
-            pdf.addPage();
-            yPos = 20;
-          }
-        });
-      }
-      
-      // Statistics page
-      pdf.addPage();
+      const dayNames = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+
+      // PAGE 1: Title Page
+      pdf.setFontSize(28);
+      pdf.text('BET Consulting Planning', 105, 80, { align: 'center' });
+
       pdf.setFontSize(16);
-      pdf.text('Statistiques', 20, 20);
-      
+      pdf.text(`Généré le ${new Date().toLocaleDateString('fr-FR', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })}`, 105, 100, { align: 'center' });
+
+      pdf.setFontSize(12);
+      pdf.text(`Année ${currentYear}`, 105, 120, { align: 'center' });
+
+      pdf.setFontSize(14);
+      pdf.text('Statistiques Générales', 105, 150, { align: 'center' });
+
+      pdf.setFontSize(11);
+      let yPos = 170;
       const stats = [
-        { label: 'Total des plans', value: plans.length },
-        { label: 'Plans terminés', value: plans.filter(p => p.statut === 'terminé').length },
-        { label: 'Plans en cours', value: plans.filter(p => p.statut === 'en_cours').length },
-        { label: 'Plans prévus', value: plans.filter(p => p.statut === 'prévu').length },
-        { label: 'Plans annulés', value: plans.filter(p => p.statut === 'annulé').length },
-        { label: 'Projets actifs', value: projects.length },
-        { label: 'Terrains assignés', value: terrains.length },
-        { label: 'Salariés de terrain', value: salaries.filter(s => s.emplacement === 'terrain').length }
+        `Total des plans: ${plans.length}`,
+        `Plans terminés: ${plans.filter(p => p.statut === 'terminé').length}`,
+        `Plans en cours: ${plans.filter(p => p.statut === 'en_cours').length}`,
+        `Plans prévus: ${plans.filter(p => p.statut === 'prévu').length}`,
+        `Plans annulés: ${plans.filter(p => p.statut === 'annulé').length}`,
+        // `Projets actifs: ${projects.length}`,
+        // `Terrains: ${terrains.length}`,
+        // `Salariés de terrain: ${salaries.filter(s => s.emplacement === 'terrain').length}`
       ];
-      
-      yPos = 35;
+
       stats.forEach(stat => {
-        pdf.setFontSize(12);
-        pdf.text(`${stat.label}: ${stat.value}`, 25, yPos);
+        pdf.text(stat, 105, yPos, { align: 'center' });
         yPos += 8;
       });
-      
-      // Save the PDF
-      const fileName = `calendrier-planification-${currentYear}.pdf`;
+
+      // PAGE 2: Yearly Overview
+      pdf.addPage();
+      pdf.setFontSize(20);
+      pdf.text(`Vue d'Année ${currentYear}`, 20, 25);
+
+      const cellWidth = 50;
+      const cellHeight = 40;
+      const startX = 20;
+      const startY = 40;
+
+      for (let monthIndex = 0; monthIndex < 12; monthIndex++) {
+        const row = Math.floor(monthIndex / 3);
+        const col = monthIndex % 3;
+        const x = startX + col * (cellWidth + 10);
+        const y = startY + row * (cellHeight + 10);
+
+        pdf.setFontSize(12);
+        pdf.text(monthNames[monthIndex], x + cellWidth / 2, y + 8, { align: 'center' });
+
+        pdf.rect(x, y, cellWidth, cellHeight);
+
+        const monthPlans = getFilteredPlansForPeriod(currentYear, monthIndex);
+
+        pdf.setFontSize(8);
+        pdf.text(`${monthPlans.length} plans`, x + cellWidth / 2, y + 15, { align: 'center' });
+
+        let planY = y + 18;
+        monthPlans.slice(0, 4).forEach((plan) => {
+          const duration = getPlanDuration(plan.date_debut, plan.date_fin);
+          pdf.setFillColor(59, 130, 246);
+          pdf.rect(x + 2, planY, cellWidth - 4, 3, 'F');
+
+          pdf.setFontSize(6);
+          pdf.text(`${plan.mssg || plan.description || 'Plan'} (${duration}j)`, x + cellWidth / 2, planY + 2, { align: 'center' });
+          planY += 4;
+        });
+
+        if (monthPlans.length > 4) {
+          pdf.setFontSize(6);
+          pdf.text(`+${monthPlans.length - 4} autres`, x + cellWidth / 2, planY + 1, { align: 'center' });
+        }
+      }
+
+      // PAGES 3–14: Monthly Details
+      for (let monthIndex = 0; monthIndex < 12; monthIndex++) {
+        pdf.addPage();
+
+        const monthPlans = getFilteredPlansForPeriod(currentYear, monthIndex);
+
+        pdf.setFontSize(18);
+        pdf.text(`${monthNames[monthIndex]} ${currentYear}`, 20, 25);
+
+        const calendarStartX = 20;
+        const calendarStartY = 40;
+        const cellSize = 25;
+
+        pdf.setFontSize(10);
+        for (let i = 0; i < 7; i++) {
+          pdf.text(dayNames[i], calendarStartX + i * cellSize + cellSize / 2, calendarStartY - 5, { align: 'center' });
+        }
+
+        const daysInMonth = getDaysInMonth(currentYear, monthIndex);
+        const firstDay = getFirstDayOfMonth(currentYear, monthIndex);
+        const adjustedFirstDay = firstDay === 0 ? 6 : firstDay - 1;
+
+        let currentDay = 1;
+        for (let week = 0; week < 6; week++) {
+          for (let day = 0; day < 7; day++) {
+            const x = calendarStartX + day * cellSize;
+            const y = calendarStartY + week * cellSize;
+
+            pdf.rect(x, y, cellSize, cellSize);
+
+            if (week === 0 && day < adjustedFirstDay) {
+              continue;
+            } else if (currentDay <= daysInMonth) {
+              pdf.setFontSize(9);
+              pdf.text(currentDay.toString(), x + 2, y + 8);
+
+              const dayDate = new Date(currentYear, monthIndex, currentDay);
+              const dayPlans = monthPlans.filter(plan => {
+                const startDate = new Date(plan.date_debut);
+                const endDate = new Date(plan.date_fin);
+                return isDateInRange(dayDate, startDate, endDate);
+              });
+
+              if (dayPlans.length > 0) {
+                let dotX = x + 2;
+                let dotY = y + cellSize - 5;
+
+                dayPlans.slice(0, 3).forEach((plan, index) => {
+                  pdf.setFillColor(59, 130, 246);
+                  pdf.circle(dotX + index * 3, dotY, 1, 'F');
+                });
+
+                if (dayPlans.length > 3) {
+                  pdf.setFontSize(6);
+                  pdf.text(`+${dayPlans.length - 3}`, x + 12, y + cellSize - 2);
+                }
+              }
+
+              currentDay++;
+            }
+          }
+
+          if (currentDay > daysInMonth) break;
+        }
+
+        // Plans list at bottom
+        pdf.setFontSize(14);
+        pdf.text(`Plans de ${monthNames[monthIndex]} (${monthPlans.length})`, 20, 200);
+
+        if (monthPlans.length > 0) {
+          pdf.setFontSize(9);
+          let listY = 210;
+
+          for (let index = 0; index < monthPlans.length; index++) {
+            const plan = monthPlans[index];
+            const duration = getPlanDuration(plan.date_debut, plan.date_fin);
+            const startDate = new Date(plan.date_debut).toLocaleDateString('fr-FR');
+            const endDate = new Date(plan.date_fin).toLocaleDateString('fr-FR');
+
+            pdf.setFont(undefined, 'bold');
+            pdf.text(`${index + 1}. ${plan.mssg || plan.description || 'Plan'}`, 25, listY);
+
+            pdf.setFont(undefined, 'normal');
+            pdf.text(`Projet: ${plan.projet.nom}`, 30, listY + 4);
+            pdf.text(`Période: ${startDate} - ${endDate} (${duration}j)`, 30, listY + 8);
+            pdf.text(`Statut: ${getStatusConfig(plan.statut).label}`, 30, listY + 12);
+
+            if (plan.salarie_ids.length > 0) {
+              const salarieNames = getSalarieDetails(plan.salarie_ids).map(s => s.fullName).slice(0, 2).join(', ');
+              pdf.text(`Salariés: ${salarieNames}${plan.salarie_ids.length > 2 ? ` +${plan.salarie_ids.length - 2}` : ''}`, 30, listY + 16);
+            }
+
+            if (plan.terrains_ids.length > 0) {
+              const terrainNames = getTerrainDetails(plan.terrains_ids).map(t => t.name).slice(0, 2).join(', ');
+              pdf.text(`Terrains: ${terrainNames}${plan.terrains_ids.length > 2 ? ` +${plan.terrains_ids.length - 2}` : ''}`, 30, listY + 20);
+            }
+
+            listY += 26;
+
+            if (listY > 270) {
+              pdf.text('(Suite sur page suivante)', 105, 280, { align: 'center' });
+              break;
+            }
+          }
+        } else {
+          pdf.setFontSize(10);
+          pdf.text('Aucun plan prévu pour ce mois.', 25, 215);
+        }
+      }
+
+      const fileName = `BET-Consulting-Planning-${currentYear}.pdf`;
       pdf.save(fileName);
-      
-      addMessage('success', 'PDF exporté avec succès !');
-      
+
+      addMessage('success', 'PDF exporté avec succès ! (14 pages générées)');
     } catch (error) {
       console.error('PDF export error:', error);
       addMessage('error', 'Erreur lors de l\'exportation PDF');
     }
   };
+
 
   // Data fetching with regular fetch - Updated to handle date_debut/date_fin
   const fetchAllData = useCallback(async () => {
@@ -1343,37 +1420,9 @@ export default function PlanningManagement() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold text-gray-900">Calendrier de Planification</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Planification</h1>
             
-            {/* View Toggle */}
-            <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 p-1">
-              <button
-                onClick={switchToYearlyView}
-                className={`px-3 py-1 rounded-md text-sm transition-colors flex items-center gap-2 ${
-                  calendarView === 'yearly' 
-                    ? 'bg-blue-100 text-blue-700' 
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <ZoomOut className="w-4 h-4" />
-                Vue Annuelle
-              </button>
-              <button
-                onClick={() => {
-                  if (calendarView === 'yearly') {
-                    switchToMonthlyView(new Date().getMonth(), new Date().getFullYear());
-                  }
-                }}
-                className={`px-3 py-1 rounded-md text-sm transition-colors flex items-center gap-2 ${
-                  calendarView === 'monthly' 
-                    ? 'bg-blue-100 text-blue-700' 
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <ZoomIn className="w-4 h-4" />
-                Vue Mensuelle
-              </button>
-            </div>
+           
           </div>
           
           <div className="flex items-center gap-3">
@@ -1447,8 +1496,8 @@ export default function PlanningManagement() {
           </div>
         )}
 
-        {/* Enhanced Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        {/* Enhanced Stats Cards - Removed "Projets" card to keep only 4 cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-blue-100 rounded-lg">
@@ -1499,18 +1548,6 @@ export default function PlanningManagement() {
                 <p className="text-2xl font-bold text-gray-900">
                   {plans.filter(p => p.statut === 'prévu').length}
                 </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <MapPin className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-600">Projets</p>
-                <p className="text-2xl font-bold text-gray-900">{projects.length}</p>
               </div>
             </div>
           </div>

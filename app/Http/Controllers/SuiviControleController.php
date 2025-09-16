@@ -3,10 +3,11 @@
 namespace App\Http\Controllers;
 
 use Inertia\Inertia;
-
+use App\Models\User;
 use App\Models\Salarie;
 use App\Models\Terrain;
 use App\Models\Projet;
+use App\Models\Vehicule;
 use App\Models\Profil;
 use App\Models\plan;
 use App\Models\Notification;
@@ -431,7 +432,102 @@ class SuiviControleController extends Controller
 
          return redirect()->back()->with('success', 'Plan Deleted');
     }
+    ######################################################
 
+    public function Tracking()
+    {
+        return Inertia::render('suivi-controle/Tracking');
+
+    }
+
+    public function fetchAll()
+    {
+        $users = User::all();
+        $plans = Plan::latest()->get();
+        $terrains = Terrain::all();
+        $projets = Projet::all();
+        $salaries = Salarie::where('statut', 'actif')->get();
+        $vehicules = Vehicule::all();
+        $allProfils = Profil::all();
+
+        // Build lookup maps for fast access
+        $salarieLookup = $salaries->keyBy('id');
+        $terrainLookup = $terrains->keyBy('id');
+
+        // Attach profils to each salarie
+        $salaries->transform(function ($salarie) use ($allProfils) {
+            $salarie->profils = $allProfils
+                ->where('user_id', $salarie->id)
+                ->values()
+                ->map(function ($profil) {
+                    return [
+                        'id' => $profil->id,
+                        'nom_profil' => $profil->nom_profil,
+                        'poste_profil' => $profil->poste_profil,
+                    ];
+                });
+            return $salarie;
+        });
+
+        // Attach related data manually to each projet
+        $projets->transform(function ($projet) use ($plans, $terrainLookup, $salarieLookup, $vehicules) {
+            // Plans for this projet
+            $projetPlans = $plans->where('projet_id', $projet->id)->values();
+
+            // Already cast to array by Eloquent
+            $terrainIds = $projet->terrain_ids ?? [];
+            $salarieIds = $projet->salarie_ids ?? [];
+
+            // Get terrain objects
+            $projetTerrains = collect($terrainIds)->map(function ($id) use ($terrainLookup) {
+                return $terrainLookup->get($id);
+            })->filter()->values();
+
+            // Get salarie objects
+            $projetSalaries = collect($salarieIds)->map(function ($id) use ($salarieLookup) {
+                return $salarieLookup->get($id);
+            })->filter()->values();
+
+            // Vehicules assigned to these salaries
+            $projetVehicules = $vehicules->whereIn('salarie_id', $salarieIds)->values();
+
+            // Attach manually
+            $projet->plans = $projetPlans;
+            $projet->terrains = $projetTerrains;
+            $projet->salaries = $projetSalaries;
+            $projet->vehicules = $projetVehicules;
+
+            return $projet;
+        });
+
+        // Notifications
+        $mssgs = Notification::where('receiver', 'suivi-controle')
+            ->where('statut', 'actif')
+            ->get();
+
+        return response()->json(compact('plans', 'terrains', 'projets', 'salaries', 'mssgs','users'));
+    }
+
+    public function sendChat(Request $request)
+    {
+        $request->validate([
+            'message' => 'required|string|max:1000',
+        ]);
+
+        $notification = Notification::create([
+            'sender' => 'suivi-controle',
+            'receiver' => 'all',
+            'message' => $request->message,
+            'statut' => 'actif', 
+            'recorded_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'notification' => $notification,
+            'message' => 'Notification created successfully.',
+        ], 201);
+    }
     ######################################################
     public function storePosition(Request $request)
     {

@@ -223,6 +223,10 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
     Route::get('/suivi-controle/Planing', [SuiviControleController::class, 'Planing'])
         ->name('Planing.suivi-controle');
 
+    Route::get('/suivi-controle/Tracking', [SuiviControleController::class, 'Tracking'])
+        ->name('Planing.suivi-Tracking');
+
+
    
 
     Route::get('/suivi-controle/fetch-data', [SuiviControleController::class, 'fetchData']);
@@ -240,8 +244,15 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
     Route::put('/suivi-controle/plans/{id}', [SuiviControleController::class, 'updatePlan']);
     Route::delete('/suivi-controle/plans/{id}', [SuiviControleController::class, 'deletePlan']);
 
+    Route::post('/suivi-controle/chat', [SuiviControleController::class, 'sendChat']);
+
+
 }); 
 
+
+Route::middleware('auth.basic')->group(function () {
+    Route::get('/suivi-controle/fetch-all-data', [SuiviControleController::class, 'fetchAll']);
+});
 Route::post('/broadcasting/auth', function (Request $request) {
     $request->validate([
         'email' => 'required|email',
