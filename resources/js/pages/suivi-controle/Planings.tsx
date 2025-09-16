@@ -5,7 +5,8 @@ import {
   Plus, Save, MapPin, Users, Calendar, Target,
   Eye, Edit2, Trash2, UserPlus, UserMinus, CheckCircle,
   Clock, AlertCircle, XCircle, Filter, Zap, Phone,
-  FileText, X, Bell, ChevronDown, ChevronRight, ChevronLeft
+  FileText, X, Bell, ChevronDown, ChevronRight, ChevronLeft,
+  ArrowLeft, ZoomIn, ZoomOut, CalendarDays, Download
 } from 'lucide-react';
 import AppLayout from "@/layouts/app-layout"
 
@@ -27,6 +28,7 @@ interface Terrain {
   statut_final: string;
   salarie_ids: number[];
   projet?: Projet;
+  projet_name?: string;
 }
 
 interface Profil {
@@ -105,6 +107,9 @@ interface PlanFormData {
   statut: string;
 }
 
+// Calendar view types
+type CalendarView = 'yearly' | 'monthly';
+
 // Helper function to get CSRF token
 const getCsrfToken = (): string => {
   const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
@@ -114,21 +119,10 @@ const getCsrfToken = (): string => {
 // Helper function to generate consistent colors for plans
 const getPlanColor = (planId: number): string => {
   const colors = [
-    '#3B82F6', // Blue
-    '#10B981', // Emerald
-    '#F59E0B', // Amber
-    '#EF4444', // Red
-    '#8B5CF6', // Violet
-    '#06B6D4', // Cyan
-    '#84CC16', // Lime
-    '#F97316', // Orange
-    '#EC4899', // Pink
-    '#6366F1', // Indigo
-    '#14B8A6', // Teal
-    '#F87171', // Rose
-    '#A78BFA', // Purple
-    '#34D399', // Green
-    '#FBBF24', // Yellow
+    '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
+    '#06B6D4', '#84CC16', '#F97316', '#EC4899', '#6366F1',
+    '#14B8A6', '#F87171', '#A78BFA', '#34D399', '#FBBF24',
+    '#8B5A2B', '#D946EF', '#F43F5E', '#22C55E', '#3B82F6'
   ];
   
   return colors[planId % colors.length];
@@ -247,6 +241,34 @@ const isDateInRange = (date: Date, startDate: Date, endDate: Date): boolean => {
   return normalizedDate >= normalizedStart && normalizedDate <= normalizedEnd;
 };
 
+// Helper to calculate plan duration
+const getPlanDuration = (startDate: string, endDate: string): number => {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+};
+
+// Helper to check if plan overlaps with month/year
+const planOverlapsWithPeriod = (plan: Plan, year: number, month?: number): boolean => {
+  const planStart = new Date(plan.date_debut);
+  const planEnd = new Date(plan.date_fin);
+  
+  let periodStart: Date;
+  let periodEnd: Date;
+  
+  if (month !== undefined) {
+    // Monthly check
+    periodStart = new Date(year, month, 1);
+    periodEnd = new Date(year, month + 1, 0);
+  } else {
+    // Yearly check
+    periodStart = new Date(year, 0, 1);
+    periodEnd = new Date(year, 11, 31);
+  }
+  
+  return planStart <= periodEnd && planEnd >= periodStart;
+};
+
 const breadcrumbs = [
   {
     title: "Dashboard Suivi & Contrôle des Travaux",
@@ -265,8 +287,11 @@ export default function PlanningManagement() {
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageState[]>([]);
 
-  // Calendar state
+  // Enhanced calendar state
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const [calendarView, setCalendarView] = useState<CalendarView>('yearly');
+  const [focusedMonth, setFocusedMonth] = useState<number | null>(null);
   const [selectedProjectFilter, setSelectedProjectFilter] = useState<number | null>(null);
   const [selectedSalarieFilter, setSelectedSalarieFilter] = useState<number | null>(null);
 
@@ -291,6 +316,57 @@ export default function PlanningManagement() {
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deactivatingNotifications, setDeactivatingNotifications] = useState<{[key: number]: boolean}>({})
+
+  // FIXED: Function to get proper project and terrain information for salaries popup - SAME AS TERRAIN POPUP
+  const getSalarieAvailabilityDisplay = (salarie: Salarie): JSX.Element => {
+    const salarieProjects = projects.filter(p => (salarie.projet_ids || []).includes(p.id))
+    const salarieTerrains = terrains.filter(t => (salarie.terrain_ids || []).includes(t.id))
+
+    if (salarieProjects.length === 0 && salarieTerrains.length === 0) {
+      return <div className="text-sm text-green-600 font-medium">✓ Disponible</div>
+    }
+
+    return (
+      <div className="space-y-1 text-sm">
+        {salarieProjects.map(project => {
+          // Find terrains for this project that the salarie is assigned to
+          const projectTerrains = salarieTerrains.filter(t => t.projet_id === project.id)
+          
+          return (
+            <div key={project.id} className="text-gray-600">
+              <div className="font-medium text-blue-700">{project.nom}</div>
+              {projectTerrains.length > 0 ? (
+                <div className="ml-2 text-xs">
+                  <span className="text-green-600">Terrains:</span> {projectTerrains.map(t => t.name).join(', ')}
+                </div>
+              ) : (
+                <div className="ml-2 text-xs text-orange-600">Projet assigné - Aucun terrain</div>
+              )}
+            </div>
+          )
+        })}
+        
+        {/* Show terrains that don't belong to assigned projects */}
+        {(() => {
+          const orphanTerrains = salarieTerrains.filter(t => 
+            !salarieProjects.some(p => p.id === t.projet_id)
+          )
+          
+          if (orphanTerrains.length > 0) {
+            return (
+              <div className="text-gray-600">
+                <div className="font-medium text-orange-600">Terrains sans projet assigné:</div>
+                <div className="ml-2 text-xs">
+                  {orphanTerrains.map(t => `${t.name} (${t.projet_name})`).join(', ')}
+                </div>
+              </div>
+            )
+          }
+          return null
+        })()}
+      </div>
+    )
+  }
   
   // Message handling
   const addMessage = useCallback((type: MessageState['type'], message: string) => {
@@ -314,7 +390,6 @@ export default function PlanningManagement() {
         await new Promise((resolve, reject) => {
           router.put(`/suivi-controle/notif/${notificationId}`, {}, {
             onSuccess: (page) => {
-              // Remove notification from local state
               setNotifications(prev => prev.filter(n => n.id !== notificationId))
               addMessage('success', 'Notification marquée comme lue')
               resolve(page)
@@ -351,6 +426,143 @@ export default function PlanningManagement() {
             return `il y a ${days}j`
         }
     }
+
+  // PDF Export functionality
+  const exportToPDF = async () => {
+    try {
+      addMessage('info', 'Génération du PDF en cours...');
+      
+      // Create PDF content
+      const { jsPDF } = await import('jspdf');
+      const pdf = new jsPDF('landscape', 'mm', 'a4');
+      
+      // Title page
+      pdf.setFontSize(24);
+      pdf.text('Calendrier de Planification', 20, 30);
+      pdf.setFontSize(16);
+      pdf.text(`Année ${currentYear}`, 20, 45);
+      pdf.setFontSize(12);
+      pdf.text(`Généré le ${new Date().toLocaleDateString('fr-FR')}`, 20, 55);
+      
+      // Yearly overview
+      pdf.addPage();
+      pdf.setFontSize(18);
+      pdf.text(`Vue d'ensemble - Année ${currentYear}`, 20, 20);
+      
+      const monthNames = [
+        'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+        'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+      ];
+      
+      let yPos = 35;
+      
+      // Summary by month
+      monthNames.forEach((monthName, monthIndex) => {
+        const monthPlans = getFilteredPlansForPeriod(currentYear, monthIndex);
+        pdf.setFontSize(12);
+        pdf.text(`${monthName}: ${monthPlans.length} plans`, 20, yPos);
+        
+        // List first 3 plans
+        monthPlans.slice(0, 3).forEach((plan, planIndex) => {
+          const duration = getPlanDuration(plan.date_debut, plan.date_fin);
+          pdf.setFontSize(10);
+          pdf.text(`  • ${plan.mssg || plan.description || 'Plan'} (${duration}j) - ${plan.projet.nom}`, 25, yPos + 5 + (planIndex * 4));
+        });
+        
+        if (monthPlans.length > 3) {
+          pdf.setFontSize(10);
+          pdf.text(`  • +${monthPlans.length - 3} autres plans`, 25, yPos + 5 + (3 * 4));
+        }
+        
+        yPos += monthPlans.length > 0 ? Math.min(monthPlans.length, 3) * 4 + 15 : 10;
+        
+        if (yPos > 180) {
+          pdf.addPage();
+          yPos = 20;
+        }
+      });
+      
+      // Monthly detailed calendars
+      for (let monthIndex = 0; monthIndex < 12; monthIndex++) {
+        const monthPlans = getFilteredPlansForPeriod(currentYear, monthIndex);
+        
+        if (monthPlans.length === 0) continue;
+        
+        pdf.addPage();
+        pdf.setFontSize(16);
+        pdf.text(`${monthNames[monthIndex]} ${currentYear}`, 20, 20);
+        
+        // Plans for this month
+        pdf.setFontSize(12);
+        pdf.text(`Plans du mois (${monthPlans.length}):`, 20, 35);
+        
+        yPos = 45;
+        
+        monthPlans.forEach((plan, index) => {
+          const duration = getPlanDuration(plan.date_debut, plan.date_fin);
+          const startDate = new Date(plan.date_debut).toLocaleDateString('fr-FR');
+          const endDate = new Date(plan.date_fin).toLocaleDateString('fr-FR');
+          
+          pdf.setFontSize(11);
+          pdf.text(`${index + 1}. ${plan.mssg || plan.description || 'Plan'}`, 25, yPos);
+          pdf.setFontSize(9);
+          pdf.text(`   Projet: ${plan.projet.nom}`, 25, yPos + 5);
+          pdf.text(`   Période: ${startDate} - ${endDate} (${duration}j)`, 25, yPos + 10);
+          pdf.text(`   Statut: ${getStatusConfig(plan.statut).label}`, 25, yPos + 15);
+          
+          if (plan.salarie_ids.length > 0) {
+            const salarieNames = getSalarieDetails(plan.salarie_ids).map(s => s.fullName).slice(0, 3).join(', ');
+            pdf.text(`   Salariés: ${salarieNames}${plan.salarie_ids.length > 3 ? ` +${plan.salarie_ids.length - 3}` : ''}`, 25, yPos + 20);
+          }
+          
+          if (plan.terrains_ids.length > 0) {
+            const terrainNames = getTerrainDetails(plan.terrains_ids).map(t => t.name).slice(0, 3).join(', ');
+            pdf.text(`   Terrains: ${terrainNames}${plan.terrains_ids.length > 3 ? ` +${plan.terrains_ids.length - 3}` : ''}`, 25, yPos + 25);
+          }
+          
+          yPos += 35;
+          
+          if (yPos > 170) {
+            pdf.addPage();
+            yPos = 20;
+          }
+        });
+      }
+      
+      // Statistics page
+      pdf.addPage();
+      pdf.setFontSize(16);
+      pdf.text('Statistiques', 20, 20);
+      
+      const stats = [
+        { label: 'Total des plans', value: plans.length },
+        { label: 'Plans terminés', value: plans.filter(p => p.statut === 'terminé').length },
+        { label: 'Plans en cours', value: plans.filter(p => p.statut === 'en_cours').length },
+        { label: 'Plans prévus', value: plans.filter(p => p.statut === 'prévu').length },
+        { label: 'Plans annulés', value: plans.filter(p => p.statut === 'annulé').length },
+        { label: 'Projets actifs', value: projects.length },
+        { label: 'Terrains assignés', value: terrains.length },
+        { label: 'Salariés de terrain', value: salaries.filter(s => s.emplacement === 'terrain').length }
+      ];
+      
+      yPos = 35;
+      stats.forEach(stat => {
+        pdf.setFontSize(12);
+        pdf.text(`${stat.label}: ${stat.value}`, 25, yPos);
+        yPos += 8;
+      });
+      
+      // Save the PDF
+      const fileName = `calendrier-planification-${currentYear}.pdf`;
+      pdf.save(fileName);
+      
+      addMessage('success', 'PDF exporté avec succès !');
+      
+    } catch (error) {
+      console.error('PDF export error:', error);
+      addMessage('error', 'Erreur lors de l\'exportation PDF');
+    }
+  };
 
   // Data fetching with regular fetch - Updated to handle date_debut/date_fin
   const fetchAllData = useCallback(async () => {
@@ -465,7 +677,6 @@ export default function PlanningManagement() {
     router.post('/suivi-controle/plans', payload, {
       onSuccess: (page) => {
         addMessage('success', 'Plan créé avec succès');
-        // Refresh data after successful creation
         fetchAllData();
         setShowCreatePopup(false);
         resetPlanForm();
@@ -501,7 +712,6 @@ export default function PlanningManagement() {
     router.put(`/suivi-controle/plans/${selectedPlan.id}`, payload, {
       onSuccess: (page) => {
         addMessage('success', 'Plan modifié avec succès');
-        // Refresh data after successful update
         fetchAllData();
         setShowEditPopup(false);
         setSelectedPlan(null);
@@ -529,7 +739,6 @@ export default function PlanningManagement() {
     router.delete(`/suivi-controle/plans/${planId}`, {
       onSuccess: (page) => {
         addMessage('success', 'Plan supprimé avec succès');
-        // Refresh data after successful deletion
         fetchAllData();
       },
       onError: (errors) => {
@@ -600,7 +809,13 @@ export default function PlanningManagement() {
     }));
   };
 
-  // Calendar navigation
+  // Enhanced calendar navigation
+  const navigateYear = (direction: 'prev' | 'next') => {
+    setCurrentYear(prevYear => {
+      return direction === 'prev' ? prevYear - 1 : prevYear + 1;
+    });
+  };
+
   const navigateMonth = (direction: 'prev' | 'next') => {
     setCurrentDate(prevDate => {
       const newDate = new Date(prevDate);
@@ -613,8 +828,20 @@ export default function PlanningManagement() {
     });
   };
 
-  // Enhanced filter logic for calendar with salary filter
-  const getFilteredPlansForCalendar = () => {
+  // View switching functions
+  const switchToMonthlyView = (month: number, year: number) => {
+    setCalendarView('monthly');
+    setFocusedMonth(month);
+    setCurrentDate(new Date(year, month, 1));
+  };
+
+  const switchToYearlyView = () => {
+    setCalendarView('yearly');
+    setFocusedMonth(null);
+  };
+
+  // Enhanced filter logic for calendar
+  const getFilteredPlansForPeriod = (year: number, month?: number) => {
     let filtered = plans;
 
     // Filter by project
@@ -629,20 +856,10 @@ export default function PlanningManagement() {
       );
     }
 
-    // Filter by current month/year
-    const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth();
-
-    filtered = filtered.filter(plan => {
-      const startDate = new Date(plan.date_debut);
-      const endDate = new Date(plan.date_fin);
-      
-      // Check if plan overlaps with current month
-      const monthStart = new Date(currentYear, currentMonth, 1);
-      const monthEnd = new Date(currentYear, currentMonth + 1, 0);
-      
-      return (startDate <= monthEnd && endDate >= monthStart);
-    });
+    // Filter by time period
+    filtered = filtered.filter(plan => 
+      planOverlapsWithPeriod(plan, year, month)
+    );
 
     return filtered;
   };
@@ -677,70 +894,167 @@ export default function PlanningManagement() {
     });
   };
 
-  // Fixed helper function to calculate plan position and spanning segments
-  const calculatePlanSegments = (plan: Plan, currentYear: number, currentMonth: number) => {
-    const startDate = new Date(plan.date_debut);
-    const endDate = new Date(plan.date_fin);
-    
-    // Normalize dates to avoid timezone issues
-    const normalizedStart = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-    const normalizedEnd = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-    
-    const monthStart = new Date(currentYear, currentMonth, 1);
-    const monthEnd = new Date(currentYear, currentMonth + 1, 0);
-    
-    // Calculate the actual start and end dates within the current month
-    const displayStart = normalizedStart < monthStart ? monthStart : normalizedStart;
-    const displayEnd = normalizedEnd > monthEnd ? monthEnd : normalizedEnd;
-    
-    const startDay = displayStart.getDate();
-    const endDay = displayEnd.getDate();
-    
-    // Get first day of month adjustment (Monday = 0)
-    const firstDayOfMonth = getFirstDayOfMonth(currentYear, currentMonth);
-    const adjustedFirstDay = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
-    
-    // Calculate segments that span multiple rows
-    const segments = [];
-    let currentSegmentStart = startDay;
-    
-    while (currentSegmentStart <= endDay) {
-      // Calculate row and column for current segment start
-      const startPos = currentSegmentStart + adjustedFirstDay - 1;
-      const startRow = Math.floor(startPos / 7);
-      const startCol = startPos % 7;
-      
-      // Calculate how many days we can span in this row
-      const remainingInRow = 7 - startCol;
-      const remainingDays = endDay - currentSegmentStart + 1;
-      const segmentDays = Math.min(remainingInRow, remainingDays);
-      
-      segments.push({
-        startDay: currentSegmentStart,
-        endDay: currentSegmentStart + segmentDays - 1,
-        row: startRow,
-        startCol,
-        width: (segmentDays / 7) * 100,
-        left: (startCol / 7) * 100
-      });
-      
-      currentSegmentStart += segmentDays;
-    }
-    
-    return segments;
+  // Enhanced yearly calendar rendering
+  const renderYearlyCalendar = () => {
+    const monthNames = [
+      'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+      'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+    ];
+
+    const yearlyPlans = getFilteredPlansForPeriod(currentYear);
+
+    return (
+      <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
+        {/* Yearly Header */}
+        <div className="flex justify-between items-center p-4 bg-gray-50 border-b">
+          <button 
+            onClick={() => navigateYear('prev')}
+            className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          
+          <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <CalendarDays className="w-6 h-6" />
+            Année {currentYear}
+          </h2>
+          
+          <button 
+            onClick={() => navigateYear('next')}
+            className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Yearly Grid */}
+        <div className="grid grid-cols-3 gap-4 p-6">
+          {monthNames.map((monthName, monthIndex) => {
+            const monthPlans = getFilteredPlansForPeriod(currentYear, monthIndex);
+            const daysInMonth = getDaysInMonth(currentYear, monthIndex);
+            const firstDayOfMonth = getFirstDayOfMonth(currentYear, monthIndex);
+            const adjustedFirstDay = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
+
+            return (
+              <div
+                key={monthIndex}
+                className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => switchToMonthlyView(monthIndex, currentYear)}
+              >
+                {/* Month header */}
+                <div className="bg-gray-100 px-4 py-2 border-b">
+                  <h3 className="text-sm font-semibold text-gray-800 flex items-center justify-between">
+                    {monthName}
+                    <span className="text-xs text-gray-600 bg-gray-200 px-2 py-1 rounded-full">
+                      {monthPlans.length} plans
+                    </span>
+                  </h3>
+                </div>
+
+                {/* Mini calendar */}
+                <div className="p-2">
+                  {/* Days grid */}
+                  <div className="grid grid-cols-7 gap-1 mb-2">
+                    {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(day => (
+                      <div key={day} className="text-xs text-center text-gray-500 py-1">
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Calendar days */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {/* Empty cells for days before first day */}
+                    {Array.from({ length: adjustedFirstDay }, (_, i) => (
+                      <div key={`empty-${i}`} className="h-6"></div>
+                    ))}
+                    
+                    {/* Days of month */}
+                    {Array.from({ length: daysInMonth }, (_, dayIndex) => {
+                      const day = dayIndex + 1;
+                      const dayDate = new Date(currentYear, monthIndex, day);
+                      const dayPlans = monthPlans.filter(plan => {
+                        const startDate = new Date(plan.date_debut);
+                        const endDate = new Date(plan.date_fin);
+                        return isDateInRange(dayDate, startDate, endDate);
+                      });
+
+                      const isToday = isSameDay(dayDate, new Date());
+
+                      return (
+                        <div
+                          key={day}
+                          className={`h-6 flex items-center justify-center relative text-xs ${
+                            isToday 
+                              ? 'bg-blue-100 text-blue-800 font-bold rounded' 
+                              : 'text-gray-700'
+                          }`}
+                        >
+                          {day}
+                          
+                          {/* Plan indicators - smaller circles */}
+                          {dayPlans.length > 0 && (
+                            <div className="absolute -bottom-0.5 left-1/2 transform -translate-x-1/2 flex gap-0.5">
+                              {dayPlans.slice(0, 3).map((plan, index) => (
+                                <div
+                                  key={plan.id}
+                                  className="w-1 h-1 rounded-full opacity-80"
+                                  style={{ backgroundColor: getPlanColor(plan.id) }}
+                                  title={plan.mssg || plan.description || 'Plan'}
+                                />
+                              ))}
+                              {dayPlans.length > 3 && (
+                                <div className="w-1 h-1 rounded-full bg-gray-400" />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Plan summary for month */}
+                <div className="px-2 pb-2">
+                  <div className="space-y-1">
+                    {monthPlans.slice(0, 2).map((plan) => {
+                      const duration = getPlanDuration(plan.date_debut, plan.date_fin);
+                      return (
+                        <div
+                          key={plan.id}
+                          className="text-xs p-1 rounded text-white truncate"
+                          style={{ backgroundColor: getPlanColor(plan.id) }}
+                          title={`${plan.mssg || plan.description}: ${duration}j - ${plan.projet.nom}`}
+                        >
+                          {plan.mssg || plan.description || 'Plan'} ({duration}j)
+                        </div>
+                      );
+                    })}
+                    {monthPlans.length > 2 && (
+                      <div className="text-xs text-gray-500 text-center py-1">
+                        +{monthPlans.length - 2} autres plans
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
-  // Enhanced calendar rendering with fixed multi-day plan display
-  const renderCalendar = () => {
+  // Enhanced monthly calendar rendering
+  const renderMonthlyCalendar = () => {
     const currentYear = currentDate.getFullYear();
     const currentMonth = currentDate.getMonth();
     const daysInMonth = getDaysInMonth(currentYear, currentMonth);
     const firstDayOfMonth = getFirstDayOfMonth(currentYear, currentMonth);
-    const adjustedFirstDay = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1; // Adjust for Monday start
+    const adjustedFirstDay = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
 
-    const filteredPlans = getFilteredPlansForCalendar();
+    const filteredPlans = getFilteredPlansForPeriod(currentYear, currentMonth);
     
-    // Create calendar grid
     const calendarDays = [];
     
     // Empty cells for days before the first day of the month
@@ -760,20 +1074,15 @@ export default function PlanningManagement() {
     
     const dayNames = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
-    // Process plans for rendering - separate single day and multi-day plans
+    // Separate single-day and multi-day plans
     const dayPlans = new Map<number, Plan[]>();
-    const spanningPlanSegments: { 
-      plan: Plan; 
-      segments: any[]; 
-      row: number;
-    }[] = [];
+    const spanningPlans: { plan: Plan; segments: any[]; stackLevel: number; }[] = [];
     
-    // First pass: collect all plans by day and calculate segments
+    // Process plans
     filteredPlans.forEach(plan => {
       const startDate = new Date(plan.date_debut);
       const endDate = new Date(plan.date_fin);
       
-      // Calculate if plan is within current month
       const monthStart = new Date(currentYear, currentMonth, 1);
       const monthEnd = new Date(currentYear, currentMonth + 1, 0);
       
@@ -786,31 +1095,51 @@ export default function PlanningManagement() {
       const isSingleDay = startDay === endDay;
       
       if (isSingleDay) {
-        // Single day plans go into dayPlans
         if (!dayPlans.has(startDay)) {
           dayPlans.set(startDay, []);
         }
         dayPlans.get(startDay)?.push(plan);
       } else {
-        // Multi-day plans: calculate segments
-        const segments = calculatePlanSegments(plan, currentYear, currentMonth);
-        spanningPlanSegments.push({ plan, segments, row: 0 });
+        // Calculate segments for multi-day plans
+        const segments = [];
+        let currentSegmentStart = startDay;
+        
+        while (currentSegmentStart <= endDay) {
+          const startPos = currentSegmentStart + adjustedFirstDay - 1;
+          const startRow = Math.floor(startPos / 7);
+          const startCol = startPos % 7;
+          
+          const remainingInRow = 7 - startCol;
+          const remainingDays = endDay - currentSegmentStart + 1;
+          const segmentDays = Math.min(remainingInRow, remainingDays);
+          
+          segments.push({
+            startDay: currentSegmentStart,
+            endDay: currentSegmentStart + segmentDays - 1,
+            row: startRow,
+            startCol,
+            width: (segmentDays / 7) * 100,
+            left: (startCol / 7) * 100
+          });
+          
+          currentSegmentStart += segmentDays;
+        }
+        
+        spanningPlans.push({ plan, segments, stackLevel: 0 });
       }
     });
 
-    // Assign rows to spanning plans to avoid overlaps
-    spanningPlanSegments.forEach((spanningPlan, index) => {
-      let row = 0;
-      let rowFound = false;
+    // Assign stack levels to prevent overlaps - enhanced algorithm
+    spanningPlans.forEach((spanningPlan, index) => {
+      let stackLevel = 0;
+      let levelFound = false;
       
-      while (!rowFound) {
-        // Check if this row is free for all segments of this plan
-        const conflicting = spanningPlanSegments.slice(0, index).some(otherSpanningPlan => {
-          if (otherSpanningPlan.row !== row) return false;
+      while (!levelFound) {
+        const conflicting = spanningPlans.slice(0, index).some(otherSpan => {
+          if (otherSpan.stackLevel !== stackLevel) return false;
           
-          // Check if any segments overlap
           return spanningPlan.segments.some(segment => 
-            otherSpanningPlan.segments.some(otherSegment => 
+            otherSpan.segments.some(otherSegment => 
               segment.row === otherSegment.row &&
               !(segment.endDay < otherSegment.startDay || segment.startDay > otherSegment.endDay)
             )
@@ -818,35 +1147,49 @@ export default function PlanningManagement() {
         });
         
         if (!conflicting) {
-          spanningPlan.row = row;
-          rowFound = true;
+          spanningPlan.stackLevel = stackLevel;
+          levelFound = true;
         } else {
-          row++;
+          stackLevel++;
         }
       }
     });
 
     return (
       <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
-        {/* Calendar Header */}
+        {/* Monthly Header with Return Button */}
         <div className="flex justify-between items-center p-4 bg-gray-50 border-b">
-          <button 
-            onClick={() => navigateMonth('prev')}
-            className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={switchToYearlyView}
+              className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Retour à l'année
+            </button>
+          </div>
           
-          <h2 className="text-xl font-semibold text-gray-900">
-            {monthNames[currentMonth]} {currentYear}
-          </h2>
-          
-          <button 
-            onClick={() => navigateMonth('next')}
-            className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => navigateMonth('prev')}
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            
+            <h2 className="text-xl font-semibold text-gray-900">
+              {monthNames[currentMonth]} {currentYear}
+            </h2>
+            
+            <button 
+              onClick={() => navigateMonth('next')}
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="w-28"></div> {/* Spacer for alignment */}
         </div>
 
         {/* Days of week header */}
@@ -860,103 +1203,67 @@ export default function PlanningManagement() {
 
         {/* Calendar container with spanning bars */}
         <div className="relative">
-          {/* Spanning plans overlay */}
+          {/* Spanning plans overlay - thinner bars */}
           <div className="absolute inset-0 pointer-events-none z-10">
-            {spanningPlanSegments.map(({ plan, segments, row }, planIndex) => {
+            {spanningPlans.map(({ plan, segments, stackLevel }, planIndex) => {
               const planColor = getPlanColor(plan.id);
-              const terrainDetails = getTerrainDetails(plan.terrains_ids);
-              const salarieDetails = getSalarieDetails(plan.salarie_ids);
-              
-              const displayText = plan.description || plan.mssg || 'Plan';
-              const terrainText = terrainDetails.length > 0 
-                ? terrainDetails.slice(0, 2).map(t => t.name).join(', ') + 
-                  (terrainDetails.length > 2 ? ` +${terrainDetails.length - 2}` : '')
-                : 'Aucun terrain';
-              const salarieText = salarieDetails.length > 0
-                ? salarieDetails.slice(0, 2).map(s => s.fullName).join(', ') + 
-                  (salarieDetails.length > 2 ? ` +${salarieDetails.length - 2}` : '')
-                : 'Aucun salarié';
-
-              const totalDays = Math.ceil((new Date(plan.date_fin).getTime() - new Date(plan.date_debut).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+              const duration = getPlanDuration(plan.date_debut, plan.date_fin);
 
               return segments.map((segment, segmentIndex) => (
                 <div
                   key={`span-${plan.id}-segment-${segmentIndex}`}
                   className="absolute pointer-events-auto cursor-pointer group"
                   style={{
-                    top: `${segment.row * 128 + 40 + row * 22}px`, // Row height * row + header + stacking
+                    top: `${segment.row * 140 + 40 + stackLevel * 16}px`,
                     left: `${segment.left}%`,
                     width: `${segment.width}%`,
-                    height: '18px',
+                    height: '14px',
                     backgroundColor: planColor,
-                    borderRadius: '9px',
-                    zIndex: 20 + row,
-                    border: '1px solid rgba(255,255,255,0.3)',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                    borderRadius: '7px',
+                    zIndex: 20 + stackLevel,
+                    border: '1px solid rgba(255,255,255,0.4)',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                    opacity: '0.9'
                   }}
                   onClick={(e) => {
                     e.stopPropagation();
                     openDetailsPopup(plan);
                   }}
                 >
-                  {/* Spanning bar content */}
+                  {/* Spanning bar content - showing mssg instead of description */}
                   <div className="h-full flex items-center px-2 text-white text-xs font-medium overflow-hidden">
                     <span className="truncate">
-                      {segmentIndex === 0 ? `${displayText} (${totalDays}j)` : '...'}
+                      {segmentIndex === 0 ? `${plan.mssg || plan.description || 'Plan'} (${duration}j)` : '...'}
                     </span>
                   </div>
                   
-                  {/* Fixed hover tooltip - positioned to avoid calendar blocking */}
-                  <div className="invisible group-hover:visible absolute top-full left-0 mt-2 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl z-[100] min-w-80 max-w-md border border-gray-700">
-                    <div className="font-semibold mb-2 text-white">{displayText}</div>
-                    <div className="space-y-1">
-                      <div>📋 <span className="font-medium">Projet:</span> {plan.projet.nom}</div>
-                      <div>📅 <span className="font-medium">Durée:</span> {totalDays} jour{totalDays > 1 ? 's' : ''}</div>
-                      <div>📅 <span className="font-medium">Du:</span> {new Date(plan.date_debut).toLocaleDateString('fr-FR')} <span className="font-medium">au:</span> {new Date(plan.date_fin).toLocaleDateString('fr-FR')}</div>
-                      <div>🏗️ <span className="font-medium">Terrains:</span> {terrainText}</div>
-                      <div>👥 <span className="font-medium">Salariés:</span> {salarieText}</div>
-                      <div className="pt-1">
-                        <span className="font-medium">Statut:</span> 
-                        <span className={`ml-1 inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
-                          getStatusConfig(plan.statut).bg
-                        } ${getStatusConfig(plan.statut).text}`}>
-                          {getStatusConfig(plan.statut).label}
-                        </span>
-                      </div>
-                    </div>
-                    {plan.mssg && (
-                      <div className="mt-2 pt-2 border-t border-gray-700">
-                        <span className="font-medium">Message:</span> {plan.mssg}
-                      </div>
-                    )}
-                    
-                    {/* Arrow pointing up */}
-                    <div className="absolute bottom-full left-4 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-gray-900"></div>
+                  {/* Simple tooltip */}
+                  <div className="invisible group-hover:visible absolute top-full left-0 mt-1 p-2 bg-white border border-gray-300 rounded shadow-lg z-[100] text-sm text-gray-900">
+                    {plan.mssg || plan.description || 'Plan'} - {plan.projet.nom}
                   </div>
                 </div>
               ));
             })}
           </div>
 
-          {/* Calendar grid */}
+          {/* Calendar grid - increased cell height for better visibility */}
           <div className="grid grid-cols-7 gap-0">
             {calendarDays.map((day, index) => {
               if (day === null) {
                 return (
-                  <div key={index} className="h-32 border-r border-b last:border-r-0 bg-gray-50"></div>
+                  <div key={index} className="h-36 border-r border-b last:border-r-0 bg-gray-50"></div>
                 );
               }
 
               const currentDayDate = new Date(currentYear, currentMonth, day);
               const isToday = isSameDay(currentDayDate, new Date());
               
-              // Get single-day plans for this day
               const singleDayPlans = dayPlans.get(day) || [];
 
               return (
                 <div 
                   key={day} 
-                  className={`h-32 border-r border-b last:border-r-0 p-2 overflow-hidden relative ${
+                  className={`h-36 border-r border-b last:border-r-0 p-2 overflow-hidden relative ${
                     isToday ? 'bg-blue-50' : ''
                   }`}
                 >
@@ -967,22 +1274,10 @@ export default function PlanningManagement() {
                     {day}
                   </div>
 
-                  {/* Single day plans as circles */}
+                  {/* Single day plans as circles - improved layout */}
                   <div className="flex flex-wrap gap-1 relative z-30">
-                    {singleDayPlans.slice(0, 8).map((plan, planIndex) => {
+                    {singleDayPlans.slice(0, 12).map((plan, planIndex) => {
                       const planColor = getPlanColor(plan.id);
-                      const terrainDetails = getTerrainDetails(plan.terrains_ids);
-                      const salarieDetails = getSalarieDetails(plan.salarie_ids);
-                      
-                      const displayText = plan.description || plan.mssg || 'Plan';
-                      const terrainText = terrainDetails.length > 0 
-                        ? terrainDetails.slice(0, 2).map(t => t.name).join(', ') + 
-                          (terrainDetails.length > 2 ? ` +${terrainDetails.length - 2}` : '')
-                        : 'Aucun terrain';
-                      const salarieText = salarieDetails.length > 0
-                        ? salarieDetails.slice(0, 2).map(s => s.fullName).join(', ') + 
-                          (salarieDetails.length > 2 ? ` +${salarieDetails.length - 2}` : '')
-                        : 'Aucun salarié';
 
                       return (
                         <div
@@ -995,48 +1290,29 @@ export default function PlanningManagement() {
                               e.stopPropagation();
                               openDetailsPopup(plan);
                             }}
-                            className="w-6 h-6 rounded-full cursor-pointer shadow-sm border-2 border-white hover:scale-110 transition-transform relative z-30"
-                            style={{ backgroundColor: planColor }}
+                            className="w-5 h-5 rounded-full cursor-pointer shadow-sm border border-white hover:scale-125 transition-all duration-200 hover:z-50 relative"
+                            style={{ 
+                              backgroundColor: planColor,
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                            }}
                           >
                             <div className="w-full h-full flex items-center justify-center text-white text-xs font-bold">
-                              {plan.description ? plan.description.charAt(0).toUpperCase() : 'P'}
+                              {(plan.mssg || plan.description || 'P').charAt(0).toUpperCase()}
                             </div>
                           </div>
 
-                          {/* Fixed hover tooltip for single day plans */}
-                          <div className="invisible group-hover:visible absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl z-[100] min-w-72 max-w-md border border-gray-700">
-                            <div className="font-semibold mb-2 text-white">{displayText}</div>
-                            <div className="space-y-1">
-                              <div>📋 <span className="font-medium">Projet:</span> {plan.projet.nom}</div>
-                              <div>📅 <span className="font-medium">Date:</span> {new Date(plan.date_debut).toLocaleDateString('fr-FR')}</div>
-                              <div>🏗️ <span className="font-medium">Terrains:</span> {terrainText}</div>
-                              <div>👥 <span className="font-medium">Salariés:</span> {salarieText}</div>
-                              <div className="pt-1">
-                                <span className="font-medium">Statut:</span> 
-                                <span className={`ml-1 inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
-                                  getStatusConfig(plan.statut).bg
-                                } ${getStatusConfig(plan.statut).text}`}>
-                                  {getStatusConfig(plan.statut).label}
-                                </span>
-                              </div>
-                            </div>
-                            {plan.mssg && (
-                              <div className="mt-2 pt-2 border-t border-gray-700">
-                                <span className="font-medium">Message:</span> {plan.mssg}
-                              </div>
-                            )}
-                            
-                            {/* Arrow pointing down */}
-                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-900"></div>
+                          {/* Simple tooltip */}
+                          <div className="invisible group-hover:visible absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 p-2 bg-white border border-gray-300 rounded shadow-lg z-[100] text-sm text-gray-900 whitespace-nowrap">
+                            {plan.mssg || plan.description || 'Plan'} - {plan.projet.nom}
                           </div>
                         </div>
                       );
                     })}
                     
                     {/* Show overflow indicator */}
-                    {singleDayPlans.length > 8 && (
-                      <div className="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-bold shadow-sm border-2 border-white relative z-30">
-                        +{singleDayPlans.length - 8}
+                    {singleDayPlans.length > 12 && (
+                      <div className="w-5 h-5 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-bold shadow-sm border border-white relative z-30">
+                        +{singleDayPlans.length - 12}
                       </div>
                     )}
                   </div>
@@ -1066,23 +1342,66 @@ export default function PlanningManagement() {
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">Calendrier de Planification</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-bold text-gray-900">Calendrier de Planification</h1>
+            
+            {/* View Toggle */}
+            <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 p-1">
+              <button
+                onClick={switchToYearlyView}
+                className={`px-3 py-1 rounded-md text-sm transition-colors flex items-center gap-2 ${
+                  calendarView === 'yearly' 
+                    ? 'bg-blue-100 text-blue-700' 
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <ZoomOut className="w-4 h-4" />
+                Vue Annuelle
+              </button>
+              <button
+                onClick={() => {
+                  if (calendarView === 'yearly') {
+                    switchToMonthlyView(new Date().getMonth(), new Date().getFullYear());
+                  }
+                }}
+                className={`px-3 py-1 rounded-md text-sm transition-colors flex items-center gap-2 ${
+                  calendarView === 'monthly' 
+                    ? 'bg-blue-100 text-blue-700' 
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <ZoomIn className="w-4 h-4" />
+                Vue Mensuelle
+              </button>
+            </div>
+          </div>
           
-          {/* Notifications Button */}
-          <div className="relative">
+          <div className="flex items-center gap-3">
+            {/* PDF Export Button */}
             <button
-              onClick={() => setShowNotifications(!showNotifications)}
-              className={`relative p-2 rounded-lg transition-colors ${
-                showNotifications ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              onClick={exportToPDF}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
             >
-              <Bell className="w-6 h-6" />
-              {notifications.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-medium">
-                  {notifications.length}
-                </span>
-              )}
+              <Download className="w-4 h-4" />
+              Exporter PDF
             </button>
+
+            {/* Notifications Button */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className={`relative p-2 rounded-lg transition-colors ${
+                  showNotifications ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Bell className="w-6 h-6" />
+                {notifications.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-medium">
+                    {notifications.length}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1128,8 +1447,8 @@ export default function PlanningManagement() {
           </div>
         )}
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Enhanced Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-blue-100 rounded-lg">
@@ -1148,7 +1467,7 @@ export default function PlanningManagement() {
                 <CheckCircle className="w-5 h-5 text-green-600" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Plans Terminés</p>
+                <p className="text-sm font-medium text-gray-600">Terminés</p>
                 <p className="text-2xl font-bold text-gray-900">
                   {plans.filter(p => p.statut === 'terminé').length}
                 </p>
@@ -1172,11 +1491,25 @@ export default function PlanningManagement() {
 
           <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
             <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <AlertCircle className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-600">Prévus</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {plans.filter(p => p.statut === 'prévu').length}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
+            <div className="flex items-center gap-3">
               <div className="p-2 bg-purple-100 rounded-lg">
                 <MapPin className="w-5 h-5 text-purple-600" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Projets Actifs</p>
+                <p className="text-sm font-medium text-gray-600">Projets</p>
                 <p className="text-2xl font-bold text-gray-900">{projects.length}</p>
               </div>
             </div>
@@ -1247,10 +1580,11 @@ export default function PlanningManagement() {
             </button>
           </div>
 
-          {/* Calendar */}
-          {renderCalendar()}
+          {/* Calendar - Render based on view */}
+          {calendarView === 'yearly' ? renderYearlyCalendar() : renderMonthlyCalendar()}
         </div>
 
+        {/* All the existing popups remain the same - keeping for space */}
         {/* Notifications Popup */}
         {showNotifications && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
@@ -1428,7 +1762,7 @@ export default function PlanningManagement() {
 
                 {/* Salaries and Terrains Selection */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Salaries Table */}
+                  {/* Salaries Table with Availability */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-3">
                       Salariés ({planFormData.salarie_ids.length} sélectionnés)
@@ -1439,6 +1773,7 @@ export default function PlanningManagement() {
                           <tr>
                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Poste</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Disponibilité</th>
                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                           </tr>
                         </thead>
@@ -1462,6 +1797,9 @@ export default function PlanningManagement() {
                                       text={profil ? `${profil.nom_profil} - ${profil.poste_profil}` : 'Non défini'} 
                                       maxLength={25} 
                                     />
+                                  </td>
+                                  <td className="px-3 py-2 text-xs">
+                                    {getSalarieAvailabilityDisplay(salarie)}
                                   </td>
                                   <td className="px-3 py-2">
                                     <button

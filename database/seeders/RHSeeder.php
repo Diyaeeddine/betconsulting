@@ -8,8 +8,8 @@ use App\Models\Projet;
 use App\Models\Plan;
 use App\Models\Salarie;
 use App\Models\Terrain;
-use App\Models\WsTechData;
 use Illuminate\Support\Str;
+use Carbon\Carbon;
 
 class RHSeeder extends Seeder
 {
@@ -26,15 +26,15 @@ class RHSeeder extends Seeder
         $terrains = collect();
         $plans = collect();
 
-        // 2. Create Projects
-        for ($i = 1; $i <= 5; $i++) {
+        // 2. Create 3 Projects
+        for ($i = 1; $i <= 3; $i++) {
             $projects->push(Projet::create([
                 'nom' => "Projet $i",
                 'description' => "Description for project $i",
                 'budget_total' => 100000 + 10000 * $i,
                 'budget_utilise' => 20000 + 5000 * $i,
-                'date_debut' => now()->subMonths($i * 2),
-                'date_fin' => now()->addMonths($i * 4),
+                'date_debut' => Carbon::create(2025, 1, 1),
+                'date_fin' => Carbon::create(2025, 12, 31),
                 'statut' => 'en_cours',
                 'client' => "Client $i",
                 'lieu_realisation' => Str::random(10),
@@ -43,16 +43,17 @@ class RHSeeder extends Seeder
                 'latitude' => 35.7 + ($i * 0.01),
                 'longitude' => -5.8 + ($i * 0.01),
                 'radius' => 5 + $i,
-                'terrain_ids' => [], // No terrain IDs initially
-                'salarie_ids' => [], // No salaried employees linked
+                'terrain_ids' => [],
+                'salarie_ids' => [],
+                'rh_needs' => json_encode([]),
             ]));
         }
 
-        // 3. Create Salaries
+        // 3. Create 10 Salaries
         for ($j = 1; $j <= 10; $j++) {
             $place = (rand(0, 1) === 1) ? 'terrain' : 'bureau';
 
-            $sal = Salarie::create([
+            $salaries->push(Salarie::create([
                 'nom' => "Nom $j",
                 'prenom' => "Prénom $j",
                 'email' => "sal$j@example.com",
@@ -64,14 +65,11 @@ class RHSeeder extends Seeder
                 'terrain_ids' => [],
                 'projet_ids' => [],
                 'password' => bcrypt('password'),
-            ]);
-
-            $salaries->push($sal);
+            ]));
         }
 
-        // 4. Create Terrains and link them to Projects
+        // 4. Create 2 Terrains per Project
         foreach ($projects as $project) {
-            // Create 2 terrains for each project
             for ($t = 1; $t <= 2; $t++) {
                 $terrains->push(Terrain::create([
                     'name' => "Terrain $t for Projet {$project->nom}",
@@ -82,30 +80,48 @@ class RHSeeder extends Seeder
                     ]),
                     'surface' => rand(1000, 5000),
                     'radius' => rand(10, 50),
-                    'projet_id' => $project->id, // Link terrain to project
-                    'statut_tech' => 'en_cours', // Valid enum value
-                    'statut_final' => 'en_revision', // Valid enum value
+                    'projet_id' => $project->id,
+                    'statut_tech' => 'en_cours',
+                    'statut_final' => 'en_revision',
                     'salarie_ids' => [],
                 ]));
             }
         }
 
-        // 5. Create Plans for each Project (2 Plans per Project)
-        foreach ($projects as $project) {
-            for ($p = 1; $p <= 2; $p++) {
+        // 5. Create 10 Plans per Project with intervals in 2025
+        foreach ($projects as $projectIndex => $project) {
+            $startBase = Carbon::create(2025, 1, 1);
+
+            for ($p = 1; $p <= 10; $p++) {
+                // Spread intervals from 1 day to ~200 days
+                $interval = ($p * 20); // ~20, 40, ..., 200 days
+                $startDate = $startBase->copy()->addDays($p * 5); // Slightly offset each plan
+                $endDate = $startDate->copy()->addDays($interval);
+
+                // Ensure end date stays in 2025
+                if ($endDate->year > 2025) {
+                    $endDate = Carbon::create(2025, 12, 31);
+                }
+
                 $plans->push(Plan::create([
-                    'date' => now()->addDays(rand(1, 30)), // Random date within next 30 days
+                    'date_debut' => $startDate,
+                    'date_fin' => $endDate,
                     'mssg' => "Plan #$p for Projet {$project->nom}",
-                    'description' => "Plan description for Plan #$p of Projet {$project->nom}",
-                    'terrains_ids' => json_encode([$terrains->random()->id, $terrains->random()->id]), // Random terrains
-                    'salarie_ids' => json_encode([$salaries->random()->id, $salaries->random()->id]), // Random salaries
-                    'statut' => 'en_cours', // Valid enum value
-                    'projet_id' => $project->id, // Link plan to project
+                    'description' => "Description of Plan #$p for Projet {$project->nom}",
+                    'terrains_ids' => json_encode([
+                        $terrains->where('projet_id', $project->id)->random()->id
+                    ]),
+                    'salarie_ids' => json_encode([
+                        $salaries->random()->id,
+                        $salaries->random()->id,
+                    ]),
+                    'statut' => 'en_cours',
+                    'projet_id' => $project->id,
                 ]));
             }
         }
 
-        // Optionally log success
-        $this->command->info('5 projects, 10 salaries, 10 terrains (2 per project), and 10 plans (2 per project) have been seeded.');
+        // Final Info
+        $this->command->info('3 projects, 10 salaries, 6 terrains, and 30 plans for 2025 have been seeded.');
     }
 }
