@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Navigation, Truck, Phone, Package, Clock, MessageCircle, Send, User, Fuel, LucideMapPin as MapPinCheckInside, AlertCircle } from "lucide-react"
+import { Navigation, Truck, Phone, Package, Clock, MessageCircle, Send, User, Fuel, LucideMapPin as MapPinCheckInside, AlertCircle, Car } from "lucide-react"
+import { router } from '@inertiajs/react'
 
 const GOOGLE_MAPS_API_KEY = "AIzaSyBqaAsQ8r3L9quGIANXqYGlXm3RiJbHjYU"
 
@@ -67,6 +68,7 @@ const descriptions = {
   completed: "Projet terminé avec succès.",
   "prévu": "Projet planifié et en attente",
   "en_cours": "Projet en cours d'exécution",
+  "terminé": "Projet terminé avec succès",
   "termine": "Projet terminé avec succès",
   "en_attente": "Projet en attente de validation"
 }
@@ -92,8 +94,10 @@ export default function TrackingPage() {
   const [mapLoaded, setMapLoaded] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null)
+  const [selectedVehicle, setSelectedVehicle] = useState<any>(null)
   const [newMessage, setNewMessage] = useState("")
   const [messages, setMessages] = useState<any[]>([])
+  const [responses, setResponses] = useState<any[]>([])
   const [sendingMessage, setSendingMessage] = useState(false)
   
   const mapRef = useRef<HTMLDivElement>(null)
@@ -119,15 +123,63 @@ export default function TrackingPage() {
     }
   }
 
+  // Fonction pour calculer le temps restant pour les véhicules
+  const calculateTempsRestant = (dateDisponibilite: string | null) => {
+    if (!dateDisponibilite) {
+      return "Disponible"
+    }
+    
+    const now = new Date()
+    const availableDate = new Date(dateDisponibilite)
+    const diffInMs = availableDate.getTime() - now.getTime()
+    
+    if (diffInMs <= 0) {
+      return "Disponible"
+    }
+    
+    const days = Math.floor(diffInMs / (1000 * 60 * 60 * 24))
+    const hours = Math.floor((diffInMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+    const minutes = Math.floor((diffInMs % (1000 * 60 * 60)) / (1000 * 60))
+    
+    if (days > 0) {
+      return `${days}j ${hours}h ${minutes}min`
+    } else if (hours > 0) {
+      return `${hours}h ${minutes}min`
+    } else {
+      return `${minutes}min`
+    }
+  }
+
+  // Fonction pour obtenir le véhicule d'un salarié
+  const getVehicleForSalarie = (salarieId: number, data: any) => {
+    // Chercher dans tous les véhicules
+    for (const projet of data.projets || []) {
+      const vehicle = projet.vehicules?.find((v: any) => v.salarie_id === salarieId)
+      if (vehicle) {
+        return vehicle
+      }
+    }
+    return null
+  }
+
   // Fonction pour transformer les données API en format compatible
   const transformApiDataToTrackingPoints = (data: any, projetFilter?: string, salarieFilter?: string) => {
     let projetsToShow = data.projets || []
+    let plansToShow = data.plans || []
+    let terrainsToShow = data.terrains || []
     
     // Filtrer par salarié si sélectionné
     if (salarieFilter && salarieFilter !== "all") {
       const salarieId = parseInt(salarieFilter)
+      // Afficher tous les projets et terrains où ce salarié est impliqué
       projetsToShow = projetsToShow.filter((projet: any) => 
         projet.salarie_ids?.includes(salarieId)
+      )
+      terrainsToShow = terrainsToShow.filter((terrain: any) => 
+        terrain.salarie_ids?.includes(salarieId)
+      )
+      plansToShow = plansToShow.filter((plan: any) => 
+        plan.salarie_ids?.includes(salarieId)
       )
     }
     
@@ -175,16 +227,43 @@ export default function TrackingPage() {
       }
 
       // Transformer les plans en timeline
-      const timeline = (projet.plans || []).map((plan: any) => ({
-        status: plan.statut || "prévu",
-        time: new Date(plan.date_debut).toLocaleDateString('fr-FR') + " - " + new Date(plan.date_fin).toLocaleDateString('fr-FR'),
-        description: plan.description || plan.mssg || "Plan de projet",
-        completed: plan.statut === "termine",
-        current: plan.statut === "en_cours",
-        delay: plan.statut === "en_retard" ? "En retard" : undefined,
-        pourcentage: plan.statut === "termine" ? 100 : (plan.statut === "en_cours" ? 70 : 0),
-        valide_par: "suivi-controle"
-      }))
+      let timeline = []
+      if (salarieFilter && salarieFilter !== "all") {
+        const salarieId = parseInt(salarieFilter)
+        const salarie = data.salaries?.find((s: any) => s.id === salarieId)
+        const salarieNom = salarie ? `${salarie.prenom} ${salarie.nom}` : "Salarié"
+        
+        // Plans de ce salarié
+        const salariePlans = plansToShow.filter((plan: any) => 
+          plan.salarie_ids?.includes(salarieId)
+        )
+        
+        timeline = salariePlans.map((plan: any) => {
+          const projetName = data.projets?.find((p: any) => p.id === plan.projet_id)?.nom || ''
+          return {
+            status: plan.statut || "prévu",
+            time: new Date(plan.date_debut).toLocaleDateString('fr-FR') + " - " + new Date(plan.date_fin).toLocaleDateString('fr-FR') + ` (Créé le ${new Date(plan.created_at).toLocaleDateString('fr-FR')} à ${new Date(plan.created_at).toLocaleTimeString('fr-FR')})`,
+            description: `${plan.description || plan.mssg || "Plan de projet"} - ${projetName}`,
+            completed: plan.statut === "terminé",
+            current: plan.statut === "en_cours",
+            delay: plan.statut === "en_retard" ? "En retard" : undefined,
+            pourcentage: plan.statut === "terminé" ? 100 : (plan.statut === "en_cours" ? 70 : 0),
+            valide_par: "suivi-controle"
+          }
+        })
+      } else {
+        // Plans normaux du projet
+        timeline = (projet.plans || []).map((plan: any) => ({
+          status: plan.statut || "prévu",
+          time: new Date(plan.date_debut).toLocaleDateString('fr-FR') + " - " + new Date(plan.date_fin).toLocaleDateString('fr-FR') + ` (Créé le ${new Date(plan.created_at).toLocaleDateString('fr-FR')} à ${new Date(plan.created_at).toLocaleTimeString('fr-FR')})`,
+          description: plan.description || plan.mssg || "Plan de projet",
+          completed: plan.statut === "terminé",
+          current: plan.statut === "en_cours",
+          delay: plan.statut === "en_retard" ? "En retard" : undefined,
+          pourcentage: plan.statut === "terminé" ? 100 : (plan.statut === "en_cours" ? 70 : 0),
+          valide_par: "suivi-controle"
+        }))
+      }
 
       // Si pas de plans, créer un timeline basique
       if (timeline.length === 0) {
@@ -192,10 +271,10 @@ export default function TrackingPage() {
           status: projet.statut || "prévu",
           time: new Date(projet.date_debut).toLocaleDateString('fr-FR'),
           description: projet.description || "Projet en cours de planification",
-          completed: projet.statut === "termine",
+          completed: projet.statut === "terminé",
           current: projet.statut === "en_cours",
           delay: undefined,
-          pourcentage: projet.statut === "termine" ? 100 : 70,
+          pourcentage: projet.statut === "terminé" ? 100 : 70,
           valide_par: "suivi-controle"
         })
       }
@@ -205,7 +284,7 @@ export default function TrackingPage() {
         title: projet.nom,
         address: projet.lieu_realisation || "Adresse non spécifiée",
         position: centerPosition,
-        status: projet.statut === "en_cours" ? "execution" : (projet.statut === "termine" ? "completed" : "preparation"),
+        status: projet.statut === "en_cours" ? "execution" : (projet.statut === "terminé" ? "completed" : "preparation"),
         distance: "N/A",
         estimatedTime: `${Math.ceil((new Date(projet.date_fin).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} jours`,
         projectManager: {
@@ -214,14 +293,12 @@ export default function TrackingPage() {
         },
         currentVehicle: {
           type: "truck",
-          name: projet.vehicules?.[0]?.model || "Véhicule de projet",
+          name: projet.vehicules?.[0]?.modele || "Véhicule de projet",
           loadPercentage: Math.floor(Math.random() * 100), // Simulation pour la démo
           capacity: "2000 Kg",
           currentLoad: "1420 Kg"
         },
-        vehicles: projet.vehicules || [
-          { type: "Camion", count: 1, status: "active", model: "Véhicule de projet", capacity: "2000 Kg" }
-        ],
+        vehicles: projet.vehicules || [],
         employees: projet.salaries || [],
         fuel: {
           current: Math.floor(Math.random() * 100), // Simulation
@@ -229,7 +306,9 @@ export default function TrackingPage() {
         },
         timeline,
         terrains: projet.terrains || [],
-        color: projectColor
+        color: projectColor,
+        statut: projet.statut,
+        salarieFilter: salarieFilter !== "all" ? parseInt(salarieFilter) : null
       }
     })
   }
@@ -261,8 +340,13 @@ export default function TrackingPage() {
         setSelectedPoint(latestProject)
       }
       
-      // Charger les messages
-      setMessages((data.mssgs || []).filter((msg: any) => msg.statut === 'actif').slice(-4))
+      // Séparer les messages et les réponses
+      const allMssgs = data.mssgs || []
+      const msgsList = allMssgs.filter((msg: any) => msg.receiver === 'all').slice(-4)
+      const responsesList = allMssgs.filter((msg: any) => msg.sender === 'all').slice(-4)
+      
+      setMessages(msgsList)
+      setResponses(responsesList)
       
     } catch (err) {
       console.error('Erreur lors du chargement des données:', err)
@@ -298,44 +382,42 @@ export default function TrackingPage() {
     }
   }, [selectedProjet, selectedSalarie, apiData])
 
-  // Fonction pour envoyer un message
+  // Fonction pour envoyer un message avec Inertia
   const sendMessage = async () => {
     if (!newMessage.trim() || sendingMessage) return
     
     try {
       setSendingMessage(true)
       
-      const response = await fetch('/suivi-controle/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          message: newMessage,
-          projet_id: selectedPoint?.id || null
-        })
-      })
-      
-      if (!response.ok) {
-        throw new Error('Erreur lors de l\'envoi du message')
-      }
-      
-      // Ajouter le message à la liste locale
-      const sentMessage = {
-        id: Date.now(),
+      router.post('/suivi-controle/chat', {
         message: newMessage,
-        sender: "suivi-controle",
-        created_at: new Date().toISOString(),
-        statut: "actif"
-      }
-      
-      setMessages(prev => [...prev.slice(-3), sentMessage])
-      setNewMessage("")
+        projet_id: selectedPoint?.id || null,
+        receiver: 'all'
+      }, {
+        onSuccess: () => {
+          // Ajouter le message à la liste locale
+          const sentMessage = {
+            id: Date.now(),
+            message: newMessage,
+            sender: "suivi-controle",
+            receiver: "all",
+            created_at: new Date().toISOString(),
+            statut: "actif"
+          }
+          
+          setMessages(prev => [...prev.slice(-3), sentMessage])
+          setNewMessage("")
+        },
+        onError: (errors) => {
+          console.error('Erreur envoi message:', errors)
+        },
+        onFinish: () => {
+          setSendingMessage(false)
+        }
+      })
       
     } catch (err) {
       console.error('Erreur envoi message:', err)
-    } finally {
       setSendingMessage(false)
     }
   }
@@ -464,7 +546,7 @@ export default function TrackingPage() {
       "en-route": "#3b82f6",
       preparation: "#9ca3af",
       "pause-technique": "#f59e0b",
-      "termine": "#22c55e",
+      "terminé": "#22c55e",
       "en_cours": "#eab308",
       "prévu": "#9ca3af",
       "en_attente": "#f59e0b"
@@ -479,7 +561,7 @@ export default function TrackingPage() {
       "en-route": "border-yellow-500",
       preparation: "border-gray-300",
       "pause-technique": "border-red-500",
-      "termine": "border-green-500",
+      "terminé": "border-green-500",
       "en_cours": "border-blue-500",
       "prévu": "border-gray-300",
       "en_attente": "border-red-500"
@@ -687,7 +769,10 @@ export default function TrackingPage() {
                       <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg">
                         <Package className="w-5 h-5 text-white" />
                       </div>
-                      Étapes du Projet
+                      {selectedPoint.salarieFilter ? 
+                        `Plans de ${apiData.salaries?.find((s: any) => s.id === selectedPoint.salarieFilter)?.prenom} ${apiData.salaries?.find((s: any) => s.id === selectedPoint.salarieFilter)?.nom}` : 
+                        "Étapes du Projet"
+                      }
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -719,11 +804,30 @@ export default function TrackingPage() {
                         </div>
                       </div>
                     ))}
+                    
+                    {/* Afficher le véhicule du salarié si filtré par salarié */}
+                    {selectedPoint.salarieFilter && (
+                      <div className="pt-4 border-t border-gray-200">
+                        <p className="text-sm font-semibold text-gray-900 mb-3">Véhicule assigné</p>
+                        {(() => {
+                          const vehicle = getVehicleForSalarie(selectedPoint.salarieFilter, apiData)
+                          return vehicle ? (
+                            <div className="p-3 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg">
+                              <p className="font-medium text-gray-900">{vehicle.marque} {vehicle.modele}</p>
+                              <p className="text-sm text-gray-600">Matricule: {vehicle.matricule}</p>
+                              <p className="text-sm text-gray-600">État: {vehicle.etat}</p>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-500 italic">No vehicule for this profile</p>
+                          )
+                        })()}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Second column - Current Vehicle Load Information */}
+              {/* Second column - Vehicles */}
               <div className="flex-1 space-y-4">
                 <Card className="bg-white/95 backdrop-blur-lg shadow-2xl border-0 hover:bg-white transition-all duration-300 hover:shadow-3xl">
                   <CardHeader className="pb-4">
@@ -731,31 +835,38 @@ export default function TrackingPage() {
                       <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg">
                         <Truck className="w-5 h-5 text-white" />
                       </div>
-                      Charge actuelle des véhicules
+                      Véhicules du Projet
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {selectedPoint.vehicles && selectedPoint.vehicles.length > 0 ? (
                       <div className="space-y-4">
                         {selectedPoint.vehicles.map((vehicle: any, index: number) => (
-                          <div key={index} className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border border-gray-200">
+                          <div 
+                            key={index} 
+                            className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border border-gray-200 cursor-pointer hover:shadow-md transition-all duration-200"
+                            onClick={() => setSelectedVehicle(vehicle)}
+                          >
                             <div className="flex justify-between items-start mb-3">
                               <div>
-                                <p className="font-semibold text-gray-900">{vehicle.model}</p>
-                                <p className="text-sm text-gray-600">{vehicle.type}</p>
+                                <p className="font-semibold text-gray-900">{vehicle.marque} - {vehicle.modele}</p>
+                                <p className="text-sm text-gray-600">Matricule: {vehicle.matricule}</p>
                               </div>
-                              <Badge variant={vehicle.status === 'active' ? 'default' : 'secondary'}>
-                                {vehicle.status}
+                              <Badge variant={vehicle.etat === 'disponible' ? 'default' : 'secondary'}>
+                                {vehicle.etat}
                               </Badge>
                             </div>
                             <div className="space-y-2">
-                              <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Capacité</span>
-                                <span className="font-medium">{vehicle.capacity}</span>
+                              <div className="flex justify-between text-sm items-center">
+                                <span className="text-gray-600 flex items-center gap-1">
+                                  <Fuel className="w-4 h-4" />
+                                  Carburant
+                                </span>
+                                <span className="font-medium">{Math.floor(Math.random() * 100)}%</span>
                               </div>
                               <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Nombre</span>
-                                <span className="font-medium">{vehicle.count}</span>
+                                <span className="text-gray-600">Temps restant</span>
+                                <span className="font-medium">{calculateTempsRestant(vehicle.date_disponibilite)}</span>
                               </div>
                             </div>
                           </div>
@@ -770,22 +881,7 @@ export default function TrackingPage() {
                   </CardContent>
                 </Card>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <Card className="bg-white/95 backdrop-blur-lg shadow-xl border-0 hover:bg-white transition-all duration-300">
-                    <CardContent className="p-4 text-center">
-                      <Fuel className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-                      <p className="text-sm font-semibold text-emerald-600">Carburant</p>
-                      <p className="text-lg font-bold text-emerald-600">{selectedPoint.fuel.current}%</p>
-                    </CardContent>
-                  </Card>
-                  <Card className="bg-white/95 backdrop-blur-lg shadow-xl border-0 hover:bg-white transition-all duration-300">
-                    <CardContent className="p-4 text-center">
-                      <Clock className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-                      <p className="text-sm font-semibold text-emerald-600">Temps restant</p>
-                      <p className="text-lg font-bold text-emerald-600">{selectedPoint.fuel.estimatedTime}</p>
-                    </CardContent>
-                  </Card>
-                </div>
+               
               </div>
 
               {/* Third column - Project Details + Chat */}
@@ -818,8 +914,8 @@ export default function TrackingPage() {
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600 font-medium">Statut</span>
-                          <Badge variant="outline" className={`font-medium ${getStatusBadgeColor(selectedPoint.status)}`}>
-                            {getStatusDescription(selectedPoint.status)}
+                          <Badge variant="outline" className={`font-medium ${getStatusBadgeColor(selectedPoint.statut)}`}>
+                            {getStatusDescription(selectedPoint.statut)}
                           </Badge>
                         </div>
                       </div>
@@ -871,6 +967,7 @@ export default function TrackingPage() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="max-h-32 space-y-2 hide-scrollbar custom-scroll" style={{ overflowY: "auto" }}>
+                      {/* Messages (receiver = all) */}
                       {messages.map((msg, index) => (
                         <div key={msg.id || index} className="flex items-start gap-2">
                           <div className="w-6 h-6 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center">
@@ -878,12 +975,25 @@ export default function TrackingPage() {
                           </div>
                           <div className="bg-blue-50 rounded-lg p-2 flex-1">
                             <p className="text-xs text-gray-800">{msg.message}</p>
-                            <p className="text-xs text-gray-500 mt-1">{getTimeAgo(msg.created_at || msg.recorded_at)}</p>
+                            <p className="text-xs text-gray-500 mt-1">{getTimeAgo(msg.created_at)}</p>
                           </div>
                         </div>
                       ))}
                       
-                      {messages.length === 0 && (
+                      {/* Responses (sender = all) */}
+                      {responses.map((response, index) => (
+                        <div key={`response-${response.id || index}`} className="flex items-start gap-2">
+                          <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center">
+                            <MessageCircle className="w-3 h-3 text-white" />
+                          </div>
+                          <div className="bg-purple-50 rounded-lg p-2 flex-1">
+                            <p className="text-xs text-gray-800">{response.message}</p>
+                            <p className="text-xs text-gray-500 mt-1">{getTimeAgo(response.created_at)}</p>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {messages.length === 0 && responses.length === 0 && (
                         <p className="text-xs text-gray-500 text-center py-4">Aucun message récent</p>
                       )}
                     </div>
@@ -912,6 +1022,7 @@ export default function TrackingPage() {
           </div>
         )}
 
+        {/* Employee Modal */}
         {selectedEmployee && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <Card className="bg-white shadow-2xl border-0 max-w-md w-full slide-in-animation">
@@ -983,6 +1094,94 @@ export default function TrackingPage() {
                   <Button variant="outline" className="flex-1 bg-transparent">
                     <MessageCircle className="w-4 h-4 mr-2" />
                     Message
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Vehicle Modal */}
+        {selectedVehicle && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <Card className="bg-white shadow-2xl border-0 max-w-md w-full slide-in-animation">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white">
+                      <Truck className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold text-gray-900">
+                        {selectedVehicle.marque} {selectedVehicle.modele}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {selectedVehicle.type}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedVehicle(null)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    ✕
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <span className="font-medium text-gray-700">Matricule</span>
+                    <span className="text-gray-900">{selectedVehicle.matricule}</span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <span className="font-medium text-gray-700">État</span>
+                    <Badge variant={selectedVehicle.etat === 'disponible' ? 'default' : 'secondary'}>
+                      {selectedVehicle.etat}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <span className="font-medium text-gray-700">Statut</span>
+                    <span className="text-gray-900">{selectedVehicle.statut}</span>
+                  </div>
+                  {selectedVehicle.date_achat && (
+                    <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                      <span className="font-medium text-gray-700">Date d'achat</span>
+                      <span className="text-gray-900">{new Date(selectedVehicle.date_achat).toLocaleDateString('fr-FR')}</span>
+                    </div>
+                  )}
+                  {selectedVehicle.montant_achat && (
+                    <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                      <span className="font-medium text-gray-700">Montant d'achat</span>
+                      <span className="text-gray-900">{selectedVehicle.montant_achat} MAD</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <span className="font-medium text-gray-700">Temps restant</span>
+                    <span className="text-gray-900">{calculateTempsRestant(selectedVehicle.date_disponibilite)}</span>
+                  </div>
+                  {selectedVehicle.salarie_id && (
+                    <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                      <span className="font-medium text-gray-700">Salarié assigné</span>
+                      <span className="text-gray-900">
+                        {(() => {
+                          const salarie = apiData.salaries?.find((s: any) => s.id === selectedVehicle.salarie_id)
+                          return salarie ? `${salarie.prenom} ${salarie.nom}` : 'Non assigné'
+                        })()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2 pt-4">
+                  <Button className="flex-1 bg-gradient-to-br from-blue-500 to-indigo-600 hover:bg-blue-600 text-white">
+                    <Car className="w-4 h-4 mr-2" />
+                    Gérer
+                  </Button>
+                  <Button variant="outline" className="flex-1 bg-transparent">
+                    <Fuel className="w-4 h-4 mr-2" />
+                    Carburant
                   </Button>
                 </div>
               </CardContent>

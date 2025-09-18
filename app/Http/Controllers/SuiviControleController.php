@@ -522,11 +522,8 @@ class SuiviControleController extends Controller
             'recorded_at' => now(),
         ]);
 
-        return response()->json([
-            'success' => true,
-            'notification' => $notification,
-            'message' => 'Notification created successfully.',
-        ], 201);
+        return redirect()->back()->with('success', 'Mssg Transfere avec succès');
+
     }
     ######################################################
     public function storePosition(Request $request)

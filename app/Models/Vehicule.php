@@ -13,6 +13,7 @@ class Vehicule extends Model {
         'marque',
         'type',
         'etat',
+        'carburant',
         'cout_location_jour',
         'date_affectation',
         'date_disponibilite',
