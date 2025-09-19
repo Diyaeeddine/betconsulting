@@ -284,6 +284,29 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
     //soustrait 
     Route::get('/sousTrais', [RessourcesHumainesController::class, 'getSousTrais'])->name('sousTrais.get.ressources-humaines');
     Route::post('/sousTrais', [RessourcesHumainesController::class, 'storeSousTrais'])->name('sousTrais.store.ressources-humaines');
+
+
+
+    
+    // Lancer le script Selenium pour récupérer les marchés publics
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/fetch-marche-public',
+        [RessourcesHumainesController::class, 'fetchMarchePublic']
+    )->name('ressources-humaines.fetch-marche-public');
+
+    // Obtenir les données JSON des marchés publics
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/marche-public',
+        [RessourcesHumainesController::class, 'getMarchePublicData']
+    )->name('ressources-humaines.marche-public');
+
+    // Page marchés publics
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(function () {
+        Route::get(
+            '/ressources-humaines/marche-public-page',
+            [RessourcesHumainesController::class, 'marchePublicPage']
+        )->name('ressources-humaines.marche-public-page');
+    });
 });
 
 

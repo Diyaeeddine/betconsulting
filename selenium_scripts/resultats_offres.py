@@ -12,7 +12,7 @@ from selenium.webdriver.support import expected_conditions as EC
 BASE_URL = "https://global-marches.com"
 
 # Chemin absolu vers storage/app/public de ton projet Laravel
-storage_public = "/Applications/XAMPP/xamppfiles/htdocs/betconsulting/storage/app/public"
+storage_public = r"C:\xampp\htdocs\betconsulting\storage\app\public"
 result_dir = os.path.join(storage_public, "resultats_offres")
 os.makedirs(result_dir, exist_ok=True)  # Créer le dossier si non existant
 

@@ -10,7 +10,7 @@ import time
 import os
 
 # Chemin absolu vers storage/app/public de ton projet
-storage_public = "/Applications/XAMPP/xamppfiles/htdocs/betconsulting/storage/app/public"
+storage_public = r"C:\xampp\htdocs\betconsulting\storage\app\public"
 dao_dir = os.path.join(storage_public, "dao")
 os.makedirs(dao_dir, exist_ok=True)  # Créer le dossier dao s'il n'existe pas
 

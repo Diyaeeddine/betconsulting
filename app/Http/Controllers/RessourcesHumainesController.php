@@ -16,6 +16,7 @@ use App\Models\ProjetNv;
 use App\Models\AppelOffer;
 use App\Models\BonCommande;
 use App\Models\ResultatBonCommande;
+use App\Models\ProjetMp;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -1209,150 +1210,150 @@ class RessourcesHumainesController extends Controller
     }
 
 
-public function fetchBonsCommande()
-{
-    $pythonScript = base_path('selenium_scripts/bons_commande.py');
+    public function fetchBonsCommande()
+    {
+        $pythonScript = base_path('selenium_scripts/bons_commande.py');
 
-    $lock = Cache::lock('selenium_lock', 300); // verrou 5 min
-    if (!$lock->get()) {
-        return redirect()->route('ressources-humaines.bons-commandes')
-            ->with('error', 'Une exécution Selenium est déjà en cours, réessayez dans quelques minutes.');
-    }
-
-    try {
-        // Exécuter le script Python en arrière-plan
-        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-            pclose(popen("start /B python $pythonScript", "r"));
-        } else {
-            exec("nohup python3 $pythonScript > /dev/null 2>&1 &");
-        }
-
-        // Attendre un peu que les fichiers soient générés
-        sleep(10);
-
-        $csvPath = storage_path('app/public/bons_commande/bons_commande.csv');
-        $jsonPath = storage_path('app/public/bons_commande/bons_commande.json');
-
-        if (!file_exists($csvPath) || !file_exists($jsonPath)) {
+        $lock = Cache::lock('selenium_lock', 300); // verrou 5 min
+        if (!$lock->get()) {
             return redirect()->route('ressources-humaines.bons-commandes')
-                ->with('error', 'Fichiers CSV/JSON introuvables après exécution du script.');
+                ->with('error', 'Une exécution Selenium est déjà en cours, réessayez dans quelques minutes.');
         }
 
-        // Lire le JSON pour récupérer les fichiers extraits
-        $jsonData = json_decode(file_get_contents($jsonPath), true) ?? [];
-        $jsonIndex = [];
-        foreach ($jsonData as $bon) {
-            $nOrdreKey = trim($bon["N d'ordre"] ?? '');
-            if ($nOrdreKey) {
-                $jsonIndex[$nOrdreKey] = $bon;
+        try {
+            // Exécuter le script Python en arrière-plan
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                pclose(popen("start /B python $pythonScript", "r"));
+            } else {
+                exec("nohup python3 $pythonScript > /dev/null 2>&1 &");
             }
-        }
 
-        // Fonction pour parser les dates
-        function parseDate($dateString)
-        {
-            if (empty($dateString)) return null;
+            // Attendre un peu que les fichiers soient générés
+            sleep(10);
 
-            $parts = explode('|', $dateString);
-            $firstPart = trim($parts[0]);
+            $csvPath = storage_path('app/public/bons_commande/bons_commande.csv');
+            $jsonPath = storage_path('app/public/bons_commande/bons_commande.json');
 
-            try {
-                return Carbon::createFromFormat('d/m/Y H:i', $firstPart);
-            } catch (\Exception $e) {
-                Log::warning("Impossible de parser la date: $dateString", ['error' => $e->getMessage()]);
-                return null;
+            if (!file_exists($csvPath) || !file_exists($jsonPath)) {
+                return redirect()->route('ressources-humaines.bons-commandes')
+                    ->with('error', 'Fichiers CSV/JSON introuvables après exécution du script.');
             }
-        }
 
-        $csv = \League\Csv\Reader::createFromPath($csvPath, 'r');
-        $csv->setHeaderOffset(0);
-        $records = $csv->getRecords();
+            // Lire le JSON pour récupérer les fichiers extraits
+            $jsonData = json_decode(file_get_contents($jsonPath), true) ?? [];
+            $jsonIndex = [];
+            foreach ($jsonData as $bon) {
+                $nOrdreKey = trim($bon["N d'ordre"] ?? '');
+                if ($nOrdreKey) {
+                    $jsonIndex[$nOrdreKey] = $bon;
+                }
+            }
 
-        $insertedCount = 0;
-        $duplicateCount = 0;
-        $errorCount = 0;
+            // Fonction pour parser les dates
+            function parseDate($dateString)
+            {
+                if (empty($dateString)) return null;
 
-        foreach ($records as $index => $row) {
-            try {
-                $cleanRow = array_map('trim', $row);
-                $dateLimit = parseDate($cleanRow['Date/Heure limite'] ?? '');
+                $parts = explode('|', $dateString);
+                $firstPart = trim($parts[0]);
 
-                // Récupérer les fichiers extraits depuis le JSON
-                $extractedFiles = $jsonIndex[$cleanRow["N d'ordre"] ?? '']['EXTRACTED_FILES'] ?? [];
+                try {
+                    return Carbon::createFromFormat('d/m/Y H:i', $firstPart);
+                } catch (\Exception $e) {
+                    Log::warning("Impossible de parser la date: $dateString", ['error' => $e->getMessage()]);
+                    return null;
+                }
+            }
 
-                $bonData = [
-                    'n_ordre' => $cleanRow['N d\'ordre'] ?? null,
-                    'reference' => $cleanRow['Référence'] ?? '',
-                    'date_heure_limite' => $dateLimit,
-                    'objet' => $cleanRow['Objet '] ?? '',
-                    'organisme' => $cleanRow['Organisme '] ?? '',
-                    'ville_execution' => $cleanRow['Ville d\'exécution '] ?? '',
-                    'type' => $cleanRow['Type '] ?? '',
-                    'observation' => $cleanRow['Obsérvation '] ?? '',
-                    'visite_lieux' => $cleanRow['Visite des lieux '] ?? '',
-                    'telechargement_dao' => $cleanRow['Téléchargement_DAO'] ?? '',
-                    'lien_cliquer_ici' => $cleanRow['Lien_Cliquer_Ici'] ?? '',
-                    'soumission_electronique' => $cleanRow['Soumission électronique '] ?? '',
-                    'chemin_fichiers' => !empty($extractedFiles) ? json_encode($extractedFiles) : null,
-                ];
+            $csv = \League\Csv\Reader::createFromPath($csvPath, 'r');
+            $csv->setHeaderOffset(0);
+            $records = $csv->getRecords();
 
-                foreach ($bonData as $key => $value) {
-                    if (is_string($value)) {
-                        $bonData[$key] = trim($value);
-                        if ($bonData[$key] === '' || $bonData[$key] === '---') {
-                            $bonData[$key] = null;
+            $insertedCount = 0;
+            $duplicateCount = 0;
+            $errorCount = 0;
+
+            foreach ($records as $index => $row) {
+                try {
+                    $cleanRow = array_map('trim', $row);
+                    $dateLimit = parseDate($cleanRow['Date/Heure limite'] ?? '');
+
+                    // Récupérer les fichiers extraits depuis le JSON
+                    $extractedFiles = $jsonIndex[$cleanRow["N d'ordre"] ?? '']['EXTRACTED_FILES'] ?? [];
+
+                    $bonData = [
+                        'n_ordre' => $cleanRow['N d\'ordre'] ?? null,
+                        'reference' => $cleanRow['Référence'] ?? '',
+                        'date_heure_limite' => $dateLimit,
+                        'objet' => $cleanRow['Objet '] ?? '',
+                        'organisme' => $cleanRow['Organisme '] ?? '',
+                        'ville_execution' => $cleanRow['Ville d\'exécution '] ?? '',
+                        'type' => $cleanRow['Type '] ?? '',
+                        'observation' => $cleanRow['Obsérvation '] ?? '',
+                        'visite_lieux' => $cleanRow['Visite des lieux '] ?? '',
+                        'telechargement_dao' => $cleanRow['Téléchargement_DAO'] ?? '',
+                        'lien_cliquer_ici' => $cleanRow['Lien_Cliquer_Ici'] ?? '',
+                        'soumission_electronique' => $cleanRow['Soumission électronique '] ?? '',
+                        'chemin_fichiers' => !empty($extractedFiles) ? json_encode($extractedFiles) : null,
+                    ];
+
+                    foreach ($bonData as $key => $value) {
+                        if (is_string($value)) {
+                            $bonData[$key] = trim($value);
+                            if ($bonData[$key] === '' || $bonData[$key] === '---') {
+                                $bonData[$key] = null;
+                            }
                         }
                     }
+
+                    Log::info("Vérification doublon ligne $index:", $bonData);
+
+                    // Vérifier doublon et insérer
+                    $bonCommande = BonCommande::firstOrCreate(
+                        [
+                            'n_ordre' => $bonData['n_ordre'],
+                            'reference' => $bonData['reference']
+                        ],
+                        $bonData
+                    );
+
+                    if ($bonCommande->wasRecentlyCreated) {
+                        $insertedCount++;
+                        Log::info("Bon de commande inséré (ID: {$bonCommande->id})");
+                    } else {
+                        $duplicateCount++;
+                        Log::info("Doublon ignoré : N° {$bonData['n_ordre']} - Réf {$bonData['reference']}");
+                    }
+                } catch (\Exception $e) {
+                    $errorCount++;
+                    Log::error("Erreur insertion ligne $index", [
+                        'error' => $e->getMessage(),
+                        'line' => $e->getLine(),
+                        'file' => $e->getFile(),
+                        'data' => $cleanRow ?? []
+                    ]);
                 }
-
-                Log::info("Vérification doublon ligne $index:", $bonData);
-
-                // Vérifier doublon et insérer
-                $bonCommande = BonCommande::firstOrCreate(
-                    [
-                        'n_ordre' => $bonData['n_ordre'],
-                        'reference' => $bonData['reference']
-                    ],
-                    $bonData
-                );
-
-                if ($bonCommande->wasRecentlyCreated) {
-                    $insertedCount++;
-                    Log::info("Bon de commande inséré (ID: {$bonCommande->id})");
-                } else {
-                    $duplicateCount++;
-                    Log::info("Doublon ignoré : N° {$bonData['n_ordre']} - Réf {$bonData['reference']}");
-                }
-            } catch (\Exception $e) {
-                $errorCount++;
-                Log::error("Erreur insertion ligne $index", [
-                    'error' => $e->getMessage(),
-                    'line' => $e->getLine(),
-                    'file' => $e->getFile(),
-                    'data' => $cleanRow ?? []
-                ]);
             }
+
+            $message = "Import terminé : $insertedCount ajoutés, $duplicateCount doublons ignorés.";
+            if ($errorCount > 0) {
+                $message .= " $errorCount erreurs détectées (voir logs).";
+            }
+
+            return redirect()->route('ressources-humaines.bons-commandes')
+                ->with('success', $message);
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de l\'importation des bons de commande:', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return redirect()->route('ressources-humaines.bons-commandes')
+                ->with('error', 'Erreur lors de l\'importation : ' . $e->getMessage());
+        } finally {
+            $lock->release();
         }
-
-        $message = "Import terminé : $insertedCount ajoutés, $duplicateCount doublons ignorés.";
-        if ($errorCount > 0) {
-            $message .= " $errorCount erreurs détectées (voir logs).";
-        }
-
-        return redirect()->route('ressources-humaines.bons-commandes')
-            ->with('success', $message);
-    } catch (\Exception $e) {
-        Log::error('Erreur lors de l\'importation des bons de commande:', [
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ]);
-
-        return redirect()->route('ressources-humaines.bons-commandes')
-            ->with('error', 'Erreur lors de l\'importation : ' . $e->getMessage());
-    } finally {
-        $lock->release();
     }
-}
 
 
 
@@ -1496,99 +1497,99 @@ public function fetchBonsCommande()
 
 
     public function fetchResultatsBonCommande()
-{
-    $pythonScript = base_path('selenium_scripts/resultats_bon_commande.py');
+    {
+        $pythonScript = base_path('selenium_scripts/resultats_bon_commande.py');
 
-    $lock = Cache::lock('selenium_resultat_bon_commande_lock', 300);
-    if (!$lock->get()) {
-        return redirect()->back()
-            ->with('error', 'Une exécution Selenium est déjà en cours, réessayez dans quelques minutes.');
-    }
-
-    try {
-        // Lancer le script Python en arrière-plan
-        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-            pclose(popen("start /B python $pythonScript", "r"));
-        } else {
-            exec("nohup python3 $pythonScript > /dev/null 2>&1 &");
-        }
-
-        // Chemins des fichiers générés
-        $csvPath = storage_path('app/public/resultats_bon_commande/resultats_bon_commande.csv');
-        $jsonPath = storage_path('app/public/resultats_bon_commande/resultats_bon_commande.json');
-
-        if (!file_exists($csvPath) || !file_exists($jsonPath)) {
+        $lock = Cache::lock('selenium_resultat_bon_commande_lock', 300);
+        if (!$lock->get()) {
             return redirect()->back()
-                ->with('error', 'Fichiers CSV/JSON introuvables après exécution du script.');
+                ->with('error', 'Une exécution Selenium est déjà en cours, réessayez dans quelques minutes.');
         }
 
-        // Lire le JSON pour récupérer les chemins des fichiers
-        $jsonData = json_decode(file_get_contents($jsonPath), true) ?? [];
-        $jsonIndex = [];
-        foreach ($jsonData as $bon) {
-            $objetKey = trim($bon['Objet'] ?? '');
-            if ($objetKey) {
-                $jsonIndex[$objetKey] = $bon;
+        try {
+            // Lancer le script Python en arrière-plan
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                pclose(popen("start /B python $pythonScript", "r"));
+            } else {
+                exec("nohup python3 $pythonScript > /dev/null 2>&1 &");
             }
+
+            // Chemins des fichiers générés
+            $csvPath = storage_path('app/public/resultats_bon_commande/resultats_bon_commande.csv');
+            $jsonPath = storage_path('app/public/resultats_bon_commande/resultats_bon_commande.json');
+
+            if (!file_exists($csvPath) || !file_exists($jsonPath)) {
+                return redirect()->back()
+                    ->with('error', 'Fichiers CSV/JSON introuvables après exécution du script.');
+            }
+
+            // Lire le JSON pour récupérer les chemins des fichiers
+            $jsonData = json_decode(file_get_contents($jsonPath), true) ?? [];
+            $jsonIndex = [];
+            foreach ($jsonData as $bon) {
+                $objetKey = trim($bon['Objet'] ?? '');
+                if ($objetKey) {
+                    $jsonIndex[$objetKey] = $bon;
+                }
+            }
+
+            // Lire le CSV et insérer en base
+            $csv = Reader::createFromPath($csvPath, 'r');
+            $csv->setHeaderOffset(0);
+            $records = $csv->getRecords();
+
+            foreach ($records as $row) {
+                $reference = $row['Référence'] ?? null;
+                $maitre_ouvrage = $row["Maitre d'ouvrage"] ?? null;
+                $objet = $row['Objet'] ?? null;
+                $adjudicataire = $row['Adjudicataire'] ?? null;
+                $ville = $row['Ville'] ?? null;
+                $budget = $row['Budget(DHs)'] ?? null;
+                $montant = $row['Montant(DHs)'] ?? null;
+                $date_adjudications = $row['Date des adjudications'] ?? null;
+                $date_ouverture = $row["Date d'ouverture"] ?? null;
+                $date_affichage = $row["Date d'affichage"] ?? null;
+                $lien_dao = $row['Lien_DAO'] ?? null;
+                $dao = $row['D.A.O'] ?? null;
+
+                $bonJson = $jsonIndex[$objet] ?? [];
+                $chemin_fichiers = $bonJson['EXTRACTED_FILES'] ?? [];
+
+                // Convertir les dates
+                $date_ouverture = $date_ouverture ? Carbon::createFromFormat('d/m/Y', $date_ouverture) : null;
+                $date_adjudications = $date_adjudications ? Carbon::createFromFormat('d/m/Y', $date_adjudications) : null;
+                $date_affichage = $date_affichage ? Carbon::createFromFormat('d/m/Y', $date_affichage) : null;
+
+                ResultatBonCommande::updateOrCreate(
+                    [
+                        'reference' => $reference,
+                        'objet' => $objet,
+                        'maitre_ouvrage' => $maitre_ouvrage,
+                    ],
+                    [
+                        'date_ouverture' => $date_ouverture,
+                        'budget' => $budget,
+                        'lien_dao' => $lien_dao,
+                        'dao' => $dao,
+                        'date_adjudications' => $date_adjudications,
+                        'ville' => $ville,
+                        'montant' => $montant,
+                        'adjudicataire' => $adjudicataire,
+                        'chemin_fichiers' => $chemin_fichiers,
+                        'date_affichage' => $date_affichage,
+                    ]
+                );
+            }
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Erreur lors de l\'importation : ' . $e->getMessage());
+        } finally {
+            $lock->release();
         }
 
-        // Lire le CSV et insérer en base
-        $csv = Reader::createFromPath($csvPath, 'r');
-        $csv->setHeaderOffset(0);
-        $records = $csv->getRecords();
-
-        foreach ($records as $row) {
-            $reference = $row['Référence'] ?? null;
-            $maitre_ouvrage = $row["Maitre d'ouvrage"] ?? null;
-            $objet = $row['Objet'] ?? null;
-            $adjudicataire = $row['Adjudicataire'] ?? null;
-            $ville = $row['Ville'] ?? null;
-            $budget = $row['Budget(DHs)'] ?? null;
-            $montant = $row['Montant(DHs)'] ?? null;
-            $date_adjudications = $row['Date des adjudications'] ?? null;
-            $date_ouverture = $row["Date d'ouverture"] ?? null;
-            $date_affichage = $row["Date d'affichage"] ?? null;
-            $lien_dao = $row['Lien_DAO'] ?? null;
-            $dao = $row['D.A.O'] ?? null;
-
-            $bonJson = $jsonIndex[$objet] ?? [];
-            $chemin_fichiers = $bonJson['EXTRACTED_FILES'] ?? [];
-
-            // Convertir les dates
-            $date_ouverture = $date_ouverture ? Carbon::createFromFormat('d/m/Y', $date_ouverture) : null;
-            $date_adjudications = $date_adjudications ? Carbon::createFromFormat('d/m/Y', $date_adjudications) : null;
-            $date_affichage = $date_affichage ? Carbon::createFromFormat('d/m/Y', $date_affichage) : null;
-
-            ResultatBonCommande::updateOrCreate(
-                [
-                    'reference' => $reference,
-                    'objet' => $objet,
-                    'maitre_ouvrage' => $maitre_ouvrage,
-                ],
-                [
-                    'date_ouverture' => $date_ouverture,
-                    'budget' => $budget,
-                    'lien_dao' => $lien_dao,
-                    'dao' => $dao,
-                    'date_adjudications' => $date_adjudications,
-                    'ville' => $ville,
-                    'montant' => $montant,
-                    'adjudicataire' => $adjudicataire,
-                    'chemin_fichiers' => $chemin_fichiers,
-                    'date_affichage' => $date_affichage,
-                ]
-            );
-        }
-    } catch (\Exception $e) {
         return redirect()->back()
-            ->with('error', 'Erreur lors de l\'importation : ' . $e->getMessage());
-    } finally {
-        $lock->release();
+            ->with('success', 'Le script Selenium pour ResultatBonCommande a été exécuté. Les données ont été mises à jour.');
     }
-
-    return redirect()->back()
-        ->with('success', 'Le script Selenium pour ResultatBonCommande a été exécuté. Les données ont été mises à jour.');
-}
 
 
 
@@ -1604,4 +1605,414 @@ public function fetchBonsCommande()
     {
         return Inertia::render('ressources-humaines/ResultatBonCommande');
     }
+
+    // marche public
+    
+    public function fetchMarchePublic()
+    {
+        set_time_limit(0); // Désactive la limite de temps d'exécution
+        ini_set('memory_limit', '512M'); // Augmente la limite mémoire
+        
+        $pythonScript = base_path('selenium_scripts/marches_public.py');
+    
+        // Vérifier que le script existe
+        if (!file_exists($pythonScript)) {
+            return redirect()->back()
+                ->with('error', 'Script Python introuvable : ' . $pythonScript);
+        }
+
+        $lock = Cache::lock('selenium_marche_public_lock', 1800); // 30 minutes
+        if (!$lock->get()) {
+            return redirect()->back()
+                ->with('error', 'Une exécution Selenium est déjà en cours, réessayez dans quelques minutes.');
+        }
+    
+        try {
+            Log::info("=== DÉMARRAGE DU PROCESSUS MARCHÉ PUBLIC ===");
+            
+            $csvPath = storage_path('app/public/marche_public/marches_publics_data.csv');
+            $jsonPath = storage_path('app/public/marche_public/marches_publics_data.json');
+            
+            // Supprimer les anciens fichiers pour éviter la confusion
+            if (file_exists($csvPath)) {
+                unlink($csvPath);
+                Log::info("Ancien fichier CSV supprimé");
+            }
+            if (file_exists($jsonPath)) {
+                unlink($jsonPath);
+                Log::info("Ancien fichier JSON supprimé");
+            }
+
+            // Lancement du script Python
+            Log::info("Lancement du script Python...");
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                pclose(popen("start /B python \"$pythonScript\"", "r"));
+            } else {
+                exec("nohup python3 \"$pythonScript\" > /dev/null 2>&1 &");
+            }
+            
+            Log::info("Script Python lancé, attente de la génération des fichiers...");
+
+            // === ATTENTE INTELLIGENTE DES FICHIERS ===
+            $maxWaitTime = 3600; // 1 heure maximum
+            $checkInterval = 10; // Vérifier toutes les 10 secondes
+            $waited = 0;
+            $lastLogTime = 0;
+            
+            while ($waited < $maxWaitTime) {
+                $csvExists = file_exists($csvPath);
+                $jsonExists = file_exists($jsonPath);
+                
+                // Log périodique pour éviter le spam
+                if ($waited - $lastLogTime >= 60) { // Log toutes les minutes
+                    Log::info("Attente des fichiers... {$waited}s écoulées (CSV: " . ($csvExists ? 'OK' : 'NON') . ", JSON: " . ($jsonExists ? 'OK' : 'NON') . ")");
+                    $lastLogTime = $waited;
+                }
+                
+                if ($csvExists && $jsonExists) {
+                    Log::info("✅ Fichiers CSV et JSON détectés après {$waited} secondes");
+                    
+                    // Vérifier que les fichiers ne sont pas vides et sont valides
+                    if ($this->validateFiles($csvPath, $jsonPath)) {
+                        Log::info("✅ Fichiers validés, début de l'import");
+                        break;
+                    } else {
+                        Log::info("⚠️ Fichiers détectés mais non valides, attente...");
+                    }
+                }
+                
+                sleep($checkInterval);
+                $waited += $checkInterval;
+            }
+    
+            if ($waited >= $maxWaitTime) {
+                Log::error("❌ Timeout après {$maxWaitTime}s d'attente");
+                return redirect()->back()
+                    ->with('error', "Le script a pris trop de temps à générer les fichiers (timeout après {$maxWaitTime}s). Vérifiez les logs du script Python.");
+            }
+
+            // === ATTENTE SUPPLÉMENTAIRE POUR LES TÉLÉCHARGEMENTS ===
+            Log::info("Attente supplémentaire pour finaliser les téléchargements et extractions...");
+            $additionalWait = 60; // 1 minute supplémentaire
+            sleep($additionalWait);
+            
+            // === IMPORT DES DONNÉES ===
+            return $this->importDataFromFiles($csvPath, $jsonPath);
+            
+        } catch (\Exception $e) {
+            Log::error("❌ Erreur lors de l'exécution du script: " . $e->getMessage());
+            Log::error("Stack trace: " . $e->getTraceAsString());
+            return redirect()->back()->with('error', 'Erreur lors de l\'exécution du script : ' . $e->getMessage());
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * Valide que les fichiers CSV et JSON sont correctement formés
+     */
+    private function validateFiles($csvPath, $jsonPath)
+    {
+        try {
+            // Vérifier que les fichiers ne sont pas vides
+            if (filesize($csvPath) < 100 || filesize($jsonPath) < 100) {
+                return false;
+            }
+            
+            // Vérifier que le JSON est valide
+            $jsonContent = file_get_contents($jsonPath);
+            $jsonData = json_decode($jsonContent, true);
+            if (json_last_error() !== JSON_ERROR_NONE || empty($jsonData)) {
+                return false;
+            }
+            
+            // Vérifier que le CSV est lisible
+            $csv = Reader::createFromPath($csvPath, 'r');
+            $csv->setHeaderOffset(0);
+            $headers = $csv->getHeader();
+            if (empty($headers) || !in_array('reference', $headers)) {
+                return false;
+            }
+            
+            return true;
+            
+        } catch (\Exception $e) {
+            Log::warning("Erreur lors de la validation des fichiers: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Import les données depuis les fichiers CSV et JSON
+     */
+    private function importDataFromFiles($csvPath, $jsonPath)
+    {
+        try {
+            Log::info("=== DÉBUT DE L'IMPORT DES DONNÉES ===");
+            
+            // Charger le JSON en mémoire pour les références croisées
+            $jsonData = json_decode(file_get_contents($jsonPath), true) ?? [];
+            $jsonIndex = [];
+            foreach ($jsonData as $marche) {
+                $referenceKey = trim($marche['reference'] ?? '');
+                if ($referenceKey) {
+                    $jsonIndex[$referenceKey] = $marche;
+                }
+            }
+            Log::info("JSON chargé avec " . count($jsonData) . " entrées indexées");
+
+            // === FONCTIONS UTILITAIRES ===
+            $findZipFile = function ($reference, $basePath) {
+                if (empty($reference)) return null;
+                
+                $exactPath = $basePath . DIRECTORY_SEPARATOR . $reference . '.zip';
+                if (file_exists($exactPath)) return $exactPath;
+                
+                $pattern = $basePath . DIRECTORY_SEPARATOR . '*' . $reference . '*.zip';
+                $files = glob($pattern);
+                return !empty($files) ? $files[0] : null;
+            };
+
+            $findExtractedDir = function ($reference, $basePath) {
+                if (empty($reference)) return null;
+                
+                $exactDir = $basePath . DIRECTORY_SEPARATOR . $reference . '_extrait';
+                if (is_dir($exactDir)) return $exactDir;
+                
+                $pattern = $basePath . DIRECTORY_SEPARATOR . '*' . $reference . '*_extrait';
+                $dirs = glob($pattern, GLOB_ONLYDIR);
+                return !empty($dirs) ? $dirs[0] : null;
+            };
+
+            $parseDateMarche = function ($dateString) {
+                if (empty($dateString) || in_array($dateString, ['---', 'N/A', ''])) {
+                    return null;
+                }
+                try {
+                    if (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/', $dateString)) {
+                        return Carbon::createFromFormat('d/m/Y', $dateString)->format('Y-m-d');
+                    }
+                    return Carbon::parse($dateString)->format('Y-m-d');
+                } catch (\Exception $e) {
+                    Log::warning("Impossible de parser la date: {$dateString}");
+                    return null;
+                }
+            };
+
+            $parseDateLimiteMarche = function ($dateString) {
+                if (empty($dateString) || in_array($dateString, ['---', 'N/A', ''])) {
+                    return null;
+                }
+                try {
+                    // Format français : "15 janvier 2024 à 10h30"
+                    if (preg_match('/(\d{1,2})\s+(\w+)\s+(\d{4}).*?(\d{1,2})h(\d{2})/', $dateString, $matches)) {
+                        $mois = [
+                            'janvier' => '01', 'février' => '02', 'mars' => '03', 'avril' => '04',
+                            'mai' => '05', 'juin' => '06', 'juillet' => '07', 'août' => '08',
+                            'septembre' => '09', 'octobre' => '10', 'novembre' => '11', 'décembre' => '12'
+                        ];
+                        $jour = str_pad($matches[1], 2, '0', STR_PAD_LEFT);
+                        $moisNum = $mois[strtolower($matches[2])] ?? '01';
+                        $annee = $matches[3];
+                        $heure = str_pad($matches[4], 2, '0', STR_PAD_LEFT);
+                        $minute = $matches[5];
+                        return "{$annee}-{$moisNum}-{$jour} {$heure}:{$minute}:00";
+                    }
+                    
+                    if (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{1,2}):(\d{2})/', $dateString)) {
+                        return Carbon::createFromFormat('d/m/Y H:i', $dateString)->format('Y-m-d H:i:s');
+                    }
+                    
+                    if (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/', $dateString)) {
+                        return Carbon::createFromFormat('d/m/Y', $dateString)->format('Y-m-d H:i:s');
+                    }
+                    
+                    return Carbon::parse($dateString)->format('Y-m-d H:i:s');
+                } catch (\Exception $e) {
+                    Log::warning("Impossible de parser la date limite: {$dateString}");
+                    return null;
+                }
+            };
+
+            // === TRAITEMENT DU CSV ===
+            $csv = Reader::createFromPath($csvPath, 'r');
+            $csv->setHeaderOffset(0);
+            $records = iterator_to_array($csv->getRecords());
+            
+            Log::info("CSV chargé avec " . count($records) . " enregistrements");
+
+            $insertedCount = 0;
+            $updatedCount = 0;
+            $errorCount = 0;
+            $zipFoundCount = 0;
+            $extractedFoundCount = 0;
+            $marchePublicPath = storage_path('app/public/marche_public');
+
+            // Traitement par batch pour optimiser les performances
+            $batchSize = 50;
+            $batches = array_chunk($records, $batchSize);
+            
+            foreach ($batches as $batchIndex => $batch) {
+                Log::info("Traitement du batch " . ($batchIndex + 1) . "/" . count($batches) . " (" . count($batch) . " enregistrements)");
+                
+                foreach ($batch as $index => $row) {
+                    try {
+                        $cleanRow = array_map('trim', $row);
+                        $reference = $cleanRow['reference'] ?? '';
+                        
+                        if (empty($reference)) {
+                            Log::warning("Référence vide à la ligne " . ($index + 1));
+                            continue;
+                        }
+
+                        // Récupérer les données JSON correspondantes
+                        $marcheJson = $jsonIndex[$reference] ?? [];
+
+                        // Recherche du fichier ZIP
+                        $cheminZip = null;
+                        $foundZipPath = $findZipFile($reference, $marchePublicPath);
+                        if ($foundZipPath && file_exists($foundZipPath)) {
+                            $cheminZip = "storage/marche_public/" . basename($foundZipPath);
+                            $zipFoundCount++;
+                        }
+
+                        // Recherche des fichiers extraits
+                        $extractedFiles = [];
+                        $foundExtractDir = $findExtractedDir($reference, $marchePublicPath);
+                        if ($foundExtractDir && is_dir($foundExtractDir)) {
+                            $iterator = new \RecursiveIteratorIterator(
+                                new \RecursiveDirectoryIterator($foundExtractDir, \RecursiveDirectoryIterator::SKIP_DOTS)
+                            );
+                            foreach ($iterator as $file) {
+                                if ($file->isFile()) {
+                                    $relativePath = str_replace(storage_path('app/public/'), '', $file->getPathname());
+                                    $relativePath = str_replace('\\', '/', $relativePath);
+                                    $extractedFiles[] = "/storage/{$relativePath}";
+                                }
+                            }
+                            if (!empty($extractedFiles)) {
+                                $extractedFoundCount++;
+                            }
+                        }
+
+                        // Préparation des données
+                        $datePublication = $parseDateMarche($cleanRow['date_publication'] ?? '');
+                        $dateLimite = $parseDateLimiteMarche($cleanRow['date_limite'] ?? '');
+                        $extractedAt = !empty($cleanRow['extracted_at']) ? Carbon::parse($cleanRow['extracted_at']) : now();
+
+                        $marcheData = [
+                            'type_procedure' => $this->cleanValue($cleanRow['type_procedure'] ?? null),
+                            'detail_procedure' => $this->cleanValue($cleanRow['detail_procedure'] ?? null),
+                            'categorie' => $this->cleanValue($cleanRow['categorie'] ?? null),
+                            'date_publication' => $datePublication,
+                            'reference' => $reference,
+                            'objet' => $this->cleanValue($cleanRow['objet'] ?? null),
+                            'objet_complet' => $this->cleanValue($cleanRow['objet_complet'] ?? $cleanRow['objet'] ?? null),
+                            'acheteur_public' => $this->cleanValue($cleanRow['acheteur_public'] ?? null),
+                            'lieu_execution' => $this->cleanValue($cleanRow['lieu_execution'] ?? null),
+                            'lieu_execution_complet' => $this->cleanValue($cleanRow['lieu_execution_complet'] ?? $cleanRow['lieu_execution'] ?? null),
+                            'lien_detail_lots' => $this->cleanValue($cleanRow['lien_detail_lots'] ?? null),
+                            'date_limite' => $dateLimite,
+                            'type_reponse_electronique' => $this->cleanValue($cleanRow['type_reponse_electronique'] ?? null),
+                            'lien_consultation' => $this->cleanValue($cleanRow['lien_consultation'] ?? null),
+                            'ref_consultation_id' => $this->cleanValue($cleanRow['ref_consultation_id'] ?? null),
+                            'extracted_at' => $extractedAt,
+                            'row_index' => (int)($cleanRow['row_index'] ?? ($index + 1)),
+                            'storage_link_csv' => 'storage/marche_public/marches_publics_data.csv',
+                            'storage_link_json' => 'storage/marche_public/marches_publics_data.json',
+                            'EXTRACTED_FILES' => json_encode($extractedFiles),
+                            'chemin_zip' => $cheminZip,
+                            'updated_at' => now(),
+                        ];
+
+                        // Insertion/Mise à jour avec gestion des doublons
+                        $projetMp = ProjetMp::updateOrCreate(
+                            [
+                                'reference' => $marcheData['reference'],
+                            ],
+                            $marcheData
+                        );
+
+                        if ($projetMp->wasRecentlyCreated) {
+                            $insertedCount++;
+                        } else {
+                            $updatedCount++;
+                        }
+
+                    } catch (\Exception $e) {
+                        $errorCount++;
+                        Log::error("❌ Erreur insertion ligne " . ($index + 1) . " (ref: {$reference}): " . $e->getMessage());
+                    }
+                }
+                
+                // Petit délai entre les batches pour éviter la surcharge
+                if ($batchIndex < count($batches) - 1) {
+                    usleep(100000); // 0.1 seconde
+                }
+            }
+
+            // === RÉSUMÉ FINAL ===
+            $totalProcessed = $insertedCount + $updatedCount + $errorCount;
+            
+            Log::info("=== RÉSUMÉ DE L'IMPORT ===");
+            Log::info("Total lignes traitées: {$totalProcessed}");
+            Log::info("✅ Nouvelles insertions: {$insertedCount}");
+            Log::info("🔄 Mises à jour: {$updatedCount}");
+            Log::info("❌ Erreurs: {$errorCount}");
+            Log::info("📁 ZIP trouvés: {$zipFoundCount}");
+            Log::info("📂 Dossiers extraits trouvés: {$extractedFoundCount}");
+
+            $message = "Import marchés publics terminé avec succès !";
+            $message .= " {$insertedCount} nouveaux marchés ajoutés";
+            if ($updatedCount > 0) $message .= ", {$updatedCount} mis à jour";
+            if ($errorCount > 0) $message .= ", {$errorCount} erreurs (voir logs)";
+            if ($zipFoundCount > 0) $message .= ". {$zipFoundCount} fichiers ZIP trouvés";
+            if ($extractedFoundCount > 0) $message .= ", {$extractedFoundCount} dossiers extraits trouvés";
+
+            return redirect()->back()->with('success', $message);
+
+        } catch (\Exception $e) {
+            Log::error("❌ Erreur générale lors de l'importation: " . $e->getMessage());
+            Log::error("Stack trace: " . $e->getTraceAsString());
+            return redirect()->back()->with('error', 'Erreur lors de l\'importation des marchés publics : ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Nettoie une valeur en supprimant les valeurs vides ou non significatives
+     */
+    private function cleanValue($value)
+    {
+        if (is_string($value)) {
+            $value = trim($value);
+            if (in_array($value, ['', '---', 'N/A', 'null', 'NULL'])) {
+                return null;
+            }
+        }
+        return $value;
+    }
+    
+        
+    
+    public function getMarchePublicData()
+    {
+        $jsonPath = storage_path('app/public/marche_public/marches_publics_data.json');
+
+        if (!file_exists($jsonPath)) {
+            return response()->json([
+                'error' => 'Fichier JSON non trouvé. Lancez d\'abord le script Selenium.'
+            ], 404);
+        }
+
+        $jsonData = json_decode(file_get_contents($jsonPath), true) ?? [];
+
+        return response()->json($jsonData);
+    }
+
+    public function marchePublicPage()
+    {
+        return Inertia::render('ressources-humaines/MarchePublic');
+    }
+
+    
 }
