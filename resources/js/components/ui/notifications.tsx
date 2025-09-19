@@ -45,7 +45,10 @@ export function Notifications() {
         const canal = pusher.subscribe(`private-user.${auth.user.id}`);
 
         canal.bind("notification.created", (data: { notification: Notification }) => {
-            setNotifications(prev => [data.notification, ...prev]);
+          setNotifications(prev => [data.notification, ...prev]);
+          const audio = new Audio('/sounds/notification.mp3');
+          audio.play().catch(err => console.error("Impossible de jouer le son", err));
+
         });
 
         return () => {

@@ -11,7 +11,7 @@ from selenium.webdriver.support import expected_conditions as EC
 
 BASE_URL = "https://global-marches.com"
 
-storage_public = "/Applications/XAMPP/xamppfiles/htdocs/betconsulting/storage/app/public"
+storage_public = "C:/Users/ghazi/OneDrive/Desktop/betconsulting/storage/app/public"
 bons_dir = os.path.join(storage_public, "bons_commande")
 os.makedirs(bons_dir, exist_ok=True)
 

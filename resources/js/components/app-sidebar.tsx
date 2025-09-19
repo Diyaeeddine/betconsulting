@@ -3,7 +3,7 @@ import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenuButton } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
-import { BookOpen, Building2, FolderKanban, LayoutDashboard, LayoutGrid, ShoppingCart, TrendingUp, UserPlus, Users } from "lucide-react"
+import { Ban, BookOpen, Building2, CircleCheckBig, CircleX, Clock3, FolderKanban, Globe, LayoutDashboard, LayoutGrid, Paperclip, Rss, ShoppingCart, TrendingUp, UserPlus, Users } from "lucide-react"
 import { Link, usePage } from '@inertiajs/react';
 import BetconsultingDashLogo from './betconsulting-dash-logo';
 import { Route, Car, Wrench} from "lucide-react"
@@ -28,7 +28,8 @@ export function AppSidebar() {
     };
 
     const dashboardHref = auth?.user?.role && roleDashboardMap[auth.user.role] ? roleDashboardMap[auth.user.role] : '/dashboard';
-
+// console.log('User permissions:', auth?.user?.permissions);
+// console.log('User role:', auth?.user?.role);
     const mainNavItems: NavItem[] = [
         {
             title: 'Dashboard',
@@ -99,17 +100,52 @@ export function AppSidebar() {
                   },
               ]
             : []),
-        
-        ...(auth?.user?.role === 'marches-marketing'
+
+        ...(auth?.user?.permissions?.includes('module marche public')
+            ? [
+                  {
+                      title: 'marches publics',
+                      icon: Rss,
+                      href: '/marches-publics',
+                  },
+              ]
+            : []),
+
+        ...(auth?.user?.permissions?.includes('module marche global')
+            ? [
+                  {
+                      title: 'Global marches',
+                      icon: Globe,
+                      href: '/global-marches',
+                  },
+              ]
+            : []),
+        ...(auth?.user?.permissions?.includes('les marches')
             ? [
                   {
                       title: 'Les marchés',
-                      href: '/marches-marketing/marches',
                       icon: Building2,
+                      items: [
+                          { title: 'En cours', href: '/marches/encours', icon: Clock3 },
+                          { title: 'Annulée', href: '/marches/annulee', icon: Ban },
+                          { title: 'Rejetée', href: '/marches/rejetee', icon: CircleX },
+                          { title: 'Terminée', href: '/marches/terminee', icon: CircleCheckBig },
+                      ],
+                  },
+              ]
+            : []),
+
+        ...(auth?.user?.permissions?.includes('module documentation')
+            ? [
+                  {
+                      title: 'Documentations',
+                      icon: Paperclip,
+                      href: '/documents',
                   },
               ]
             : []),
     ];
+    
 
     return (
         <Sidebar collapsible="icon" variant="floating">

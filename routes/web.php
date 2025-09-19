@@ -12,12 +12,16 @@ use App\Http\Controllers\InnovationTransitionController;
 use App\Http\Controllers\JuridiqueController;
 use App\Http\Controllers\LogistiqueGenerauxController;
 use App\Http\Controllers\MarchesMarketingController;
+use App\Http\Controllers\SharedController;
 use App\Http\Controllers\QualiteAuditController;
 use App\Http\Controllers\RessourcesHumainesController;
 use App\Http\Controllers\SuiviControleController;
 use App\Http\Controllers\SalarieController;
 use App\Http\Controllers\ScreenshotController;
 use App\Events\NewNotification;
+use App\Models\User;
+use App\Models\Document;
+use App\Notifications\DocumentExpirationNotification;
 use App\Models\Notification;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Broadcast;
@@ -113,7 +117,57 @@ Route::middleware(['auth', 'verified', 'role:marches-marketing'])->group(functio
 
     Route::get('/marches-marketing/marches', [MarchesMarketingController::class, 'marches'])
         ->name('marches.marches-marketing');
+
+    // Nouvelle route pour afficher un projet
+    Route::get('/marches-marketing/marches/{projet}', [MarchesMarketingController::class, 'show'])
+        ->name('marches.projet.show');
+
 });
+
+Route::middleware(['auth', 'permission:module documentation'])
+    ->group(function () {
+        Route::get('/documents', [SharedController::class, 'documents'])
+        ->name('documents.index');
+    Route::post('/documents', [SharedController::class, 'storeDocument'])
+        ->name('documents.store');
+    Route::post('/documents/{id}/renew', [SharedController::class, 'renewDocument'])
+        ->name('documents.renew');
+    Route::get('/documents/archives', [SharedController::class, 'DocumentsArchive'])
+        ->name('documents.archives');
+
+    // Documents complémentaires
+    Route::get('/documents-complementaires', [SharedController::class, 'complementaryDocuments'])
+        ->name('documents.complementaires.index');
+    Route::post('/documents-complementaires', [SharedController::class, 'storeComplementary'])
+        ->name('documents.complementaires.store');
+    Route::post('/documents-complementaires/{id}/renew', [SharedController::class, 'renewComplementary'])
+        ->name('documents.complementaires.renew');
+    Route::get('/documents-complementaires/archives', [SharedController::class, 'archivedComplementaryDocuments'])
+        ->name('documents.complementaires.archives');
+    });
+
+Route::middleware(['auth','permission:module marche public','permission:module marche global','permission:les marches'])
+
+->group(function () {
+    
+    Route::get('marches-publics', [SharedController::class, 'marchesPublic'])->name('marchesPublic');
+    Route::get('global-marches', [SharedController::class, 'globalMarches'])->name('globalMarches');
+
+    Route::post('marches/{id}/accept', [SharedController::class, 'acceptMP'])->name('marchesPublic.accept');
+    Route::post('marches/{id}/reject', [SharedController::class, 'rejectMP'])->name('marchesPublic.reject');
+
+    Route::post('marches/{id}/accept-initial', [SharedController::class, 'acceptIMP'])->name('marchesPublic.acceptInitial');
+    Route::post('marches/{id}/annule', [SharedController::class, 'annulerMP'])->name('marchesPublic.annulerMP');
+
+
+    Route::get('marches/encours', [SharedController::class, 'marchesEnCours'])->name('marches.encours');
+    Route::get('marches/annulee', [SharedController::class, 'marchesAnnulee'])->name('marches.annulee');
+    Route::get('marches/rejetee', [SharedController::class, 'marchesRejetee'])->name('marches.rejetee');
+    Route::get('marches/terminee', [SharedController::class, 'marchesTerminee'])->name('marches.terminee');
+
+});
+
+
 
 // Qualité & Audit
 Route::middleware(['auth', 'verified', 'role:qualite-audit'])->group(function () {
@@ -400,20 +454,40 @@ Route::middleware(['auth'])->group(function () {
 Broadcast::routes(['middleware' => ['auth:web']]);
 
 
+
 Route::get('/test-pusher', function () {
-    $notif = Notification::create([
-        'user_id' => auth()->id() ?? 7,
-        'source_user_id' => auth()->id() ?? 7,
-        'titre' => 'Test Pusher',
-        'commentaire' => 'Ceci est un test temps réel',
-        'type' => 'remplir_champs',
-    ]);
+    $user = auth()->user() ?? User::first();
+    $document = Document::first();
     
-    event(new NewNotification($notif));
+    if (!$document) {
+        return response()->json([
+            'error' => 'Aucun document trouvé en base de données. Créez d\'abord un document.'
+        ]);
+    }
+    
+    if (!$user) {
+        return response()->json([
+            'error' => 'Aucun utilisateur trouvé. Connectez-vous d\'abord.'
+        ]);
+    }
 
-    return 'Notification envoyée !';
+    // 1️⃣ Créer la notification dans la DB
+    $user->notify(new DocumentExpirationNotification($document, 5));
+
+    // 2️⃣ Récupérer la dernière notification créée
+    $latestNotification = $user->notifications()->latest()->first();
+
+    // 3️⃣ Envoyer l'event immédiatement à Pusher
+    event(new NewNotification($latestNotification, $user->id));
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Notification envoyée pour le document: ' . $document->type,
+        'user_id' => $user->id,
+        'document_id' => $document->id,
+        'channel' => 'private-user.' . $user->id
+    ]);
 });
-
 
 
 
@@ -429,8 +503,6 @@ Route::get('/test-pusher', function () {
 //         'created_at' => now()->toDateTimeString(),
 //     ];
 
-//     // Log pour vérifier que ça passe
-//     Log::info('Broadcasting NewNotification event', $data);
 
 //     broadcast(new NewNotification((object) $data));
 

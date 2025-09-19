@@ -6,16 +6,19 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager 
 import time
 import os
-
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 # Chemin absolu vers storage/app/public de ton projet
-storage_public = "/Applications/XAMPP/xamppfiles/htdocs/betconsulting/storage/app/public"
+storage_public = "C:/Users/ghazi/OneDrive/Desktop/betconsulting/storage/app/public"
 dao_dir = os.path.join(storage_public, "dao")
 os.makedirs(dao_dir, exist_ok=True)  # Créer le dossier dao s'il n'existe pas
 
-driver = webdriver.Chrome()
-
+options = Options()
+service = Service(ChromeDriverManager().install())
+driver = webdriver.Chrome(service=service, options=options)
 try:
     # Connexion et navigation
     driver.get("https://global-marches.com/")

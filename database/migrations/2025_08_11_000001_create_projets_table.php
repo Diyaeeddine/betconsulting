@@ -10,6 +10,7 @@ return new class extends Migration {
             $table->id();
             $table->string('nom');
             $table->text('description')->nullable();
+            $table->text('etape')->nullable()->default('first');
             $table->decimal('budget_total', 15, 2);
             $table->decimal('budget_utilise', 15, 2)->default(0);
             $table->date('date_debut')->nullable();

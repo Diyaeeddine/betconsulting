@@ -2,43 +2,44 @@
 
 namespace App\Events;
 
-use App\Models\Notification;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow; // ⚠️ Envoi immédiat
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Notifications\DatabaseNotification;
 
 class NewNotification implements ShouldBroadcastNow
 {
     use InteractsWithSockets, SerializesModels;
 
     public $notification;
+    public $userId;
 
-    public function __construct(Notification $notification)
+    public function __construct(DatabaseNotification $notification, int $userId)
     {
         $this->notification = $notification;
+        $this->userId = $userId;
     }
 
     public function broadcastOn()
     {
-        return new PrivateChannel('user.' . $this->notification->user_id);
+        return new PrivateChannel('user.' . $this->userId);
     }
 
     public function broadcastAs()
     {
-        // Nom de l'événement côté frontend
         return 'notification.created';
     }
 
     public function broadcastWith()
     {
-        // Format des données envoyées au frontend
         return [
             'notification' => [
                 'id' => $this->notification->id,
-                'titre' => $this->notification->titre,
-                'commentaire' => $this->notification->commentaire,
+                'type' => $this->notification->type,
+                'data' => $this->notification->data,
                 'created_at' => $this->notification->created_at->toDateTimeString(),
+                'read_at' => $this->notification->read_at,
             ]
         ];
     }
