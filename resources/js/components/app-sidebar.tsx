@@ -56,6 +56,12 @@ const mainNavItems: NavItem[] = [
                   icon: BookOpen,
               },
 
+              {
+                title: 'Marchés Publics',
+                href: '/ressources-humaines/marche-public-page',
+                icon: BookOpen,
+               },            
+
 
                 {
                   title: 'Tracking',

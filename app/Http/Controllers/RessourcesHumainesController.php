@@ -1621,7 +1621,7 @@ class RessourcesHumainesController extends Controller
                 ->with('error', 'Script Python introuvable : ' . $pythonScript);
         }
 
-        $lock = Cache::lock('selenium_marche_public_lock', 1800); // 30 minutes
+        $lock = Cache::lock('selenium_marche_public_lock', 400); // 30 minutes
         if (!$lock->get()) {
             return redirect()->back()
                 ->with('error', 'Une exécution Selenium est déjà en cours, réessayez dans quelques minutes.');
@@ -2013,6 +2013,13 @@ class RessourcesHumainesController extends Controller
     {
         return Inertia::render('ressources-humaines/MarchePublic');
     }
+
+    public function getMarchesPublicsData()
+{
+    $marchesPublics = ProjetMp::orderBy('date_publication', 'desc')->get();
+    return response()->json($marchesPublics);
+}
+
 
     
 }

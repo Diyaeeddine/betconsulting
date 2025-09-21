@@ -307,6 +307,13 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(funct
             [RessourcesHumainesController::class, 'marchePublicPage']
         )->name('ressources-humaines.marche-public-page');
     });
+
+    // À ajouter dans les routes ressources-humaines
+Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+    '/ressources-humaines/marches-publics-data',
+    [RessourcesHumainesController::class, 'getMarchesPublicsData']
+)->name('ressources-humaines.marches-publics-data');
+
 });
 
 
