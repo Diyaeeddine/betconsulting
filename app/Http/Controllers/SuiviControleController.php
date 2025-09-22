@@ -9,6 +9,8 @@ use App\Models\Terrain;
 use App\Models\Projet;
 use App\Models\Vehicule;
 use App\Models\Profil;
+use App\Models\Materiel;
+use App\Models\Logiciel;
 use App\Models\plan;
 use App\Models\Notification;
 
@@ -525,6 +527,87 @@ class SuiviControleController extends Controller
         return redirect()->back()->with('success', 'Mssg Transfere avec succès');
 
     }
+
+    ######################################################
+
+    public function SuiviProjet()
+    {
+        // Fetch all projets with only id and nom
+        $projets = Projet::select('id', 'nom')->get();
+
+        // Pass the projets to the Inertia view
+        return Inertia::render('suivi-controle/SuiviProjet', [
+            'projets' => $projets
+        ]);
+    }
+
+    public function getProjetRessources($projet_id)
+    {
+        // Fetch the specific project by projet_id
+        $projet = Projet::findOrFail($projet_id);
+
+        // Get related data for the project
+        $terrains = Terrain::whereIn('id', $projet->terrain_ids ?? [])->get();
+        $salaries = Salarie::whereIn('id', $projet->salarie_ids ?? [])->where('statut', 'actif')->get();
+        $vehicules = Vehicule::whereIn('salarie_id', $projet->salarie_ids ?? [])->get();
+        $materiels = Materiel::whereIn('salarie_id', $projet->salarie_ids ?? [])->get();
+        $logiciels = Logiciel::whereIn('id', $salaries->pluck('logiciel_id'))->get();
+
+        // ✅ Fetch all profils before using the variable
+        $allProfils = Profil::all();
+
+        // Lookup maps for performance
+        $salarieLookup = $salaries->keyBy('id');
+        $terrainLookup = $terrains->keyBy('id');
+
+        // Attach profils to each salarie
+        $salaries->transform(function ($salarie) use ($allProfils) {
+            $salarie->profils = $allProfils
+                ->where('user_id', $salarie->id)
+                ->values()
+                ->map(function ($profil) {
+                    return [
+                        'id' => $profil->id,
+                        'nom_profil' => $profil->nom_profil,
+                        'poste_profil' => $profil->poste_profil,
+                    ];
+                });
+            return $salarie;
+        });
+
+        // Attach terrains to projet
+        $projet->terrains = $terrains;
+
+        // Attach resources to each salarie
+        $projetSalaries = $salaries->map(function ($salarie) use ($vehicules, $materiels, $terrainLookup) {
+            $salarie->vehicules = $vehicules->where('salarie_id', $salarie->id)->values();
+            $salarie->materiels = $materiels->where('salarie_id', $salarie->id)->values();
+            $salarie->terrains = collect($salarie->terrain_ids)->map(function ($terrainId) use ($terrainLookup) {
+                return $terrainLookup->get($terrainId);
+            })->filter();
+            return $salarie;
+        });
+
+        // Attach salaries to the projet
+        $projet->salaries = $projetSalaries;
+
+        // Active notifications for suivi-controle
+        $mssgs = Notification::where('receiver', 'suivi-controle')
+            ->where('statut', 'actif')
+            ->get();
+
+        return response()->json(compact(
+            'projet',
+            'terrains',
+            'salaries',
+            'vehicules',
+            'materiels',
+            'logiciels',
+            'mssgs'
+        ));
+    }
+
+
     ######################################################
     public function storePosition(Request $request)
     {

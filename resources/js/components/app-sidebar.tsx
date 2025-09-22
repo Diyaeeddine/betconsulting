@@ -97,8 +97,13 @@ const mainNavItems: NavItem[] = [
             icon: Calendar,
             },
              {
-            title: 'Suivi Projets',
+            title: 'Tracking',
             href: '/suivi-controle/Tracking',
+            icon: LayoutGrid,
+            },
+            {
+            title: 'Suivi-Projet',
+            href: '/suivi-controle/suiviProjet',
             icon: LayoutGrid,
             },
         ]

@@ -224,7 +224,10 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
         ->name('Planing.suivi-controle');
 
     Route::get('/suivi-controle/Tracking', [SuiviControleController::class, 'Tracking'])
-        ->name('Planing.suivi-Tracking');
+        ->name('Tracking.suivi-controle');
+
+    Route::get('/suivi-controle/suiviProjet', [SuiviControleController::class, 'SuiviProjet'])
+        ->name('SuiviProjet.suivi-controle');
 
 
    
@@ -252,7 +255,11 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
 
 Route::middleware('auth.basic')->group(function () {
     Route::get('/suivi-controle/fetch-all-data', [SuiviControleController::class, 'fetchAll']);
+    Route::get('/suivi-controle/fetch-projet/{id}', [SuiviControleController::class, 'getProjetRessources']);
+
 });
+
+
 Route::post('/broadcasting/auth', function (Request $request) {
     $request->validate([
         'email' => 'required|email',

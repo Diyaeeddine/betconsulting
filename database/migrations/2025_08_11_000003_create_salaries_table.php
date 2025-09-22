@@ -20,6 +20,7 @@ return new class extends Migration {
                   ->default('bureau');
             $table->json('terrain_ids');
             $table->json('projet_ids'); // Stores related project IDs
+            $table->foreignId('logiciel_id')->nullable()->constrained('logiciels')->onDelete('set null');
             $table->timestamps();
         });
 

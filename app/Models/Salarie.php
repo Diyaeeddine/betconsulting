@@ -57,5 +57,10 @@ class Salarie extends Model
         ->withPivot(['statut', 'progression', 'note'])
         ->withTimestamps();
 }
+    
+    public function logiciel()
+    {
+        return $this->belongsTo(Logiciel::class, 'logiciel_id');
+    }
 
 }

@@ -670,7 +670,7 @@ export default function TrackingPage() {
   return (
     <AppLayout>
       <style dangerouslySetInnerHTML={{ __html: customStyles }} />
-
+    
       <div className="relative w-full h-screen overflow-hidden">
         {/* Filters - Top center overlay */}
         <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-30">
