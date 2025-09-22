@@ -28,6 +28,21 @@ print(f"[INFO] Dossier de stockage : {result_dir}")
 # --- Variables globales pour les fichiers JSON ---
 json_file_path = os.path.join(result_dir, "marches_publics_data.json")
 csv_file_path = os.path.join(result_dir, "marches_publics_data.csv")
+existing_references_file = os.path.join(result_dir, "existing_references.json")
+
+# --- CHARGEMENT DES RÉFÉRENCES EXISTANTES ---
+existing_references = set()
+if os.path.exists(existing_references_file):
+    try:
+        with open(existing_references_file, 'r', encoding='utf-8') as f:
+            existing_refs_data = json.load(f)
+            existing_references = set(existing_refs_data)
+        print(f"[INFO] {len(existing_references)} références existantes chargées pour éviter les doublons")
+    except Exception as e:
+        print(f"[WARN] Impossible de charger les références existantes : {e}")
+        existing_references = set()
+else:
+    print("[INFO] Aucun fichier de références existantes trouvé - tous les marchés seront traités")
 
 # --- Config Chrome optimisée ---
 options = webdriver.ChromeOptions()
@@ -103,6 +118,22 @@ def clean_text(text):
     if not text:
         return ""
     return re.sub(r'\s+', ' ', text.strip())
+
+# --- FONCTION DE VÉRIFICATION DES DOUBLONS ---
+def is_duplicate_reference(reference):
+    """
+    Vérifie si une référence existe déjà en base de données
+    """
+    if not reference or not reference.strip():
+        return False
+    
+    reference_clean = reference.strip()
+    is_dup = reference_clean in existing_references
+    
+    if is_dup:
+        print(f"[DOUBLON] ⏭️ Référence {reference_clean} déjà en base - SKIP téléchargement/extraction")
+    
+    return is_dup
 
 # --- FONCTION D'EXTRACTION AMÉLIORÉE ---
 def extract_zip_file(zip_path, reference):
@@ -390,18 +421,26 @@ def update_data_with_files(data, reference, zip_path=None, extracted_files=None)
             break
     return data
 
-# --- Téléchargement DCE MODIFIÉ ---
+# --- Téléchargement DCE MODIFIÉ AVEC DÉTECTION DOUBLONS ---
 success_count = 0
 fail_count = 0
 extract_success_count = 0
 extract_fail_count = 0
+skipped_duplicates_count = 0
 
 def download_dce(row, data):
-    global success_count, fail_count, extract_success_count, extract_fail_count
+    global success_count, fail_count, extract_success_count, extract_fail_count, skipped_duplicates_count
     
     reference = row.get('reference', 'UNKNOWN')
     print(f"\n[INFO] === Traitement de {reference} ===")
     
+    # 🔑 VÉRIFICATION DOUBLONS AVANT TRAITEMENT
+    if is_duplicate_reference(reference):
+        skipped_duplicates_count += 1
+        print(f"[SKIP] ⏭️ Référence {reference} ignorée (doublon détecté)")
+        print(f"[SKIP] → Aucun téléchargement/extraction nécessaire")
+        return
+
     try:
         if not row.get('lien_consultation'):
             print(f"[ERROR] Pas de lien de consultation pour {reference}")
@@ -606,6 +645,11 @@ def process_existing_zips(data):
         # Extraire la référence du nom de fichier (enlever .zip)
         reference = os.path.splitext(zip_name)[0]
         
+        # 🔑 VÉRIFIER SI C'EST UN DOUBLON AVANT EXTRACTION
+        if is_duplicate_reference(reference):
+            print(f"[SKIP] ⏭️ ZIP ignoré (doublon) : {reference}")
+            continue
+        
         # Vérifier si déjà extrait
         extract_dir = os.path.join(result_dir, f"{reference}_extrait")
         if os.path.exists(extract_dir) and os.listdir(extract_dir):
@@ -639,6 +683,7 @@ def process_existing_zips(data):
 if __name__ == "__main__":
     try:
         print("[INFO] === Démarrage extraction des marchés publics ===")
+        print(f"[INFO] Références existantes chargées : {len(existing_references)}")
         start_time = time.time()
 
         driver.get("https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseAdvancedSearch&searchAnnCons")
@@ -664,20 +709,33 @@ if __name__ == "__main__":
         if data:
             print(f"[INFO] {len(data)} marchés extraits du tableau")
             
-            # 🔑 TRAITEMENT DES ZIP EXISTANTS (mise à jour des données en mémoire)
-            process_existing_zips(data)
+            # 🔑 FILTRAGE DES DOUBLONS DANS LES DONNÉES EXTRAITES
+            filtered_data = []
+            for row in data:
+                reference = row.get('reference', '')
+                if is_duplicate_reference(reference):
+                    continue
+                filtered_data.append(row)
             
-            # 🔑 TÉLÉCHARGEMENT ET EXTRACTION DES NOUVEAUX MARCHÉS
-            print(f"\n[INFO] === Début téléchargement de {len(data)} marchés ===")
-            for i, row in enumerate(data, 1):
-                print(f"\n[INFO] === Marché {i}/{len(data)} ===")
-                download_dce(row, data)  # Passer les données pour mise à jour en mémoire
+            print(f"[INFO] {len(filtered_data)} nouveaux marchés après filtrage des doublons")
+            print(f"[INFO] {len(data) - len(filtered_data)} doublons détectés et ignorés")
+            
+            # 🔑 TRAITEMENT DES ZIP EXISTANTS (mise à jour des données en mémoire)
+            process_existing_zips(data)  # On traite les data complètes pour la mise à jour
+            
+            # 🔑 TÉLÉCHARGEMENT ET EXTRACTION DES NOUVEAUX MARCHÉS (SEULEMENT LES NON-DOUBLONS)
+            print(f"\n[INFO] === Début téléchargement de {len(filtered_data)} nouveaux marchés ===")
+            for i, row in enumerate(filtered_data, 1):
+                print(f"\n[INFO] === Nouveau marché {i}/{len(filtered_data)} ===")
+                download_dce(row, data)  # Passer les données complètes pour mise à jour en mémoire
                 time.sleep(1)  # Petite pause entre chaque téléchargement
 
             duration = time.time() - start_time
-            print(f"\n[INFO] === RÉSUMÉ TÉLÉCHARGEMENTS/EXTRACTIONS ===")
+            print(f"\n[INFO] === RÉSUMÉ TÉLÉCHARGEMENTS/EXTRACTIONS AVEC FILTRAGE DOUBLONS ===")
             print(f"[INFO] Durée totale : {duration:.2f} secondes")
-            print(f"[INFO] Marchés traités : {len(data)}")
+            print(f"[INFO] Marchés dans le tableau : {len(data)}")
+            print(f"[INFO] 🔄 Doublons ignorés : {skipped_duplicates_count + (len(data) - len(filtered_data))}")
+            print(f"[INFO] Nouveaux marchés traités : {len(filtered_data)}")
             print(f"[INFO] ✅ Téléchargements réussis : {success_count}")
             print(f"[INFO] ❌ Téléchargements échoués : {fail_count}")
             print(f"[INFO] ✅ Extractions réussies : {extract_success_count}")
@@ -685,13 +743,14 @@ if __name__ == "__main__":
             
             # 🔑🔑🔑 GÉNÉRATION FINALE DES FICHIERS CSV ET JSON 🔑🔑🔑
             print(f"\n[INFO] === GÉNÉRATION FINALE DES FICHIERS CSV/JSON ===")
-            save_to_csv(data)
+            save_to_csv(data)  # Sauvegarder toutes les données (avec mises à jour)
             save_to_json(data)
             
-            print(f"\n[INFO] === FICHIERS FINAUX GÉNÉRÉS ===")
+            print(f"\n[INFO] === FICHIERS FINAUX GÉNÉRÉS AVEC OPTIMISATION DOUBLONS ===")
             print(f"[INFO] ✅ CSV final généré avec toutes les données")
             print(f"[INFO] ✅ JSON final généré avec toutes les données") 
             print(f"[INFO] Tous les chemins ZIP et fichiers extraits sont inclus")
+            print(f"[INFO] 🚀 Temps et bande passante économisés en évitant les doublons")
             
         else:
             print("[WARN] Aucune donnée extraite")

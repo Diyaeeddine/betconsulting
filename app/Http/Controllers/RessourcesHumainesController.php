@@ -1612,9 +1612,9 @@ class RessourcesHumainesController extends Controller
     {
         set_time_limit(0); // Désactive la limite de temps d'exécution
         ini_set('memory_limit', '512M'); // Augmente la limite mémoire
-        
+
         $pythonScript = base_path('selenium_scripts/marches_public.py');
-    
+
         // Vérifier que le script existe
         if (!file_exists($pythonScript)) {
             return redirect()->back()
@@ -1626,13 +1626,31 @@ class RessourcesHumainesController extends Controller
             return redirect()->back()
                 ->with('error', 'Une exécution Selenium est déjà en cours, réessayez dans quelques minutes.');
         }
-    
+
         try {
             Log::info("=== DÉMARRAGE DU PROCESSUS MARCHÉ PUBLIC ===");
+
+            // 🔑 RÉCUPÉRER LES RÉFÉRENCES EXISTANTES AVANT TOUT
+            $existingReferences = ProjetMp::pluck('reference')->filter()->unique()->toArray();
+            Log::info("Références existantes en BD : " . count($existingReferences));
             
+            // 🔑🔑 NOUVEAU : SAUVEGARDER LES RÉFÉRENCES POUR PYTHON 🔑🔑
+            $existingReferencesFile = storage_path('app/public/marche_public/existing_references.json');
+            // S'assurer que le dossier existe
+            $marchePublicDir = dirname($existingReferencesFile);
+            if (!is_dir($marchePublicDir)) {
+                mkdir($marchePublicDir, 0755, true);
+            }
+            
+            file_put_contents($existingReferencesFile, json_encode($existingReferences, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            Log::info("Fichier des références existantes créé pour Python : " . count($existingReferences) . " références");
+            
+            // Sauvegarder les références existantes dans le cache pour éviter les re-requêtes
+            Cache::put('existing_references_marche_public', $existingReferences, 3600); // 1 heure
+
             $csvPath = storage_path('app/public/marche_public/marches_publics_data.csv');
             $jsonPath = storage_path('app/public/marche_public/marches_publics_data.json');
-            
+
             // Supprimer les anciens fichiers pour éviter la confusion
             if (file_exists($csvPath)) {
                 unlink($csvPath);
@@ -1644,13 +1662,13 @@ class RessourcesHumainesController extends Controller
             }
 
             // Lancement du script Python
-            Log::info("Lancement du script Python...");
+            Log::info("Lancement du script Python avec filtrage des doublons...");
             if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
                 pclose(popen("start /B python \"$pythonScript\"", "r"));
             } else {
                 exec("nohup python3 \"$pythonScript\" > /dev/null 2>&1 &");
             }
-            
+
             Log::info("Script Python lancé, attente de la génération des fichiers...");
 
             // === ATTENTE INTELLIGENTE DES FICHIERS ===
@@ -1658,7 +1676,7 @@ class RessourcesHumainesController extends Controller
             $checkInterval = 10; // Vérifier toutes les 10 secondes
             $waited = 0;
             $lastLogTime = 0;
-            
+
             while ($waited < $maxWaitTime) {
                 $csvExists = file_exists($csvPath);
                 $jsonExists = file_exists($jsonPath);
@@ -1684,7 +1702,7 @@ class RessourcesHumainesController extends Controller
                 sleep($checkInterval);
                 $waited += $checkInterval;
             }
-    
+
             if ($waited >= $maxWaitTime) {
                 Log::error("❌ Timeout après {$maxWaitTime}s d'attente");
                 return redirect()->back()
@@ -1695,15 +1713,25 @@ class RessourcesHumainesController extends Controller
             Log::info("Attente supplémentaire pour finaliser les téléchargements et extractions...");
             $additionalWait = 60; // 1 minute supplémentaire
             sleep($additionalWait);
-            
-            // === IMPORT DES DONNÉES ===
-            return $this->importDataFromFiles($csvPath, $jsonPath);
+
+            // === IMPORT DES DONNÉES AVEC FILTRAGE DES DOUBLONS ===
+            return $this->importDataFromFiles($csvPath, $jsonPath, $existingReferences);
             
         } catch (\Exception $e) {
             Log::error("❌ Erreur lors de l'exécution du script: " . $e->getMessage());
             Log::error("Stack trace: " . $e->getTraceAsString());
             return redirect()->back()->with('error', 'Erreur lors de l\'exécution du script : ' . $e->getMessage());
         } finally {
+            // Nettoyer le cache et les fichiers temporaires
+            Cache::forget('existing_references_marche_public');
+            
+            // 🔑🔑 SUPPRIMER LE FICHIER DES RÉFÉRENCES EXISTANTES APRÈS USAGE 🔑🔑
+            $existingReferencesFile = storage_path('app/public/marche_public/existing_references.json');
+            if (file_exists($existingReferencesFile)) {
+                unlink($existingReferencesFile);
+                Log::info("Fichier temporaire des références existantes supprimé");
+            }
+            
             $lock->release();
         }
     }
@@ -1743,12 +1771,13 @@ class RessourcesHumainesController extends Controller
     }
 
     /**
-     * Import les données depuis les fichiers CSV et JSON
+     * Import les données depuis les fichiers CSV et JSON avec filtrage des doublons
      */
-    private function importDataFromFiles($csvPath, $jsonPath)
+    private function importDataFromFiles($csvPath, $jsonPath, $existingReferences = [])
     {
         try {
-            Log::info("=== DÉBUT DE L'IMPORT DES DONNÉES ===");
+            Log::info("=== DÉBUT DE L'IMPORT DES DONNÉES AVEC FILTRAGE DOUBLONS ===");
+            Log::info("Références existantes à ignorer : " . count($existingReferences));
             
             // Charger le JSON en mémoire pour les références croisées
             $jsonData = json_decode(file_get_contents($jsonPath), true) ?? [];
@@ -1834,13 +1863,41 @@ class RessourcesHumainesController extends Controller
                 }
             };
 
-            // === TRAITEMENT DU CSV ===
+            // === TRAITEMENT DU CSV AVEC FILTRAGE ===
             $csv = Reader::createFromPath($csvPath, 'r');
             $csv->setHeaderOffset(0);
             $records = iterator_to_array($csv->getRecords());
             
             Log::info("CSV chargé avec " . count($records) . " enregistrements");
 
+            // 🔑 FILTRER LES DOUBLONS AVANT TRAITEMENT
+            $filteredRecords = [];
+            $duplicateCount = 0;
+            
+            foreach ($records as $record) {
+                $reference = trim($record['reference'] ?? '');
+                
+                if (empty($reference)) {
+                    Log::warning("Référence vide ignorée");
+                    continue;
+                }
+                
+                // 🔑 VÉRIFIER SI LA RÉFÉRENCE EXISTE DÉJÀ
+                if (in_array($reference, $existingReferences)) {
+                    $duplicateCount++;
+                    Log::info("🔄 DOUBLON IGNORÉ : {$reference} (Python a déjà fait le tri côté téléchargement)");
+                    continue;
+                }
+                
+                $filteredRecords[] = $record;
+            }
+            
+            Log::info("=== FILTRAGE TERMINÉ ===");
+            Log::info("Enregistrements total : " . count($records));
+            Log::info("Doublons ignorés côté Laravel : {$duplicateCount}");
+            Log::info("Nouveaux enregistrements à traiter : " . count($filteredRecords));
+
+            // === TRAITEMENT DES NOUVEAUX ENREGISTREMENTS ===
             $insertedCount = 0;
             $updatedCount = 0;
             $errorCount = 0;
@@ -1850,7 +1907,7 @@ class RessourcesHumainesController extends Controller
 
             // Traitement par batch pour optimiser les performances
             $batchSize = 50;
-            $batches = array_chunk($records, $batchSize);
+            $batches = array_chunk($filteredRecords, $batchSize);
             
             foreach ($batches as $batchIndex => $batch) {
                 Log::info("Traitement du batch " . ($batchIndex + 1) . "/" . count($batches) . " (" . count($batch) . " enregistrements)");
@@ -1865,18 +1922,27 @@ class RessourcesHumainesController extends Controller
                             continue;
                         }
 
+                        // 🔑 DOUBLE VÉRIFICATION (sécurité)
+                        if (in_array($reference, $existingReferences)) {
+                            Log::info("🔄 DOUBLON DÉTECTÉ LORS DU TRAITEMENT, IGNORÉ : {$reference}");
+                            continue;
+                        }
+
                         // Récupérer les données JSON correspondantes
                         $marcheJson = $jsonIndex[$reference] ?? [];
 
-                        // Recherche du fichier ZIP
+                        // 🔑 RECHERCHE DU FICHIER ZIP (SEULEMENT POUR NOUVEAUX)
                         $cheminZip = null;
                         $foundZipPath = $findZipFile($reference, $marchePublicPath);
                         if ($foundZipPath && file_exists($foundZipPath)) {
                             $cheminZip = "storage/marche_public/" . basename($foundZipPath);
                             $zipFoundCount++;
+                            Log::info("📁 ZIP trouvé pour nouveau marché : {$reference}");
+                        } else {
+                            Log::info("📁 Aucun ZIP trouvé pour : {$reference}");
                         }
 
-                        // Recherche des fichiers extraits
+                        // 🔑 RECHERCHE DES FICHIERS EXTRAITS (SEULEMENT POUR NOUVEAUX)
                         $extractedFiles = [];
                         $foundExtractDir = $findExtractedDir($reference, $marchePublicPath);
                         if ($foundExtractDir && is_dir($foundExtractDir)) {
@@ -1892,7 +1958,10 @@ class RessourcesHumainesController extends Controller
                             }
                             if (!empty($extractedFiles)) {
                                 $extractedFoundCount++;
+                                Log::info("📂 Dossier extrait trouvé pour nouveau marché : {$reference} (" . count($extractedFiles) . " fichiers)");
                             }
+                        } else {
+                            Log::info("📂 Aucun dossier extrait trouvé pour : {$reference}");
                         }
 
                         // Préparation des données
@@ -1925,19 +1994,10 @@ class RessourcesHumainesController extends Controller
                             'updated_at' => now(),
                         ];
 
-                        // Insertion/Mise à jour avec gestion des doublons
-                        $projetMp = ProjetMp::updateOrCreate(
-                            [
-                                'reference' => $marcheData['reference'],
-                            ],
-                            $marcheData
-                        );
-
-                        if ($projetMp->wasRecentlyCreated) {
-                            $insertedCount++;
-                        } else {
-                            $updatedCount++;
-                        }
+                        // 🔑 INSERTION UNIQUEMENT (PAS DE MISE À JOUR CAR PAS DE DOUBLONS)
+                        $projetMp = ProjetMp::create($marcheData);
+                        $insertedCount++;
+                        Log::info("✅ NOUVEAU MARCHÉ AJOUTÉ : {$reference}");
 
                     } catch (\Exception $e) {
                         $errorCount++;
@@ -1954,20 +2014,25 @@ class RessourcesHumainesController extends Controller
             // === RÉSUMÉ FINAL ===
             $totalProcessed = $insertedCount + $updatedCount + $errorCount;
             
-            Log::info("=== RÉSUMÉ DE L'IMPORT ===");
+            Log::info("=== RÉSUMÉ DE L'IMPORT AVEC FILTRAGE DOUBLONS OPTIMISÉ ===");
+            Log::info("Total enregistrements dans CSV: " . count($records));
+            Log::info("🔄 Doublons ignorés côté Laravel: {$duplicateCount}");
             Log::info("Total lignes traitées: {$totalProcessed}");
             Log::info("✅ Nouvelles insertions: {$insertedCount}");
             Log::info("🔄 Mises à jour: {$updatedCount}");
             Log::info("❌ Erreurs: {$errorCount}");
-            Log::info("📁 ZIP trouvés: {$zipFoundCount}");
-            Log::info("📂 Dossiers extraits trouvés: {$extractedFoundCount}");
+            Log::info("📁 ZIP trouvés (nouveaux): {$zipFoundCount}");
+            Log::info("📂 Dossiers extraits trouvés (nouveaux): {$extractedFoundCount}");
+            Log::info("🚀 OPTIMISATION: Doublons évités côté Python (pas de téléchargement/extraction inutile)");
 
-            $message = "Import marchés publics terminé avec succès !";
+            $message = "Import marchés publics terminé avec filtrage optimisé des doublons !";
             $message .= " {$insertedCount} nouveaux marchés ajoutés";
+            if ($duplicateCount > 0) $message .= ", {$duplicateCount} doublons ignorés côté Laravel";
             if ($updatedCount > 0) $message .= ", {$updatedCount} mis à jour";
             if ($errorCount > 0) $message .= ", {$errorCount} erreurs (voir logs)";
-            if ($zipFoundCount > 0) $message .= ". {$zipFoundCount} fichiers ZIP trouvés";
-            if ($extractedFoundCount > 0) $message .= ", {$extractedFoundCount} dossiers extraits trouvés";
+            if ($zipFoundCount > 0) $message .= ". {$zipFoundCount} fichiers ZIP traités";
+            if ($extractedFoundCount > 0) $message .= ", {$extractedFoundCount} dossiers extraits traités";
+            $message .= ". 🚀 Temps et bande passante économisés !";
 
             return redirect()->back()->with('success', $message);
 
@@ -1976,6 +2041,24 @@ class RessourcesHumainesController extends Controller
             Log::error("Stack trace: " . $e->getTraceAsString());
             return redirect()->back()->with('error', 'Erreur lors de l\'importation des marchés publics : ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Supprime récursivement un répertoire
+     */
+    private function deleteDirectory($dir)
+    {
+        if (!is_dir($dir)) {
+            return false;
+        }
+        
+        $files = array_diff(scandir($dir), array('.', '..'));
+        foreach ($files as $file) {
+            $path = $dir . DIRECTORY_SEPARATOR . $file;
+            is_dir($path) ? $this->deleteDirectory($path) : unlink($path);
+        }
+        
+        return rmdir($dir);
     }
 
     /**
@@ -1991,7 +2074,6 @@ class RessourcesHumainesController extends Controller
         }
         return $value;
     }
-    
         
     
     public function getMarchePublicData()

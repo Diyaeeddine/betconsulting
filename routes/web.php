@@ -321,7 +321,22 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
 Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function () {
     Route::get('/suivi-controle/dashboard', [SuiviControleController::class, 'index'])
         ->name('dashboard.suivi-controle');
+
+
+        
 });
+
+Route::get('/ressources-humaines/download-file', function(Request $request) {
+    $path = $request->get('path');
+    $fullPath = storage_path('app/public/' . str_replace('/storage/', '', $path));
+    
+    if (file_exists($fullPath)) {
+        return response()->file($fullPath);
+    }
+    
+    abort(404);
+})->name('download.file');
+
 
 // Route::get('/dashboard', function () {
 //     $user = auth()->user();
