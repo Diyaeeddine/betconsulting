@@ -338,6 +338,101 @@ Route::get('/ressources-humaines/download-file', function(Request $request) {
 })->name('download.file');
 
 
+
+// Routes spécifiques pour les documents importés des marchés publics
+Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(function () {
+    
+    // 📄 Route pour importer les documents avec labels
+    Route::post('/ressources-humaines/imported-documents', [RessourcesHumainesController::class, 'storeImportedDocuments'])
+        ->name('ressources-humaines.imported-documents.store');
+
+    // 📋 Route pour récupérer les documents importés d'un marché spécifique
+    Route::get('/ressources-humaines/imported-documents/{marcheId}', [RessourcesHumainesController::class, 'getImportedDocuments'])
+        ->name('ressources-humaines.imported-documents.get');
+
+    // 📥 Route pour télécharger un fichier importé spécifique
+    Route::get('/ressources-humaines/download-imported-file', [RessourcesHumainesController::class, 'downloadImportedFile'])
+        ->name('ressources-humaines.download-imported-file');
+
+    // 📁 Route pour télécharger les fichiers extraits (existant)
+    Route::get('/ressources-humaines/download-file', function(Request $request) {
+        $path = $request->get('path');
+        $fullPath = storage_path('app/public/' . str_replace('/storage/', '', $path));
+
+        if (file_exists($fullPath)) {
+            return response()->file($fullPath);
+        }
+
+        abort(404, 'Fichier non trouvé');
+    })->name('ressources-humaines.download-file');
+    
+    // 🔍 Route optionnelle pour lister les fichiers d'un marché (debug)
+    Route::get('/ressources-humaines/list-imported-files/{marcheId}', function($marcheId) {
+        try {
+            $projetMp = \App\Models\ProjetMp::findOrFail($marcheId);
+            $reference = preg_replace('/[^\w\-\.]/', '_', $projetMp->reference);
+            
+            $basePath = storage_path("app/public/marche_public/imported_files/{$reference}");
+            
+            if (!is_dir($basePath)) {
+                return response()->json(['error' => 'Dossier non trouvé', 'path' => $basePath], 404);
+            }
+            
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($basePath, \RecursiveDirectoryIterator::SKIP_DOTS)
+            );
+            
+            $files = [];
+            foreach ($iterator as $file) {
+                if ($file->isFile()) {
+                    $relativePath = str_replace($basePath . DIRECTORY_SEPARATOR, '', $file->getPathname());
+                    $files[] = [
+                        'name' => $file->getFilename(),
+                        'path' => $relativePath,
+                        'size' => $file->getSize(),
+                        'modified' => date('Y-m-d H:i:s', $file->getMTime()),
+                    ];
+                }
+            }
+            
+            return response()->json([
+                'marche_id' => $marcheId,
+                'reference' => $projetMp->reference,
+                'base_path' => $basePath,
+                'files_count' => count($files),
+                'files' => $files,
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    })->name('ressources-humaines.list-imported-files');
+
+});
+
+// Route générale de téléchargement (fallback pour compatibilité)
+Route::get('/download-imported-file', function(Request $request) {
+    $filePath = $request->get('path');
+    
+    if (!$filePath) {
+        abort(400, 'Chemin du fichier manquant');
+    }
+
+    // Sécurité : s'assurer que le chemin est dans imported_files
+    if (!str_contains($filePath, 'imported_files')) {
+        abort(403, 'Accès non autorisé');
+    }
+
+    $fullPath = storage_path('app/public/' . ltrim($filePath, '/'));
+
+    if (file_exists($fullPath) && is_file($fullPath)) {
+        return response()->download($fullPath);
+    }
+
+    abort(404, 'Fichier non trouvé');
+})->name('download.imported.file.fallback');
+
+
 // Route::get('/dashboard', function () {
 //     $user = auth()->user();
 //     return match (true) {

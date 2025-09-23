@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use App\Models\Projet;
 use App\Models\User;
 use App\Models\Vehicule;
@@ -17,6 +18,7 @@ use App\Models\AppelOffer;
 use App\Models\BonCommande;
 use App\Models\ResultatBonCommande;
 use App\Models\ProjetMp;
+use App\Models\ImportedDocument;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -2102,6 +2104,373 @@ class RessourcesHumainesController extends Controller
     return response()->json($marchesPublics);
 }
 
+//imported files 
+public function storeImportedDocuments(Request $request)
+{
+    try {
+        Log::info('=== DÉBUT IMPORT DOCUMENTS AMÉLIORÉ ===');
+        Log::info('Données reçues:', [
+            'marche_id' => $request->input('marche_id'),
+            'reference' => $request->input('reference'),
+            'labels_count' => count($request->input('labels', [])),
+        ]);
 
+        // Validation des données de base
+        $validated = $request->validate([
+            'marche_id' => 'required|exists:projet_mps,id',
+            'reference' => 'required|string',
+            'labels' => 'required|array|min:1',
+            'labels.*.name' => 'required|string|max:255',
+            'labels.*.files' => 'required|array|min:1',
+            'labels.*.files.*' => 'required|file|max:20480', // max 20 Mo par fichier
+        ], [
+            'marche_id.required' => 'L\'ID du marché est requis',
+            'marche_id.exists' => 'Le marché spécifié n\'existe pas',
+            'reference.required' => 'La référence est requise',
+            'labels.required' => 'Au moins un label est requis',
+            'labels.*.name.required' => 'Le nom du label est requis',
+            'labels.*.files.required' => 'Au moins un fichier est requis par label',
+            'labels.*.files.*.file' => 'Le fichier n\'est pas valide',
+            'labels.*.files.*.max' => 'Le fichier ne peut pas dépasser 20 Mo',
+        ]);
+
+        Log::info('✅ Validation OK pour marché ID: ' . $validated['marche_id']);
+        
+        // Récupérer le projet marché public
+        $projetMp = ProjetMp::findOrFail($validated['marche_id']);
+        $reference = $this->sanitizeFileName($validated['reference']);
+        
+        Log::info('✅ Projet trouvé avec référence: ' . $reference);
+
+        // 🎯 CHEMIN SELON VOS SPÉCIFICATIONS EXACTES
+        // C:\xampp\htdocs\betconsulting\storage\app\public\marche_public\imported_files\{reference}
+        $baseImportPath = "marche_public/imported_files/{$reference}";
+        
+        // Créer le chemin complet dans le storage public
+        $fullStoragePath = storage_path('app/public/' . $baseImportPath);
+        
+        // S'assurer que le dossier de base existe
+        if (!file_exists($fullStoragePath)) {
+            mkdir($fullStoragePath, 0755, true);
+            Log::info('📁 Dossier de base créé: ' . $fullStoragePath);
+        }
+
+        $savedDocuments = [];
+        $totalFilesProcessed = 0;
+        $totalSizeProcessed = 0;
+
+        // Utilisation d'une transaction pour assurer la cohérence des données
+        DB::beginTransaction();
+
+        try {
+            // Traiter chaque label avec ses fichiers
+            foreach ($validated['labels'] as $labelIndex => $labelData) {
+                $labelName = trim($labelData['name']);
+                $files = $labelData['files'];
+                
+                Log::info("📋 Traitement du label: '{$labelName}' avec " . count($files) . " fichiers");
+
+                // Créer un sous-dossier pour ce label dans le chemin spécifié
+                $sanitizedLabelName = $this->sanitizeFileName($labelName);
+                $labelPath = $baseImportPath . '/' . $sanitizedLabelName;
+                $fullLabelPath = storage_path('app/public/' . $labelPath);
+                
+                if (!file_exists($fullLabelPath)) {
+                    mkdir($fullLabelPath, 0755, true);
+                    Log::info('📁 Sous-dossier label créé: ' . $fullLabelPath);
+                }
+
+                $savedFiles = [];
+
+                // Sauvegarder chaque fichier du label
+                foreach ($files as $fileIndex => $file) {
+                    try {
+                        if (!$file->isValid()) {
+                            Log::error("❌ Fichier invalide à l'index {$fileIndex}");
+                            continue;
+                        }
+
+                        $originalName = $file->getClientOriginalName();
+                        $extension = $file->getClientOriginalExtension();
+                        $sanitizedName = $this->sanitizeFileName(pathinfo($originalName, PATHINFO_FILENAME));
+                        
+                        // Nom unique pour éviter les conflits
+                        $timestamp = now()->format('Y-m-d_H-i-s');
+                        $uniqueFileName = "{$sanitizedName}_{$timestamp}_{$fileIndex}.{$extension}";
+                        
+                        // Chemin complet du fichier dans le label
+                        $filePath = $labelPath . '/' . $uniqueFileName;
+                        
+                        // 🎯 SAUVEGARDER LE FICHIER DIRECTEMENT DANS LE STORAGE PUBLIC
+                        $savedPath = $file->storeAs($labelPath, $uniqueFileName, 'public');
+
+                        
+                        if ($savedPath) {
+                            $fileSize = $file->getSize();
+                            $totalSizeProcessed += $fileSize;
+                            
+                            $savedFiles[] = [
+                                'original_name' => $originalName,
+                                'stored_name' => $uniqueFileName,
+                                'path' => $filePath, // Chemin relatif pour la BD
+                                'full_path' => $fullLabelPath . '/' . $uniqueFileName, // Chemin absolu
+                                'size' => $fileSize,
+                                'mime_type' => $file->getMimeType(),
+                                'uploaded_at' => now()->toISOString(),
+                            ];
+                            
+                            $totalFilesProcessed++;
+                            Log::info("📄 Fichier sauvegardé: {$originalName} -> {$filePath}");
+                        } else {
+                            Log::error("❌ Échec de la sauvegarde du fichier: {$originalName}");
+                        }
+                        
+                    } catch (\Exception $fileError) {
+                        Log::error("❌ Erreur lors de la sauvegarde du fichier {$originalName}: " . $fileError->getMessage());
+                        Log::error("Stack trace fichier: " . $fileError->getTraceAsString());
+                    }
+                }
+
+                // Sauvegarder en base de données seulement si des fichiers ont été sauvés
+                if (!empty($savedFiles)) {
+                    $importedDocument = ImportedDocument::create([
+                        'projet_mp_id' => $projetMp->id,
+                        'label' => $labelName,
+                        'files' => $savedFiles, // Stocké en JSON avec détails complets
+                    ]);
+
+                    $labelTotalSize = array_sum(array_column($savedFiles, 'size'));
+
+                    $savedDocuments[] = [
+                        'id' => $importedDocument->id,
+                        'label' => $labelName,
+                        'files_count' => count($savedFiles),
+                        'total_size' => $labelTotalSize,
+                        'files' => $savedFiles,
+                        'created_at' => $importedDocument->created_at,
+                        'storage_path' => $fullLabelPath,
+                    ];
+
+                    Log::info("✅ Label '{$labelName}' sauvegardé en BD avec " . count($savedFiles) . " fichiers ({$this->formatBytes($labelTotalSize)})");
+                } else {
+                    Log::warning("⚠️ Aucun fichier sauvegardé pour le label: {$labelName}");
+                }
+            }
+
+            // Si tout s'est bien passé, valider la transaction
+            DB::commit();
+
+            Log::info('=== IMPORT TERMINÉ AVEC SUCCÈS ===');
+            Log::info("📊 STATISTIQUES :");
+            Log::info("   • Labels traités : " . count($savedDocuments));
+            Log::info("   • Fichiers traités : {$totalFilesProcessed}");
+            Log::info("   • Taille totale : " . $this->formatBytes($totalSizeProcessed));
+            Log::info("   • Chemin de base : {$fullStoragePath}");
+            Log::info("   • Structure : C:\\xampp\\htdocs\\betconsulting\\storage\\app\\public\\{$baseImportPath}");
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Documents importés avec succès dans le storage spécifié',
+                'data' => [
+                    'projet_mp_id' => $projetMp->id,
+                    'reference' => $reference,
+                    'base_path' => $baseImportPath,
+                    'full_storage_path' => $fullStoragePath,
+                    'windows_path' => str_replace('/', '\\', "C:\\xampp\\htdocs\\betconsulting\\storage\\app\\public\\{$baseImportPath}"),
+                    'labels_processed' => count($savedDocuments),
+                    'total_files' => $totalFilesProcessed,
+                    'total_size' => $totalSizeProcessed,
+                    'total_size_formatted' => $this->formatBytes($totalSizeProcessed),
+                    'documents' => $savedDocuments,
+                ],
+            ], 201);
+
+        } catch (\Exception $transactionError) {
+            // Annuler la transaction en cas d'erreur
+            DB::rollBack();
+            
+            Log::error('❌ Erreur lors de la transaction, rollback effectué');
+            Log::error('Détails: ' . $transactionError->getMessage());
+            
+            throw $transactionError;
+        }
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        Log::error('❌ Erreur de validation:', $e->errors());
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur de validation',
+            'errors' => $e->errors(),
+        ], 422);
+        
+    } catch (\Exception $e) {
+        Log::error('❌ Erreur générale lors de l\'import des documents: ' . $e->getMessage());
+        Log::error('Stack trace: ' . $e->getTraceAsString());
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de l\'import des documents: ' . $e->getMessage(),
+            'debug' => app()->environment('local') ? [
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+                'trace' => $e->getTraceAsString(),
+            ] : null,
+        ], 500);
+    }
+}
+
+/**
+ * Nettoie un nom de fichier pour éviter les problèmes de système de fichiers
+ */
+private function sanitizeFileName($filename)
+{
+    // Supprimer les caractères spéciaux dangereux
+    $filename = preg_replace('/[<>:"\/\\\|?*]/', '_', $filename);
+    
+    // Remplacer les espaces par des underscores
+    $filename = preg_replace('/\s+/', '_', $filename);
+    
+    // Supprimer les caractères non ASCII sauf les lettres accentuées courantes
+    $filename = preg_replace('/[^\w\-\.àáâãäåæçèéêëìíîïñòóôõöøùúûüýÿ]/u', '_', $filename);
+    
+    // Éviter les underscores multiples consécutifs
+    $filename = preg_replace('/_{2,}/', '_', $filename);
+    
+    // Éviter les noms trop longs (max 100 caractères)
+    $filename = substr($filename, 0, 100);
+    
+    // Éviter les noms vides
+    if (empty($filename) || $filename === '' || $filename === '_') {
+        $filename = 'fichier_' . time();
+    }
+    
+    // Supprimer les underscores en début et fin
+    $filename = trim($filename, '_');
+    
+    return $filename;
+}
+
+/**
+ * Formate une taille en bytes en format lisible
+ */
+private function formatBytes($size, $precision = 2)
+{
+    if ($size === 0) return '0 B';
+    
+    $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    $base = log($size, 1024);
+    $pow = min(floor($base), count($units) - 1);
+    
+    return round($size / (1024 ** $pow), $precision) . ' ' . $units[$pow];
+}
+
+/**
+ * Récupère les documents importés pour un marché public (amélioré)
+ */
+public function getImportedDocuments($marcheId)
+{
+    try {
+        Log::info("📋 Récupération des documents importés pour le marché ID: {$marcheId}");
+        
+        $documents = ImportedDocument::where('projet_mp_id', $marcheId)
+            ->with('projetMp:id,reference')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($document) {
+                $totalSize = 0;
+                $files = $document->files ?? [];
+                
+                // Calculer la taille totale
+                foreach ($files as $file) {
+                    $totalSize += $file['size'] ?? 0;
+                }
+                
+                return [
+                    'id' => $document->id,
+                    'label' => $document->label,
+                    'files' => $files,
+                    'files_count' => count($files),
+                    'total_size' => $totalSize,
+                    'total_size_formatted' => $this->formatBytes($totalSize),
+                    'created_at' => $document->created_at,
+                    'updated_at' => $document->updated_at,
+                    'projet_mp_reference' => $document->projetMp->reference ?? null,
+                ];
+            });
+
+        Log::info("✅ {$documents->count()} document(s) trouvé(s) pour le marché {$marcheId}");
+
+        return response()->json([
+            'success' => true,
+            'data' => $documents,
+        ]);
+        
+    } catch (\Exception $e) {
+        Log::error('❌ Erreur lors de la récupération des documents: ' . $e->getMessage());
+        Log::error('Stack trace: ' . $e->getTraceAsString());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la récupération des documents',
+            'error' => $e->getMessage(),
+        ], 500);
+    }
+}
+
+/**
+ * Télécharge un fichier importé (amélioré avec sécurité)
+ */
+public function downloadImportedFile(Request $request)
+{
+    try {
+        $filePath = $request->get('path');
+        
+        if (!$filePath) {
+            Log::warning('❌ Tentative de téléchargement sans chemin de fichier');
+            return response()->json(['error' => 'Chemin du fichier manquant'], 400);
+        }
+
+        // 🔒 SÉCURITÉ : s'assurer que le chemin est dans imported_files
+        if (!str_contains($filePath, 'imported_files')) {
+            Log::warning("❌ Tentative d'accès non autorisé au fichier: {$filePath}");
+            return response()->json(['error' => 'Accès non autorisé - le fichier doit être dans imported_files'], 403);
+        }
+
+        // Construire le chemin complet avec normalisation
+        $cleanPath = ltrim(str_replace(['\\', '//', '..'], ['/', '/', ''], $filePath), '/');
+        $fullPath = storage_path('app/public/' . $cleanPath);
+        
+        Log::info("📄 Tentative de téléchargement du fichier:");
+        Log::info("   • Chemin demandé: {$filePath}");
+        Log::info("   • Chemin nettoyé: {$cleanPath}");
+        Log::info("   • Chemin complet: {$fullPath}");
+        
+        // Vérifier que le fichier existe
+        if (!file_exists($fullPath)) {
+            Log::warning("❌ Fichier non trouvé: {$fullPath}");
+            return response()->json(['error' => 'Fichier non trouvé'], 404);
+        }
+
+        // Vérifier que c'est bien un fichier (pas un dossier)
+        if (!is_file($fullPath)) {
+            Log::warning("❌ Le chemin ne correspond pas à un fichier: {$fullPath}");
+            return response()->json(['error' => 'Le chemin ne correspond pas à un fichier'], 400);
+        }
+
+        Log::info("✅ Téléchargement du fichier autorisé: " . basename($fullPath));
+
+        // Retourner le fichier pour téléchargement
+        return response()->download($fullPath, basename($fullPath));
+        
+    } catch (\Exception $e) {
+        Log::error('❌ Erreur lors du téléchargement: ' . $e->getMessage());
+        Log::error('Stack trace: ' . $e->getTraceAsString());
+        
+        return response()->json([
+            'error' => 'Erreur lors du téléchargement',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
     
 }
