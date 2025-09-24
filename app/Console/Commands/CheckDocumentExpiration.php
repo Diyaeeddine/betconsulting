@@ -1,11 +1,13 @@
 <?php
 
 namespace App\Console\Commands;
-
 use Illuminate\Console\Command;
 use App\Models\Document;
 use App\Models\User;
 use App\Notifications\DocumentExpirationNotification;
+use App\Events\NewNotification;
+use Illuminate\Support\Str;
+use Exception;
 
 class CheckDocumentExpiration extends Command
 {
@@ -18,6 +20,7 @@ class CheckDocumentExpiration extends Command
 
         foreach ($documents as $doc) {
             $periodicite = $doc->periodicite;
+
             $thresholds = [
                 'mensuel' => 7,
                 'trimestriel' => 14,
@@ -27,20 +30,42 @@ class CheckDocumentExpiration extends Command
 
             $threshold = $thresholds[$periodicite] ?? 30;
 
-            if (!$doc->date_expiration) continue;
+            if (!$doc->date_expiration) {
+                continue;
+            }
 
             $diffDays = now()->diffInDays($doc->date_expiration, false);
 
             if ($diffDays > 0 && $diffDays <= $threshold) {
-                // Récupérer l'utilisateur
                 $user = User::find($doc->user_id);
-                
-                if ($user) {
-                    // Envoyer la notification (elle sera automatiquement stockée en BDD et broadcastée)
-                    $user->notify(new DocumentExpirationNotification($doc, $diffDays));
-                    $latestNotification = $user->notifications()->latest()->first();
-                    event(new \App\Events\NewNotification($latestNotification, $user->id));
-                    $this->info("Notification envoyée pour {$doc->type} à {$user->name}");
+
+                if (!$user) {
+                    $this->warn("Aucun utilisateur trouvé pour le document id={$doc->id}");
+                    continue;
+                }
+
+                try {
+                    $notifData = (new DocumentExpirationNotification($doc, $diffDays))->toDatabase($user);
+
+                    $notificationId = (string) Str::uuid();
+                    
+                    $notification = $user->notifications()->create([
+                        'id'   => $notificationId,
+                        'type' => DocumentExpirationNotification::class,
+                        'data' => $notifData,
+                    ]);
+
+                    // SOLUTION : Récupérer la notification directement depuis la base avec toutes ses données
+                    $fullNotification = $user->notifications()->where('id', $notificationId)->first();
+
+                    if ($fullNotification) {
+                        event(new NewNotification($fullNotification, $user->id));
+                        $this->info("Notification envoyée pour document '{$doc->type}' (doc_id={$doc->id}) à {$user->name} (user_id={$user->id})");
+                    } else {
+                        $this->error("Notification créée mais non trouvée pour doc_id={$doc->id}");
+                    }
+                } catch (Exception $e) {
+                    $this->error("Erreur lors de l'envoi de la notification pour doc_id={$doc->id} : " . $e->getMessage());
                 }
             }
         }

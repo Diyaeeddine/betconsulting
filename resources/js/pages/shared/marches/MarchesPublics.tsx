@@ -36,6 +36,7 @@ interface MarchesPublicsProps {
     marchePublics: MarchePublic[];
 }
 
+
 interface ConfirmationModal {
     show: boolean;
     type: 'accept' | 'reject' | 'bulkAccept' | 'bulkReject';
@@ -43,6 +44,27 @@ interface ConfirmationModal {
     marcheReference?: string;
 }
 
+interface DetailsModal {
+    show: boolean;
+    marche?: MarchePublic;
+}
+
+interface FilesModal {
+    show: boolean;
+    marcheReference?: string;
+    files: string[];
+}
+interface FlashProps {
+    success?: string;
+    error?: string;
+    warning?: string;
+    info?: string;
+}
+
+interface PageProps {
+    flash?: FlashProps;
+    [key: string]: any;
+}
 const breadcrumbs = [
     {
         title: 'Validation des Marchés Publics',
@@ -50,17 +72,50 @@ const breadcrumbs = [
     },
 ];
 
+const IMPORTANCE_OPTIONS = [
+    { value: 'ao_ouvert', label: 'AO Ouvert' },
+    { value: 'ao_important', label: 'AO Important' },
+    { value: 'ao_simplifie', label: 'AO Simplifié' },
+    { value: 'ao_restreint', label: 'AO Restreint' },
+    { value: 'ao_preselection', label: 'AO Présélection' },
+    { value: 'ao_bon_commande', label: 'AO Bon de Commande' },
+];
+
+// Fonction pour générer des noms de fichiers fictifs
+const generateFakeFiles = (marcheId: number): string[] => {
+    const fileTypes = [
+        'Cahier_des_charges.pdf',
+        'Règlement_consultation.pdf',
+        'Plans_techniques.pdf',
+        'Bordereau_prix.pdf',
+        'Acte_engagement.pdf',
+        'Certificats_requis.pdf',
+    ];
+
+    // Générer entre 3 et 6 fichiers aléatoirement basé sur l'ID du marché
+    const numFiles = 3 + (marcheId % 4);
+    return fileTypes.slice(0, numFiles).map((file) => `${file}`);
+};
+
 export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
-    const { props } = usePage();
+    const { props } = usePage<PageProps>();
     const successMessage = props.flash?.success;
     const [selectedMarches, setSelectedMarches] = useState<number[]>([]);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterVille, setFilterVille] = useState('');
     const [processing, setProcessing] = useState<number[]>([]);
+    const [selectedImportance, setSelectedImportance] = useState('');
     const [confirmationModal, setConfirmationModal] = useState<ConfirmationModal>({
         show: false,
         type: 'accept',
+    });
+    const [detailsModal, setDetailsModal] = useState<DetailsModal>({
+        show: false,
+    });
+    const [filesModal, setFilesModal] = useState<FilesModal>({
+        show: false,
+        files: [],
     });
 
     const formatDate = (date: string | undefined | null): string => {
@@ -73,16 +128,54 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
         return new Intl.NumberFormat('fr-FR').format(Number(amount)) + ' DH';
     };
 
+    const showDetails = (marche: MarchePublic) => {
+        setDetailsModal({
+            show: true,
+            marche: marche,
+        });
+    };
+
+    const closeDetailsModal = () => {
+        setDetailsModal({ show: false });
+    };
+
+    const showFiles = (marcheId: number, marcheReference: string) => {
+        const files = generateFakeFiles(marcheId);
+        setFilesModal({
+            show: true,
+            marcheReference,
+            files,
+        });
+    };
+
+    const closeFilesModal = () => {
+        setFilesModal({ show: false, files: [] });
+    };
+
+    const handleFileDownload = (fileName: string) => {
+        // Ici vous pouvez implémenter la logique de téléchargement réel
+        console.log(`Téléchargement du fichier: ${fileName}`);
+        alert(`Téléchargement de ${fileName} (simulation)`);
+    };
+
     const handleAccept = async (marcheId: number) => {
+        if (!selectedImportance) {
+            alert("Veuillez sélectionner un type d'AO avant d'accepter.");
+            return;
+        }
+
         setProcessing([...processing, marcheId]);
         try {
             router.post(
                 `/marches/${marcheId}/accept`,
-                {},
+                { importance: selectedImportance },
                 {
+                    preserveState: false,
+                    preserveScroll: true,
                     onSuccess: () => {
                         setProcessing(processing.filter((id) => id !== marcheId));
                         setConfirmationModal({ show: false, type: 'accept' });
+                        setSelectedImportance('');
                     },
                     onError: () => {
                         setProcessing(processing.filter((id) => id !== marcheId));
@@ -136,6 +229,7 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
             marcheId,
             marcheReference: reference,
         });
+        setSelectedImportance(''); // Reset selection
     };
 
     const showRejectConfirmation = (marcheId: number, reference: string) => {
@@ -177,6 +271,7 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
 
     const closeModal = () => {
         setConfirmationModal({ show: false, type: 'accept' });
+        setSelectedImportance('');
     };
 
     const toggleSelection = (marcheId: number) => {
@@ -234,6 +329,7 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                     ),
+                    showImportanceSelect: true,
                 };
             case 'reject':
                 return {
@@ -246,6 +342,7 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     ),
+                    showImportanceSelect: false,
                 };
             case 'bulkAccept':
                 return {
@@ -258,6 +355,7 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                     ),
+                    showImportanceSelect: false,
                 };
             case 'bulkReject':
                 return {
@@ -270,6 +368,7 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     ),
+                    showImportanceSelect: false,
                 };
         }
     };
@@ -279,6 +378,265 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <div className="min-h-screen bg-gray-50">
+                {/* Files Modal */}
+                {filesModal.show && (
+                    <div className="fixed inset-0 z-1000 flex items-center justify-center overflow-y-auto">
+                        <div className="bg-opacity-50 fixed inset-0 bg-black transition-opacity" onClick={closeFilesModal}></div>
+                        <div className="relative mx-4 w-full max-w-2xl rounded-lg bg-white shadow-xl">
+                            <div className="border-b border-gray-200 px-6 py-4">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-medium text-gray-900">Fichiers du Marché - {filesModal.marcheReference}</h3>
+                                    <button onClick={closeFilesModal} className="text-gray-400 hover:text-gray-500 focus:outline-none">
+                                        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="max-h-96 overflow-y-auto px-6 py-4">
+                                <div className="space-y-3">
+                                    {filesModal.files.map((file, index) => (
+                                        <div
+                                            key={index}
+                                            className="flex items-center justify-between rounded-lg border border-gray-200 p-3 hover:bg-gray-50"
+                                        >
+                                            <div className="flex items-center space-x-3">
+                                                <div className="flex-shrink-0">
+                                                    <svg className="h-8 w-8 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path
+                                                            fillRule="evenodd"
+                                                            d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z"
+                                                            clipRule="evenodd"
+                                                        />
+                                                    </svg>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-900">{file}</p>
+                                                    <p className="text-xs text-gray-500">PDF • {Math.floor(Math.random() * 5 + 1)} MB</p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => handleFileDownload(file)}
+                                                className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+                                            >
+                                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                                    />
+                                                </svg>
+                                                Télécharger
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="border-t border-gray-200 bg-gray-50 px-6 py-4">
+                                <div className="flex justify-end">
+                                    <button
+                                        onClick={closeFilesModal}
+                                        className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-gray-500 focus:outline-none"
+                                    >
+                                        Fermer
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Details Modal */}
+                {detailsModal.show && detailsModal.marche && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto">
+                        <div className="bg-opacity-50 fixed inset-0 bg-black transition-opacity" onClick={closeDetailsModal}></div>
+                        <div className="relative mx-4 w-full max-w-4xl rounded-lg bg-white shadow-xl">
+                            <div className="border-b border-gray-200 px-6 py-4">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-medium text-gray-900">Détails du Marché - {detailsModal.marche.n_reference}</h3>
+                                    <div className="flex items-center gap-3">
+                                        <button
+                                            onClick={() => showFiles(detailsModal.marche!.id, detailsModal.marche!.n_reference || 'N/A')}
+                                            className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                        >
+                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                                />
+                                            </svg>
+                                            Voir les fichiers
+                                        </button>
+                                        <button onClick={closeDetailsModal} className="text-gray-400 hover:text-gray-500 focus:outline-none">
+                                            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="max-h-96 overflow-y-auto px-6 py-4">
+                                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Référence</label>
+                                            <p className="mt-1 text-sm text-gray-900">{detailsModal.marche.n_reference || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Type AO</label>
+                                            <p className="mt-1 text-sm text-gray-900">{detailsModal.marche.type_ao || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Objet</label>
+                                            <p className="mt-1 text-sm text-gray-900">{detailsModal.marche.objet || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Maître d'Ouvrage</label>
+                                            <p className="mt-1 text-sm text-gray-900">{detailsModal.marche.mo || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Estimation</label>
+                                            <p className="mt-1 text-sm font-medium text-gray-900 text-green-600">
+                                                {formatCurrency(detailsModal.marche.estimation)}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Caution</label>
+                                            <p className="mt-1 text-sm text-gray-900">{formatCurrency(detailsModal.marche.caution)}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Date Limite</label>
+                                            <p className="mt-1 text-sm text-gray-900">{formatDate(detailsModal.marche.date_limite)}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Heure</label>
+                                            <p className="mt-1 text-sm text-gray-900">{detailsModal.marche.heure || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Ville</label>
+                                            <p className="mt-1 text-sm text-gray-900">{detailsModal.marche.ville || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Lieu AO</label>
+                                            {detailsModal.marche.lieu_ao ? (
+                                                <a
+                                                    href={detailsModal.marche.lieu_ao}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="mt-1 text-sm text-blue-600 hover:underline"
+                                                >
+                                                    Voir le lieu
+                                                </a>
+                                            ) : (
+                                                <p className="mt-1 text-sm text-gray-900">-</p>
+                                            )}
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">État</label>
+                                            <p className="mt-1 text-sm text-gray-900">
+                                                {/* <span
+                                                    className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(detailsModal.marche.etape)}`}
+                                                >
+                                                    {detailsModal.marche.etape || 'Non définie'}
+                                                </span> */}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Mode d'Attribution</label>
+                                            <p className="mt-1 text-sm text-gray-900">{detailsModal.marche.mode_attribution || '-'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {(detailsModal.marche.attestation_reference || detailsModal.marche.cnss || detailsModal.marche.agrement) && (
+                                    <div className="mt-6 border-t pt-6">
+                                        <h4 className="text-md mb-4 font-medium text-gray-900">Informations Complémentaires</h4>
+                                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                            {detailsModal.marche.attestation_reference && (
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700">Attestation Référence</label>
+                                                    <p className="mt-1 text-sm text-gray-900">{detailsModal.marche.attestation_reference}</p>
+                                                </div>
+                                            )}
+                                            {detailsModal.marche.cnss && (
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700">CNSS</label>
+                                                    <p className="mt-1 text-sm text-gray-900">{detailsModal.marche.cnss}</p>
+                                                </div>
+                                            )}
+                                            {detailsModal.marche.agrement && (
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700">Agrément</label>
+                                                    <p className="mt-1 text-sm text-gray-900">{detailsModal.marche.agrement}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {(detailsModal.marche.contrainte || detailsModal.marche.autres) && (
+                                    <div className="mt-6 border-t pt-6">
+                                        <h4 className="text-md mb-4 font-medium text-gray-900">Contraintes et Autres</h4>
+                                        <div className="space-y-4">
+                                            {detailsModal.marche.contrainte && (
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700">Contraintes</label>
+                                                    <p className="mt-1 text-sm text-gray-900">{detailsModal.marche.contrainte}</p>
+                                                </div>
+                                            )}
+                                            {detailsModal.marche.autres && (
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700">Autres</label>
+                                                    <p className="mt-1 text-sm text-gray-900">{detailsModal.marche.autres}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="border-t border-gray-200 bg-gray-50 px-6 py-4">
+                                <div className="flex justify-end gap-3">
+                                    <button
+                                        onClick={closeDetailsModal}
+                                        className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-gray-500 focus:outline-none"
+                                    >
+                                        Fermer
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            closeDetailsModal();
+                                            showAcceptConfirmation(detailsModal.marche!.id, detailsModal.marche!.n_reference || 'N/A');
+                                        }}
+                                        className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                                    >
+                                        Accepter
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            closeDetailsModal();
+                                            showRejectConfirmation(detailsModal.marche!.id, detailsModal.marche!.n_reference || 'N/A');
+                                        }}
+                                        className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:outline-none"
+                                    >
+                                        Rejeter
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Confirmation Modal */}
                 {confirmationModal.show && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto">
@@ -289,6 +647,31 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                 <div className="ml-4 flex-1">
                                     <h3 className="mb-2 text-lg font-medium text-gray-900">{modalConfig.title}</h3>
                                     <p className="mb-6 text-sm text-gray-600">{modalConfig.message}</p>
+
+                                    {modalConfig.showImportanceSelect && (
+                                        <div className="mb-6">
+                                            <label className="mb-2 block text-sm font-medium text-gray-700">
+                                                Type d'AO <span className="text-red-500">*</span>
+                                            </label>
+                                            <select
+                                                value={selectedImportance}
+                                                onChange={(e) => setSelectedImportance(e.target.value)}
+                                                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#155DFC] focus:ring-1 focus:ring-[#155DFC] focus:outline-none"
+                                                required
+                                            >
+                                                <option value="">Sélectionner un type d'AO</option>
+                                                {IMPORTANCE_OPTIONS.map((option) => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {modalConfig.showImportanceSelect && !selectedImportance && (
+                                                <p className="mt-1 text-xs text-red-600">Ce champ est obligatoire</p>
+                                            )}
+                                        </div>
+                                    )}
+
                                     <div className="mb-6 rounded-md border border-yellow-200 bg-yellow-50 p-3 text-xs text-gray-500">
                                         <div className="flex items-center">
                                             <svg className="mr-2 h-4 w-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -312,7 +695,8 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                         </button>
                                         <button
                                             onClick={handleConfirmAction}
-                                            className={`rounded-md px-4 py-2 text-sm font-medium text-white focus:ring-2 focus:ring-offset-2 focus:outline-none ${modalConfig.confirmClass}`}
+                                            disabled={modalConfig.showImportanceSelect && !selectedImportance}
+                                            className={`rounded-md px-4 py-2 text-sm font-medium text-white focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${modalConfig.confirmClass}`}
                                         >
                                             {modalConfig.confirmText}
                                         </button>
@@ -448,7 +832,11 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                             {viewMode === 'grid' ? (
                                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
                                     {filteredMarches.map((marche: MarchePublic) => (
-                                        <div key={marche.id} className="relative rounded-lg bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
+                                        <div
+                                            key={marche.id}
+                                            className="relative cursor-pointer rounded-lg bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+                                            onClick={() => showDetails(marche)}
+                                        >
                                             {/* Urgent Badge */}
                                             {isUrgent(marche.date_limite) && (
                                                 <div className="absolute -top-2 -right-2 rounded-full bg-red-500 px-2 py-1 text-xs font-bold text-white">
@@ -461,7 +849,10 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                                 <input
                                                     type="checkbox"
                                                     checked={selectedMarches.includes(marche.id)}
-                                                    onChange={() => toggleSelection(marche.id)}
+                                                    onChange={(e) => {
+                                                        e.stopPropagation();
+                                                        toggleSelection(marche.id);
+                                                    }}
                                                     className="h-4 w-4 rounded border-gray-300 text-[#155DFC] focus:ring-[#155DFC]"
                                                 />
                                             </div>
@@ -472,11 +863,6 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                                         <div className="mb-2 flex items-center gap-2">
                                                             <span className="text-sm font-semibold text-[#155DFC]">
                                                                 {marche.n_reference || 'N/A'}
-                                                            </span>
-                                                            <span
-                                                                className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(marche.etape)}`}
-                                                            >
-                                                                {marche.etape || 'Non définie'}
                                                             </span>
                                                         </div>
 
@@ -513,7 +899,10 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
 
                                                 <div className="mt-4 flex gap-2">
                                                     <button
-                                                        onClick={() => showAcceptConfirmation(marche.id, marche.n_reference || 'N/A')}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            showAcceptConfirmation(marche.id, marche.n_reference || 'N/A');
+                                                        }}
                                                         disabled={processing.includes(marche.id)}
                                                         className="inline-flex flex-1 items-center justify-center gap-1 rounded-md bg-green-600 px-3 py-2 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
                                                     >
@@ -534,7 +923,10 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                                         )}
                                                     </button>
                                                     <button
-                                                        onClick={() => showRejectConfirmation(marche.id, marche.n_reference || 'N/A')}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            showRejectConfirmation(marche.id, marche.n_reference || 'N/A');
+                                                        }}
                                                         disabled={processing.includes(marche.id)}
                                                         className="inline-flex flex-1 items-center justify-center gap-1 rounded-md bg-red-600 px-3 py-2 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
                                                     >
@@ -597,9 +989,9 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                                     <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
                                                         Ville
                                                     </th>
-                                                    <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
+                                                    {/* <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
                                                         Étape
-                                                    </th>
+                                                    </th> */}
                                                     <th className="px-6 py-3 text-right text-xs font-medium tracking-wider text-gray-500 uppercase">
                                                         Actions
                                                     </th>
@@ -609,13 +1001,17 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                                 {filteredMarches.map((marche: MarchePublic, index: number) => (
                                                     <tr
                                                         key={marche.id}
-                                                        className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} transition-colors hover:bg-gray-50`}
+                                                        className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} cursor-pointer transition-colors hover:bg-gray-100`}
+                                                        onClick={() => showDetails(marche)}
                                                     >
                                                         <td className="px-6 py-4">
                                                             <input
                                                                 type="checkbox"
                                                                 checked={selectedMarches.includes(marche.id)}
-                                                                onChange={() => toggleSelection(marche.id)}
+                                                                onChange={(e) => {
+                                                                    e.stopPropagation();
+                                                                    toggleSelection(marche.id);
+                                                                }}
                                                                 className="h-4 w-4 rounded border-gray-300 text-[#155DFC] focus:ring-[#155DFC]"
                                                             />
                                                         </td>
@@ -646,17 +1042,20 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-900">{marche.ville || '-'}</td>
-                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                        {/* <td className="px-6 py-4 whitespace-nowrap">
                                                             <span
                                                                 className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(marche.etape)}`}
                                                             >
                                                                 {marche.etape || 'Non définie'}
                                                             </span>
-                                                        </td>
+                                                        </td> */}
                                                         <td className="px-6 py-4 text-right text-sm font-medium whitespace-nowrap">
                                                             <div className="flex justify-end gap-2">
                                                                 <button
-                                                                    onClick={() => showAcceptConfirmation(marche.id, marche.n_reference || 'N/A')}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        showAcceptConfirmation(marche.id, marche.n_reference || 'N/A');
+                                                                    }}
                                                                     disabled={processing.includes(marche.id)}
                                                                     className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
                                                                 >
@@ -682,7 +1081,10 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                                                     )}
                                                                 </button>
                                                                 <button
-                                                                    onClick={() => showRejectConfirmation(marche.id, marche.n_reference || 'N/A')}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        showRejectConfirmation(marche.id, marche.n_reference || 'N/A');
+                                                                    }}
                                                                     disabled={processing.includes(marche.id)}
                                                                     className="inline-flex items-center gap-1 rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
                                                                 >

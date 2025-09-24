@@ -3,7 +3,7 @@ import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenuButton } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
-import { Ban, BookOpen, Building2, CircleCheckBig, CircleX, Clock3, FolderKanban, Globe, LayoutDashboard, LayoutGrid, Paperclip, Rss, ShoppingCart, TrendingUp, UserPlus, Users } from "lucide-react"
+import { Ban, BookOpen, Building2, CircleCheckBig, CircleX, Clock3, FolderKanban, Gavel, Globe, LayoutDashboard, LayoutGrid, Paperclip, Rss, ShoppingCart, TrendingUp, UserPlus, Users } from "lucide-react"
 import { Link, usePage } from '@inertiajs/react';
 import BetconsultingDashLogo from './betconsulting-dash-logo';
 import { Route, Car, Wrench} from "lucide-react"
@@ -104,7 +104,7 @@ export function AppSidebar() {
         ...(auth?.user?.permissions?.includes('module marche public')
             ? [
                   {
-                      title: 'marches publics',
+                      title: 'Marchés publics',
                       icon: Rss,
                       href: '/marches-publics',
                   },
@@ -134,7 +134,15 @@ export function AppSidebar() {
                   },
               ]
             : []),
-
+        ...(auth?.user?.role === 'admin'
+            ? [
+                  {
+                      title: 'Boite de descisions',
+                      icon: Gavel,
+                      href: '/direction-generale/boite-decision',
+                  },
+              ]
+            : []),
         ...(auth?.user?.permissions?.includes('module documentation')
             ? [
                   {
@@ -155,8 +163,7 @@ export function AppSidebar() {
                         <Link href={dashboardHref} prefetch>
                             <BetconsultingDashLogo className="w-[140px]" />
                         </Link>
-                    </SidebarMenuButton>
-
+                    </SidebarMenuButton>    
                     <Notifications />
                 </div>
             </SidebarHeader>

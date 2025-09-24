@@ -6,11 +6,14 @@ use App\Models\Projet;
 use Inertia\Inertia;
 use App\Models\Document;
 use App\Models\MarchePublic;
+use App\Models\GlobalMarche;
 use Inertia\Response;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Exception;
+use App\Notifications\MarcheDecisionNotification;
+use Spatie\Permission\Models\Role;
 
 class SharedController extends Controller
 {
@@ -200,19 +203,43 @@ public function marchesPublic(){
     ]);
 
 }
+public function GlobalMarches(){
 
-public function acceptMP($id)
-    {
-        $marche = MarchePublic::findOrFail($id);
+    $globalMarches = GlobalMarche::where('is_accepted', false)
+    ->where(function($query) {
+        $query->where('etat', '!=', 'rejetee')
+              ->orWhereNull('etat');
+    })
+    ->get();
 
-        $marche->update([
-            'is_accepted' => true,
-            'etat'        => 'en cours', 
-            'etape'       => 'decision initial', 
-        ]);
+    return Inertia::render('shared/marches/MarchesGlobal', [
+        'globalMarches' => $globalMarches,
+    ]);
 
-        return redirect()->back()->with('success', 'Le marché a été accepté avec succès');
-    }
+}
+
+
+
+public function acceptMP($id, Request $request)
+{
+    $marche = MarchePublic::findOrFail($id);
+
+    $request->validate([
+        'importance' => 'required|in:ao_ouvert,ao_important,ao_simplifie,ao_restreint,ao_preselection,ao_bon_commande',
+    ], [
+        'importance.required' => 'Le type d\'AO est obligatoire.',
+        'importance.in' => 'Le type d\'AO sélectionné n\'est pas valide.',
+    ]);
+
+    $marche->update([
+        'is_accepted' => true,
+        'etat' => 'en cours', 
+        'etape' => 'decision initial',
+        'importance' => $request->importance,
+    ]);
+
+    return redirect()->back()->with('success', 'Le marché a été accepté avec succès');
+}
 
 
     public function rejectMP($id)
@@ -230,7 +257,7 @@ public function acceptMP($id)
 
 
 
-public function acceptIMP(Request $request, $id)
+public function acceptIMP(Request $request, $id) 
 {
     try {
         Log::info("Tentative d'acceptation du marché", [
@@ -240,7 +267,7 @@ public function acceptIMP(Request $request, $id)
         ]);
 
         $marche = MarchePublic::findOrFail($id);
-        
+
         $marche->update([
             'etape' => 'decision admin',
             'is_accepted' => true
@@ -248,8 +275,42 @@ public function acceptIMP(Request $request, $id)
 
         Log::info("Marché accepté avec succès", ['marche_id' => $id]);
 
-        // Pour Inertia.js, on redirige vers la même page avec un message flash
-        return redirect()->back()->with('success', 'Marché accepté avec succès');
+        // Envoyer une notification à l'admin
+        try {
+            // Trouver l'admin avec le rôle 'admin'
+            $adminRole = Role::where('name', 'admin')->first();
+            
+            if ($adminRole) {
+                $admins = $adminRole->users; // Récupère tous les utilisateurs avec le rôle admin
+                
+                foreach ($admins as $admin) {
+                    // Envoyer la notification à chaque admin
+                    $admin->notify(new MarcheDecisionNotification($marche, Auth::user(), $admin->id));
+                    
+                    Log::info("Notification envoyée à l'admin", [
+                        'admin_id' => $admin->id,
+                        'admin_email' => $admin->email,
+                        'marche_id' => $id
+                    ]);
+                }
+                
+                if ($admins->count() > 0) {
+                    Log::info("Notifications envoyées à " . $admins->count() . " admin(s)");
+                } else {
+                    Log::warning("Aucun utilisateur trouvé avec le rôle admin");
+                }
+            } else {
+                Log::warning("Rôle admin non trouvé");
+            }
+        } catch (Exception $notificationError) {
+            // Log l'erreur mais ne pas empêcher la fonction principale de continuer
+            Log::error("Erreur lors de l'envoi de la notification admin", [
+                'error' => $notificationError->getMessage(),
+                'marche_id' => $id
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Marché accepté avec succès. L\'admin a été notifié.');
 
     } catch (Exception $e) {
         Log::error("Erreur lors de l'acceptation du marché", [
@@ -265,18 +326,29 @@ public function acceptIMP(Request $request, $id)
 public function annulerMP(Request $request, $id)
 {
     try {
+        $request->validate([
+            'motif_annulation' => 'required|string|max:500'
+        ]);
+
         Log::info("Tentative d'annulation du marché", [
             'marche_id' => $id,
-            'user_id' => Auth::id()
+            'user_id' => Auth::id(),
+            'motif_annulation' => $request->motif_annulation
         ]);
 
         $marche = MarchePublic::findOrFail($id);
         
         $marche->update([
-            'etat' => 'annulee'
+            'etat' => 'annulee',
+            'motif_annulation' => $request->motif_annulation,
+            'date_annulation' => now(),
+            'annule_par' => Auth::id()
         ]);
 
-        Log::info("Marché annulé avec succès", ['marche_id' => $id]);
+        Log::info("Marché annulé avec succès", [
+            'marche_id' => $id,
+            'motif' => $request->motif_annulation
+        ]);
 
         return redirect()->back()->with('success', 'Marché annulé avec succès');
 
@@ -289,7 +361,8 @@ public function annulerMP(Request $request, $id)
 
         return redirect()->back()->with('error', 'Erreur lors de l\'annulation du marché: ' . $e->getMessage());
     }
-}    
+}
+   
     public function marchesRejetee(){
 
         $marcheR= MarchePublic::where('etat','rejetee')
@@ -301,13 +374,23 @@ public function annulerMP(Request $request, $id)
     ]);
     }
 
+    public function marchesTerminee(){
+
+        $marcheT= MarchePublic::where('etat','terminee')
+    ->where('is_accepted',true)
+    ->get();
+    
+    return Inertia::render('shared/marches/Terminee', [
+        'marcheT' => $marcheT,
+    ]);
+    }
 
 
 
 public function marchesEnCours(){
 
     $marcheP= MarchePublic::where('etat','en cours')
-    ->where('is_accepted',true)
+    ->where('is_accepted',true)->where('etape','decision initial')
     ->get();
     
     return Inertia::render('shared/marches/EnCours', [

@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('marche_public', function (Blueprint $table) {
+        Schema::create('global_marche', function (Blueprint $table) {
             $table->id();
             $table->string('type_ao')->nullable();
             $table->string('n_reference')->nullable();
@@ -45,7 +45,7 @@ return new class extends Migration
                 'ao_preselection',
                 'ao_bon_commande',
             ])->nullable();
-            $table->text('motif_refus')->nullable();      // motif quand l’admin REFUSE
+            $table->text('motif_refus')->nullable();     
             $table->text('motif_annulation')->nullable();
             $table->timestamps();
         });
@@ -56,6 +56,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('marche_public');
+        Schema::dropIfExists('global_marche');
     }
 };

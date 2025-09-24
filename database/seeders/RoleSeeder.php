@@ -122,6 +122,9 @@ class RoleSeeder extends Seeder
         $roleDG->givePermissionTo(Permission::all());
         
         $roleMM->givePermissionTo(['module documentation','module marche public', 'module marche global','les marches', 'decision ao']);
+        $roleET->givePermissionTo(['module documentation', 'les marches']);
+        $roleSCT->givePermissionTo(['module documentation', 'les marches']);
+        // $roleMM->givePermissionTo(['module documentation', 'les marches']);
         
     }
 }

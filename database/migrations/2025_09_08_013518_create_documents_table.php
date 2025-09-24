@@ -7,18 +7,20 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void {
         Schema::create('documents', function (Blueprint $table) {
-            $table->id();
-            $table->string('type'); // ex: RC Mod.09
-            $table->string('periodicite'); // ex: annuel, mensuel, chaque 3 mois
-            $table->date('date_expiration')->nullable(); // pour gérer les délais
-            $table->string('file_path'); // chemin du fichier stocké
-            $table->boolean('is_complementary')->default(false);
-            $table->boolean('archived')->default(false); // archive ou actif
-            $table->unsignedBigInteger('user_id'); // qui a uploadé
-            $table->timestamps();
+    $table->id();
+    $table->string('type'); 
+    $table->string('periodicite'); 
+    $table->date('date_expiration')->nullable(); 
+    $table->string('file_path'); 
+    $table->boolean('is_complementary')->default(false);
+    $table->boolean('archived')->default(false); 
+    $table->unsignedBigInteger('user_id');
 
-            $table->foreign('user_id')->references('id')->on('users')->cascadeOnDelete();
-        });
+    $table->timestamps();
+
+    $table->foreign('user_id')->references('id')->on('users')->cascadeOnDelete();
+});
+
     }
 
     public function down(): void {

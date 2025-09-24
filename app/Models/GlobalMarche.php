@@ -5,14 +5,14 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class MarchePublic extends Model
+class GlobalMarche extends Model
 {
     use HasFactory;
 
     /**
      * Le nom de la table (optionnel si Laravel devine bien).
      */
-    protected $table = 'marche_public';
+    protected $table = 'global_marche';
 
     /**
      * Les attributs assignables en masse.

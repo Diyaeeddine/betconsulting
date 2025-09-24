@@ -21,8 +21,11 @@ use App\Http\Controllers\ScreenshotController;
 use App\Events\NewNotification;
 use App\Models\User;
 use App\Models\Document;
+use App\Models\MarchePublic;
 use App\Notifications\DocumentExpirationNotification;
 use App\Models\Notification;
+use Spatie\Permission\Models\Role;
+use App\Notifications\MarcheDecisionNotification;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Broadcast;
 
@@ -66,6 +69,16 @@ Route::get('/', function () {
 Route::middleware(['auth', 'verified', 'role:admin'])->group(function () {
     Route::get('/direction-generale/dashboard', [DirectionGeneraleController::class, 'index'])
         ->name('dashboard.direction-generale');
+    
+    Route::get('/direction-generale/boite-decision', [DirectionGeneraleController::class, 'boiteDecision'])
+        ->name('direction-generale.boiteDecision');
+    
+    // Routes pour les actions sur les marchés
+    Route::post('/direction-generale/marche/{id}/accepter', [DirectionGeneraleController::class, 'accepterMarche'])
+        ->name('direction-generale.accepter-marche');
+    
+    Route::post('/direction-generale/marche/{id}/refuser', [DirectionGeneraleController::class, 'refuserMarche'])
+        ->name('direction-generale.refuser-marche');
 });
 
 // Communication Digitale
@@ -151,7 +164,7 @@ Route::middleware(['auth','permission:module marche public','permission:module m
 ->group(function () {
     
     Route::get('marches-publics', [SharedController::class, 'marchesPublic'])->name('marchesPublic');
-    Route::get('global-marches', [SharedController::class, 'globalMarches'])->name('globalMarches');
+    Route::get('global-marches', [SharedController::class, 'GlobalMarches'])->name('GlobalMarches');
 
     Route::post('marches/{id}/accept', [SharedController::class, 'acceptMP'])->name('marchesPublic.accept');
     Route::post('marches/{id}/reject', [SharedController::class, 'rejectMP'])->name('marchesPublic.reject');
@@ -159,13 +172,18 @@ Route::middleware(['auth','permission:module marche public','permission:module m
     Route::post('marches/{id}/accept-initial', [SharedController::class, 'acceptIMP'])->name('marchesPublic.acceptInitial');
     Route::post('marches/{id}/annule', [SharedController::class, 'annulerMP'])->name('marchesPublic.annulerMP');
 
+});
+Route::middleware(['auth','permission:les marches'])
+
+->group(function () {
 
     Route::get('marches/encours', [SharedController::class, 'marchesEnCours'])->name('marches.encours');
     Route::get('marches/annulee', [SharedController::class, 'marchesAnnulee'])->name('marches.annulee');
     Route::get('marches/rejetee', [SharedController::class, 'marchesRejetee'])->name('marches.rejetee');
     Route::get('marches/terminee', [SharedController::class, 'marchesTerminee'])->name('marches.terminee');
 
-});
+
+    });
 
 
 
@@ -510,11 +528,80 @@ Route::get('/test-pusher', function () {
 // });
 
 
-
-
-
-
-
+Route::get('/test-notification-admin', function () {
+    try {
+        Log::info("Test de notification admin démarré");
+        
+        // Créer un marché fictif pour le test (ou utiliser un existant)
+        $marche = MarchePublic::first(); // Prendre le premier marché
+        
+        if (!$marche) {
+            // Si pas de marché, en créer un temporaire
+            $marche = new MarchePublic();
+            $marche->id = 999; // ID fictif
+            $marche->title = "Test Marché AO";
+            $marche->objet = "Test pour notification admin";
+            $marche->etape = "decision admin";
+            $marche->is_accepted = true;
+        }
+        
+        // Simuler l'utilisateur qui accepte (utilisateur connecté)
+        $userWhoAccepted = auth()->user();
+        
+        if (!$userWhoAccepted) {
+            return response()->json([
+                'error' => 'Vous devez être connecté pour tester'
+            ], 401);
+        }
+        
+        // Trouver tous les admins
+        $adminRole = Role::where('name', 'admin')->first();
+        
+        if (!$adminRole) {
+            return response()->json([
+                'error' => 'Rôle admin non trouvé'
+            ], 404);
+        }
+        
+        $admins = $adminRole->users;
+        
+        if ($admins->isEmpty()) {
+            return response()->json([
+                'error' => 'Aucun admin trouvé'
+            ], 404);
+        }
+        
+        // Envoyer la notification à tous les admins
+        $notificationsSent = 0;
+        foreach ($admins as $admin) {
+            $admin->notify(new MarcheDecisionNotification($marche, $userWhoAccepted, $admin->id));
+            $notificationsSent++;
+            
+            Log::info("Notification test envoyée à l'admin", [
+                'admin_id' => $admin->id,
+                'admin_email' => $admin->email
+            ]);
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => "Notification de test envoyée à {$notificationsSent} admin(s)",
+            'admins_notified' => $admins->pluck('email'),
+            'marche_test' => $marche->title ?? $marche->objet ?? 'Marché test',
+            'sent_by' => $userWhoAccepted->name
+        ]);
+        
+    } catch (Exception $e) {
+        Log::error("Erreur lors du test de notification admin", [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'error' => 'Erreur lors du test: ' . $e->getMessage()
+        ], 500);
+    }
+})->middleware(['web', 'auth']);
 
 
 require __DIR__ . '/settings.php';
