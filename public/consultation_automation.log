@@ -1,0 +1,115 @@
+2025-09-23 21:08:06,777 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=932575&orgAcronyme=q9t
+2025-09-23 21:08:06,777 - INFO - Référence marché: 23/2025/DRSPS/BMK
+2025-09-23 21:08:06,783 - INFO - ====== WebDriver manager ======
+2025-09-23 21:08:09,124 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:08:09,750 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:08:10,075 - INFO - There is no [win64] chromedriver "140.0.7339.207" for browser google-chrome "140.0.7339" in cache
+2025-09-23 21:08:10,076 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:08:11,219 - INFO - WebDriver version 140.0.7339.207 selected
+2025-09-23 21:08:11,225 - INFO - Modern chrome version https://storage.googleapis.com/chrome-for-testing-public/140.0.7339.207/win32/chromedriver-win32.zip
+2025-09-23 21:08:11,225 - INFO - About to download new driver from https://storage.googleapis.com/chrome-for-testing-public/140.0.7339.207/win32/chromedriver-win32.zip
+2025-09-23 21:08:11,644 - INFO - Driver downloading response is 200
+2025-09-23 21:08:48,334 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:08:51,228 - INFO - Driver has been saved in cache [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207]
+2025-09-23 21:15:39,174 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=932575&orgAcronyme=q9t
+2025-09-23 21:15:39,175 - INFO - Référence marché: 23/2025/DRSPS/BMK
+2025-09-23 21:15:39,184 - INFO - ====== WebDriver manager ======
+2025-09-23 21:15:40,676 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:15:41,047 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:15:41,343 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-23 21:21:25,571 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=932575&orgAcronyme=q9t
+2025-09-23 21:21:25,571 - INFO - Référence marché: 23/2025/DRSPS/BMK
+2025-09-23 21:21:25,578 - INFO - ====== WebDriver manager ======
+2025-09-23 21:21:27,052 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:21:27,874 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:21:28,872 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-23 21:22:30,182 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=932575&orgAcronyme=q9t
+2025-09-23 21:22:30,182 - INFO - Référence marché: 23/2025/DRSPS/BMK
+2025-09-23 21:22:30,191 - INFO - ====== WebDriver manager ======
+2025-09-23 21:22:31,597 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:22:31,920 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:22:32,275 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-23 21:27:52,041 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=931339&orgAcronyme=q9t
+2025-09-23 21:27:52,041 - INFO - Référence marché: 10/2025/CHPKH
+2025-09-23 21:27:52,049 - INFO - ====== WebDriver manager ======
+2025-09-23 21:27:53,835 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:27:54,248 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:27:54,570 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-23 21:29:17,427 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=932575&orgAcronyme=q9t
+2025-09-23 21:29:17,427 - INFO - Référence marché: 23/2025/DRSPS/BMK
+2025-09-23 21:29:17,432 - INFO - ====== WebDriver manager ======
+2025-09-23 21:29:18,851 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:29:19,188 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:29:19,520 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-23 21:32:53,951 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=932575&orgAcronyme=q9t
+2025-09-23 21:32:53,951 - INFO - Référence marché: 23/2025/DRSPS/BMK
+2025-09-23 21:32:53,953 - INFO - ====== WebDriver manager ======
+2025-09-23 21:32:55,381 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:32:55,723 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:32:56,024 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-23 21:34:38,416 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=931339&orgAcronyme=q9t
+2025-09-23 21:34:38,416 - INFO - Référence marché: 10/2025/CHPKH
+2025-09-23 21:34:38,419 - INFO - ====== WebDriver manager ======
+2025-09-23 21:34:40,015 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:34:41,618 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:34:42,004 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-23 21:49:51,343 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=932575&orgAcronyme=q9t
+2025-09-23 21:49:51,344 - INFO - Référence marché: 23/2025/DRSPS/BMK
+2025-09-23 21:49:51,356 - INFO - ====== WebDriver manager ======
+2025-09-23 21:49:53,200 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:49:55,322 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:49:56,136 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-23 21:54:51,602 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=931339&orgAcronyme=q9t
+2025-09-23 21:54:51,602 - INFO - Référence marché: 10/2025/CHPKH
+2025-09-23 21:54:51,604 - INFO - ====== WebDriver manager ======
+2025-09-23 21:54:52,943 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:54:53,296 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 21:54:56,046 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-23 22:05:57,304 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=932575&orgAcronyme=q9t
+2025-09-23 22:05:57,304 - INFO - Référence marché: 23/2025/DRSPS/BMK
+2025-09-23 22:05:57,319 - INFO - ====== WebDriver manager ======
+2025-09-23 22:05:58,791 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 22:05:59,126 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 22:05:59,420 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-23 22:09:41,838 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=931339&orgAcronyme=q9t
+2025-09-23 22:09:41,838 - INFO - Référence marché: 10/2025/CHPKH
+2025-09-23 22:09:41,852 - INFO - ====== WebDriver manager ======
+2025-09-23 22:09:43,326 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 22:09:43,777 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 22:09:44,101 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-23 22:13:44,327 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=932575&orgAcronyme=q9t
+2025-09-23 22:13:44,328 - INFO - Référence marché: 23/2025/DRSPS/BMK
+2025-09-23 22:13:44,335 - INFO - ====== WebDriver manager ======
+2025-09-23 22:13:45,899 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 22:13:46,360 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 22:13:46,792 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-23 22:19:18,425 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=932575&orgAcronyme=q9t
+2025-09-23 22:19:18,425 - INFO - Référence marché: 23/2025/DRSPS/BMK
+2025-09-23 22:19:18,439 - INFO - ====== WebDriver manager ======
+2025-09-23 22:19:19,967 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 22:19:20,324 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 22:19:20,911 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-23 22:22:19,147 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=931339&orgAcronyme=q9t
+2025-09-23 22:22:19,147 - INFO - Référence marché: 10/2025/CHPKH
+2025-09-23 22:22:19,162 - INFO - ====== WebDriver manager ======
+2025-09-23 22:22:20,541 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 22:22:20,947 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 22:22:21,414 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-23 22:25:30,765 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=932575&orgAcronyme=q9t
+2025-09-23 22:25:30,766 - INFO - Référence marché: 23/2025/DRSPS/BMK
+2025-09-23 22:25:30,773 - INFO - ====== WebDriver manager ======
+2025-09-23 22:25:32,784 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 22:25:35,202 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 22:25:37,541 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-23 22:58:11,922 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=932575&orgAcronyme=q9t
+2025-09-23 22:58:11,923 - INFO - Référence marché: 23/2025/DRSPS/BMK
+2025-09-23 22:58:11,925 - INFO - ====== WebDriver manager ======
+2025-09-23 22:58:13,546 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 22:58:15,997 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 22:58:16,326 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-23 23:01:55,103 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=931339&orgAcronyme=q9t
+2025-09-23 23:01:55,103 - INFO - Référence marché: 10/2025/CHPKH
+2025-09-23 23:01:55,107 - INFO - ====== WebDriver manager ======
+2025-09-23 23:01:57,005 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 23:01:59,190 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-23 23:01:59,710 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache

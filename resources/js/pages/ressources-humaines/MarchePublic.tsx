@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FileText, Upload, Download, FolderOpen, AlertCircle } from 'lucide-react';
+import { FileText, Upload, Download, FolderOpen, AlertCircle, Bot } from 'lucide-react';
 import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
@@ -87,6 +87,10 @@ export default function MarchePublic() {
   const [showImportedDocs, setShowImportedDocs] = useState(false);
   const [importedDocuments, setImportedDocuments] = useState<ImportedDocument[]>([]);
   const [loadingImportedDocs, setLoadingImportedDocs] = useState(false);
+
+  // États pour l'automatisation Selenium
+  const [automationStatus, setAutomationStatus] = useState<{[key: number]: 'idle' | 'running' | 'success' | 'error'}>({});
+  const [automationMessages, setAutomationMessages] = useState<{[key: number]: string}>({});
 
   const fetchMarchesPublics = () => {
     axios
@@ -331,6 +335,120 @@ export default function MarchePublic() {
     document.body.removeChild(link);
   };
 
+  // 🤖 NOUVELLE FONCTION : Gestion du clic sur Consulter avec automatisation Selenium
+  const handleConsulterClick = async (marche: MarchePublic) => {
+    if (!marche.lien_consultation) {
+      alert('Aucun lien de consultation disponible pour ce marché.');
+      return;
+    }
+
+    try {
+      console.log('🚀 Clic sur Consulter pour:', marche.reference);
+      console.log('🌐 URL de consultation:', marche.lien_consultation);
+
+      // 1. Ouvrir le lien dans un nouvel onglet (comportement normal)
+      window.open(marche.lien_consultation, '_blank', 'noopener,noreferrer');
+
+      // 2. Lancer l'automatisation Selenium
+      setAutomationStatus(prev => ({
+        ...prev,
+        [marche.id]: 'running'
+      }));
+
+      setAutomationMessages(prev => ({
+        ...prev,
+        [marche.id]: 'Lancement de l\'automatisation Selenium...'
+      }));
+
+      const response = await axios.post('/ressources-humaines/automate-consultation', {
+        consultation_url: marche.lien_consultation,
+        marche_reference: marche.reference || `marche_${marche.id}`,
+        marche_id: marche.id,
+      });
+
+      console.log('✅ Réponse automatisation:', response.data);
+
+      if (response.data.success) {
+        setAutomationStatus(prev => ({
+          ...prev,
+          [marche.id]: 'success'
+        }));
+
+        setAutomationMessages(prev => ({
+          ...prev,
+          [marche.id]: response.data.message || 'Automatisation terminée avec succès !'
+        }));
+
+        // Afficher les détails du succès
+        const details = response.data.details;
+        let successMessage = '🎉 Automatisation Selenium terminée avec succès !\n\n';
+
+        if (details?.steps_completed && details.steps_completed.length > 0) {
+          successMessage += 'Étapes complétées :\n';
+          details.steps_completed.forEach((step: string) => {
+            successMessage += `✓ ${step}\n`;
+          });
+        }
+
+        alert(successMessage);
+
+      } else {
+        throw new Error(response.data.message || 'Erreur inconnue lors de l\'automatisation');
+      }
+
+    } catch (error) {
+      console.error('❌ Erreur automatisation:', error);
+
+      setAutomationStatus(prev => ({
+        ...prev,
+        [marche.id]: 'error'
+      }));
+
+      let errorMessage = 'Erreur lors de l\'automatisation Selenium';
+
+      if (axios.isAxiosError(error) && error.response) {
+        const responseData = error.response.data;
+        errorMessage = responseData.message || errorMessage;
+
+        // Afficher les détails de l'erreur si disponibles
+        if (responseData.details?.errors && responseData.details.errors.length > 0) {
+          errorMessage += '\n\nDétails :\n' + responseData.details.errors.join('\n');
+        }
+      }
+
+      setAutomationMessages(prev => ({
+        ...prev,
+        [marche.id]: errorMessage
+      }));
+
+      alert(`❌ ${errorMessage}`);
+    }
+  };
+
+  // Fonction pour obtenir l'icône du statut d'automatisation
+  const getAutomationStatusIcon = (marcheId: number) => {
+    const status = automationStatus[marcheId] || 'idle';
+
+    switch (status) {
+      case 'running':
+        return (
+          <div className="inline-flex items-center">
+            <svg className="animate-spin h-3 w-3 text-blue-600 mr-1" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+            </svg>
+            <span className="text-xs text-blue-600">Selenium en cours...</span>
+          </div>
+        );
+      case 'success':
+        return <span className="text-xs text-green-600 flex items-center"><Bot className="w-3 h-3 mr-1"/>✅ Automatisé</span>;
+      case 'error':
+        return <span className="text-xs text-red-600 flex items-center"><Bot className="w-3 h-3 mr-1"/>❌ Erreur</span>;
+      default:
+        return null;
+    }
+  };
+
   const canSubmit = importLabels.some(label =>
     label.name.trim() && label.files && label.files.length > 0
   );
@@ -528,17 +646,48 @@ export default function MarchePublic() {
                   </div>
                 )}
 
+                {/* 🤖 Affichage du statut d'automatisation */}
+                {automationStatus[marche.id] && (
+                  <div className="px-4 py-2 border-t border-gray-200 bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">Automatisation Selenium :</span>
+                      {getAutomationStatusIcon(marche.id)}
+                    </div>
+                    {automationMessages[marche.id] && (
+                      <p className="text-xs text-gray-600 mt-1">{automationMessages[marche.id]}</p>
+                    )}
+                  </div>
+                )}
+
                 <div className="p-4 border-t border-gray-200 flex gap-2 justify-end flex-wrap">
+                  {/* 🤖 BOUTON CONSULTER MODIFIÉ AVEC AUTOMATISATION SELENIUM */}
                   {marche.lien_consultation && (
-                    <a
-                      href={marche.lien_consultation}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm flex items-center gap-2 transition-colors"
+                    <button
+                      onClick={() => handleConsulterClick(marche)}
+                      disabled={automationStatus[marche.id] === 'running'}
+                      className={`${
+                        automationStatus[marche.id] === 'running' 
+                          ? 'bg-gray-400 cursor-not-allowed' 
+                          : 'bg-blue-500 hover:bg-blue-600'
+                      } text-white px-3 py-1 rounded text-sm flex items-center gap-2 transition-colors`}
                     >
-                      <FileText className="w-4 h-4" />
-                      Consulter
-                    </a>
+                      {automationStatus[marche.id] === 'running' ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                          </svg>
+                          Automation...
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="w-4 h-4" />
+                          Consulter
+                          {automationStatus[marche.id] === 'success' && <Bot className="w-4 h-4 text-green-400" />}
+                          {automationStatus[marche.id] === 'error' && <Bot className="w-4 h-4 text-red-400" />}
+                        </>
+                      )}
+                    </button>
                   )}
 
                   {marche.EXTRACTED_FILES && marche.EXTRACTED_FILES.length > 0 && (

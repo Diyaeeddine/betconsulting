@@ -314,6 +314,10 @@ Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
     [RessourcesHumainesController::class, 'getMarchesPublicsData']
 )->name('ressources-humaines.marches-publics-data');
 
+ // 🤖 Route pour l'automatisation de consultation
+ Route::post('/ressources-humaines/automate-consultation', [RessourcesHumainesController::class, 'automateConsultation'])
+ ->name('ressources-humaines.automate-consultation');
+
 });
 
 

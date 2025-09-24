@@ -2472,5 +2472,142 @@ public function downloadImportedFile(Request $request)
         ], 500);
     }
 }
+
+
+/**
+ * Lance l'automatisation de consultation via Selenium
+ */
+public function automateConsultation(Request $request)
+{
+    try {
+        // Validation des données
+        $validated = $request->validate([
+            'consultation_url' => 'required|url',
+            'marche_reference' => 'required|string',
+            'marche_id' => 'required|exists:projet_mps,id',
+        ]);
+
+        Log::info('🚀 LANCEMENT AUTOMATISATION CONSULTATION', [
+            'marche_id' => $validated['marche_id'],
+            'reference' => $validated['marche_reference'],
+            'url' => $validated['consultation_url'],
+        ]);
+
+        $pythonScript = base_path('selenium_scripts/consultation_automation.py');
+
+        // Vérifier que le script existe
+        if (!file_exists($pythonScript)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Script Python d\'automatisation introuvable : ' . $pythonScript
+            ], 500);
+        }
+
+        // Lock pour éviter les exécutions simultanées
+        $lockKey = 'consultation_automation_' . $validated['marche_id'];
+        $lock = Cache::lock($lockKey, 300); // 5 minutes
+
+        if (!$lock->get()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Une automatisation est déjà en cours pour ce marché. Veuillez patienter.'
+            ], 423);
+        }
+
+        try {
+            // Préparer les arguments pour le script Python
+            $consultationUrl = escapeshellarg($validated['consultation_url']);
+            $marcheReference = escapeshellarg($validated['marche_reference']);
+
+            // Exécuter le script Python de manière synchrone
+            $command = "python \"{$pythonScript}\" {$consultationUrl} {$marcheReference}";
+            
+            Log::info('Commande Python à exécuter: ' . $command);
+
+            // Exécution avec timeout
+            $output = [];
+            $returnCode = 0;
+            
+            // Exécuter et capturer la sortie
+            exec($command . ' 2>&1', $output, $returnCode);
+            
+            $outputString = implode("\n", $output);
+            
+            Log::info('Sortie du script Python:', [
+                'return_code' => $returnCode,
+                'output' => $outputString,
+            ]);
+
+            // Lire les résultats du fichier JSON généré par le script
+            $resultsFile = base_path('selenium_scripts/consultation_automation_results.json');
+            $results = [];
+            
+            if (file_exists($resultsFile)) {
+                $resultsContent = file_get_contents($resultsFile);
+                $results = json_decode($resultsContent, true) ?? [];
+                
+                Log::info('Résultats de l\'automatisation:', $results);
+                
+                // Supprimer le fichier de résultats après lecture
+                unlink($resultsFile);
+            }
+
+            // Analyser les résultats
+            if ($returnCode === 0 && isset($results['success']) && $results['success']) {
+                Log::info('✅ Automatisation réussie pour le marché: ' . $validated['marche_reference']);
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => $results['message'] ?? 'Automatisation terminée avec succès',
+                    'details' => [
+                        'steps_completed' => $results['steps_completed'] ?? [],
+                        'screenshots' => $results['screenshots'] ?? [],
+                        'marche_reference' => $validated['marche_reference'],
+                    ]
+                ]);
+            } else {
+                Log::error('❌ Échec de l\'automatisation pour le marché: ' . $validated['marche_reference']);
+                
+                $errorMessage = $results['message'] ?? 'Erreur lors de l\'automatisation';
+                $errors = $results['errors'] ?? [$outputString];
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => $errorMessage,
+                    'details' => [
+                        'errors' => $errors,
+                        'return_code' => $returnCode,
+                        'output' => $outputString,
+                    ]
+                ], 500);
+            }
+
+        } finally {
+            $lock->release();
+        }
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        Log::error('❌ Erreur de validation automatisation consultation:', $e->errors());
+        return response()->json([
+            'success' => false,
+            'message' => 'Données de validation invalides',
+            'errors' => $e->errors(),
+        ], 422);
+
+    } catch (\Exception $e) {
+        Log::error('❌ Erreur générale automatisation consultation: ' . $e->getMessage());
+        Log::error('Stack trace: ' . $e->getTraceAsString());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de l\'automatisation: ' . $e->getMessage(),
+            'debug' => app()->environment('local') ? [
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+            ] : null,
+        ], 500);
+    }
+}
+
     
 }
