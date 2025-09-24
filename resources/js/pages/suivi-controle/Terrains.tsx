@@ -74,6 +74,20 @@ interface RhNeed {
   number: number
 }
 
+interface DocumentNeed {
+  nom: string
+  type: "entry" | "livrable"
+  description: string
+  doc_id: number
+}
+
+interface DocRequis {
+  id: number
+  nom: string
+  type: "entry" | "livrable"
+  description: string
+}
+
 interface Projet {
   id: number
   nom: string
@@ -93,6 +107,7 @@ interface Projet {
   terrain_ids?: number[]
   rh_needs?: RhNeed[]
   salarie_ids?: number[]
+  docs_needs?: DocumentNeed[]
 }
 
 interface SalariesDisponibility {
@@ -408,6 +423,7 @@ export default function TerrainsManagement() {
   const [terrains, setTerrains] = useState<Terrain[]>([])
   const [projects, setProjects] = useState<Projet[]>([])
   const [notifications, setNotifications] = useState<SalariesDisponibility[]>([])
+  const [docsRequis, setDocsRequis] = useState<DocRequis[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string[]}>({})
@@ -427,6 +443,16 @@ export default function TerrainsManagement() {
   const [projectRhNeedsState, setProjectRhNeedsState] = useState<RhNeed[]>([])
   // New state to track original project data for comparison
   const [originalProjectData, setOriginalProjectData] = useState<{salarie_ids: number[], rh_needs: RhNeed[]} | null>(null)
+
+  // Document management states
+  const [selectedDocuments, setSelectedDocuments] = useState<number[]>([])
+  const [showAddDocumentPopup, setShowAddDocumentPopup] = useState(false)
+  const [isSubmittingDocument, setIsSubmittingDocument] = useState(false)
+  const [documentFormData, setDocumentFormData] = useState({
+    nom: "",
+    description: "",
+    type: "" as "entry" | "livrable" | ""
+  })
 
   // KML/KMZ related states
   const [uploadedKMLData, setUploadedKMLData] = useState<ParsedKMLTerrain[]>([])
@@ -485,6 +511,67 @@ export default function TerrainsManagement() {
     }
   }, [flashMessages, addMessage])
 
+  // Document management functions
+  const handleAddDocument = () => {
+    setShowAddDocumentPopup(true)
+    setDocumentFormData({ nom: "", description: "", type: "" })
+  }
+
+  const handleDocumentFormChange = (field: keyof typeof documentFormData, value: string) => {
+    setDocumentFormData(prev => ({ 
+      ...prev, 
+      [field]: field === 'type' ? value as "entry" | "livrable" : sanitizeInput.sanitizeText(value)
+    }))
+  }
+
+  const submitNewDocument = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!documentFormData.nom || !documentFormData.description || !documentFormData.type) return
+
+    setIsSubmittingDocument(true)
+
+    const payload = {
+      nom: sanitizeInput.sanitizeText(documentFormData.nom),
+      description: sanitizeInput.sanitizeText(documentFormData.description),
+      type: documentFormData.type
+    }
+
+    try {
+      await new Promise((resolve, reject) => {
+        router.post('/suivi-controle/docReqEntry', payload, {
+          onSuccess: (page) => {
+            addMessage('success', 'Document ajouté avec succès')
+            setShowAddDocumentPopup(false)
+            setDocumentFormData({ nom: "", description: "", type: "" })
+            // Refresh docsRequis data
+            fetchAllData()
+            resolve(page)
+          },
+          onError: (errors) => {
+            console.error('Add document error:', errors)
+            const errorMsg = extractErrorMessage(errors)
+            addMessage('error', errorMsg)
+            reject(errors)
+          }
+        })
+      })
+    } catch (error) {
+      console.error('Document submission error:', error)
+    } finally {
+      setIsSubmittingDocument(false)
+    }
+  }
+
+  const toggleDocumentSelection = (docId: number) => {
+    setSelectedDocuments(prev => {
+      if (prev.includes(docId)) {
+        return prev.filter(id => id !== docId)
+      } else {
+        return [...prev, docId]
+      }
+    })
+  }
+
   // ENHANCED: Project salaries popup handlers with proper state management
   const openProjectSalariesPopup = (projet: Projet) => {
     // Get the latest project data to ensure we have current state
@@ -504,6 +591,15 @@ export default function TerrainsManagement() {
       salarie_ids: [...currentAffectedSalaries],
       rh_needs: JSON.parse(JSON.stringify(currentRhNeeds))
     })
+
+    // Initialize selected documents based on project's docs_needs
+    if (currentProject.docs_needs && currentProject.docs_needs.length > 0) {
+      // If project has docs_needs, use those doc_ids
+      setSelectedDocuments(currentProject.docs_needs.map(doc => doc.doc_id))
+    } else {
+      // If no docs_needs, start with empty selection
+      setSelectedDocuments([])
+    }
     
     setShowProjectSalariesPopup(true)
     setShowNotifications(false)
@@ -584,16 +680,17 @@ export default function TerrainsManagement() {
     const payload = {
       projet_id: selectedProject.id,
       name: selectedProject.nom,
-      salarie_ids: affectedSalaries
+      salarie_ids: affectedSalaries,
+      docs_ids: selectedDocuments
     }
 
-    console.log('Submitting project salaries:', payload)
+    console.log('Submitting project salaries and documents:', payload)
 
     try {
       await new Promise((resolve, reject) => {
         router.put('/suivi-controle/ProjetSals', payload, {
           onSuccess: (page) => {
-            addMessage('success', 'Affectations enregistrées avec succès')
+            addMessage('success', 'Affectations et documents enregistrés avec succès')
             
             // Update local project state immediately
             setProjects(prev => prev.map(p => 
@@ -628,6 +725,7 @@ export default function TerrainsManagement() {
             setShowProjectSalariesPopup(false)
             setSelectedProject(null)
             setAffectedSalaries([])
+            setSelectedDocuments([])
             setOriginalProjectData(null)
             
             // Refresh data to ensure consistency
@@ -883,7 +981,7 @@ export default function TerrainsManagement() {
       const data = await response.json()
 
       // Destructure with default values
-      const { terrains = [], projets = [], salaries = [], mssgs = [] } = data
+      const { terrains = [], projets = [], salaries = [], mssgs = [], docsRequis = [] } = data
 
       // Add project names to terrains and ensure proper salarie_ids array
       const terrainsWithProjects = terrains.map((terrain: any) => {
@@ -906,24 +1004,27 @@ export default function TerrainsManagement() {
         salarie_ids: Array.isArray(salarie.salarie_ids) ? salarie.salarie_ids : []
       }))
 
-      // Process projects with rh_needs and salarie_ids
+      // Process projects with rh_needs, salarie_ids, and docs_needs
       const projectsWithNeeds = projets.map((projet: any) => ({
         ...projet,
         rh_needs: Array.isArray(projet.rh_needs) ? projet.rh_needs : [],
-        salarie_ids: Array.isArray(projet.salarie_ids) ? projet.salarie_ids : []
+        salarie_ids: Array.isArray(projet.salarie_ids) ? projet.salarie_ids : [],
+        docs_needs: Array.isArray(projet.docs_needs) ? projet.docs_needs : []
       }))
 
       console.log('Data fetched successfully:', {
         terrains: terrainsWithProjects.length,
         projets: projectsWithNeeds.length,
         salaries: salariesWithIds.length,
-        notifications: mssgs.length
+        notifications: mssgs.length,
+        docsRequis: docsRequis.length
       })
 
       setTerrains(terrainsWithProjects)
       setProjects(projectsWithNeeds)
       setSalaries(salariesWithIds)
       setNotifications(mssgs)
+      setDocsRequis(docsRequis)
       
     } catch (err) {
       console.error("Erreur lors du chargement des données:", err)
@@ -937,7 +1038,7 @@ export default function TerrainsManagement() {
   useEffect(() => { fetchAllData() }, [fetchAllData])
 
   // Check if any popup is open
-  const isAnyPopupOpen = showCreatePopup || showEditPopup || showSalariesPopup || showKMLData || showNotifications || showProjectSalariesPopup || showProjectsPopup
+  const isAnyPopupOpen = showCreatePopup || showEditPopup || showSalariesPopup || showKMLData || showNotifications || showProjectSalariesPopup || showProjectsPopup || showAddDocumentPopup
 
   // Focus terrain on map
   const focusTerrainOnMap = (terrain: Terrain) => {
@@ -973,6 +1074,7 @@ export default function TerrainsManagement() {
     setShowNotifications(false)
     setShowProjectSalariesPopup(false)
     setShowProjectsPopup(false)
+    setShowAddDocumentPopup(false)
     setError(null)
     setValidationErrors({})
   }
@@ -1693,6 +1795,93 @@ export default function TerrainsManagement() {
             </div>
           )}
 
+          {/* Add Document Popup */}
+          {showAddDocumentPopup && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-md m-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Ajouter un document</h3>
+                  <button
+                    onClick={() => setShowAddDocumentPopup(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <form onSubmit={submitNewDocument} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Nom *</label>
+                    <input
+                      type="text"
+                      value={documentFormData.nom}
+                      onChange={(e) => handleDocumentFormChange('nom', e.target.value)}
+                      className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Nom du document"
+                      required
+                      maxLength={100}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
+                    <textarea
+                      value={documentFormData.description}
+                      onChange={(e) => handleDocumentFormChange('description', e.target.value)}
+                      className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Description du document"
+                      rows={3}
+                      required
+                      maxLength={255}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Type *</label>
+                    <select
+                      value={documentFormData.type}
+                      onChange={(e) => handleDocumentFormChange('type', e.target.value)}
+                      className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    >
+                      <option value="">Sélectionner le type</option>
+                      <option value="entry">Documents Requis (Entry)</option>
+                      <option value="livrable">Documents Livrables</option>
+                    </select>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddDocumentPopup(false)}
+                      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                      disabled={isSubmittingDocument}
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingDocument || !documentFormData.nom || !documentFormData.description || !documentFormData.type}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                      {isSubmittingDocument ? (
+                        <div className="flex items-center space-x-2">
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>Ajout...</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center space-x-2">
+                          <Plus className="w-4 h-4" />
+                          <span>Ajouter</span>
+                        </div>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
           {/* Map Section - Updated without profile filter */}
           <div className={`bg-white rounded-lg shadow-md border border-gray-100 p-6 transition-opacity duration-300 ${
             isAnyPopupOpen ? 'opacity-75' : 'opacity-100'
@@ -1936,15 +2125,15 @@ export default function TerrainsManagement() {
             </div>
           </div>
 
-          {/* FIXED: Project Salaries Popup - Updated with correct availability display and fixed RH calculation */}
+          {/* UPDATED: Project Salaries Popup - Now includes Document Management */}
           {showProjectSalariesPopup && selectedProject && (
             <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white rounded-lg p-6 w-full max-w-7xl max-h-[90vh] overflow-y-auto m-4">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-medium text-gray-900">
-                    Affectation Profils - Projet: <TruncatedText text={selectedProject.nom} maxLength={30} />
+                    Projet: <TruncatedText text={selectedProject.nom} maxLength={30} />
                     <span className="text-sm font-normal text-gray-500 ml-2">
-                      (Profils affectés: {affectedSalaries.length})
+                      (Profils: {affectedSalaries.length} | Documents: {selectedDocuments.length})
                     </span>
                   </h3>
                   <button
@@ -1977,16 +2166,14 @@ export default function TerrainsManagement() {
                   </select>
                 </div>
 
-              
-
-                {/* Two Tables Side by Side */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* ALL Salaries Table - FIXED with same display as terrain salaries */}
+                {/* Four Tables Grid Layout */}
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  {/* Salaries Table */}
                   <div>
                     <h4 className="text-md font-medium text-gray-900 mb-3">
                       Tous les Salariés ({affectedSalaries.length} affectés sur {salaries.length})
                     </h4>
-                    <div className="border rounded-md max-h-96 overflow-y-auto">
+                    <div className="border rounded-md max-h-80 overflow-y-auto">
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50 sticky top-0">
                           <tr>
@@ -2059,12 +2246,12 @@ export default function TerrainsManagement() {
                     </div>
                   </div>
 
-                  {/* FIXED: RH Needs Table - Shows only original needs, removed restant column */}
+                  {/* RH Needs Table */}
                   <div>
                     <h4 className="text-md font-medium text-gray-900 mb-3">
                       Besoins RH ({getTotalRemainingPositions()} postes restants)
                     </h4>
-                    <div className="border rounded-md max-h-96 overflow-y-auto">
+                    <div className="border rounded-md max-h-80 overflow-y-auto">
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50 sticky top-0">
                           <tr>
@@ -2102,6 +2289,175 @@ export default function TerrainsManagement() {
                       </table>
                     </div>
                   </div>
+
+                  {/* Documents Requis Table */}
+                  <div>
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="text-md font-medium text-gray-900">
+                        Documents Requis ({docsRequis.filter(doc => doc.type === 'entry').length})
+                      </h4>
+                      <button
+                        onClick={handleAddDocument}
+                        className="inline-flex items-center gap-1 px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Ajouter document
+                      </button>
+                    </div>
+                    <div className="border rounded-md max-h-80 overflow-y-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                              <input
+                                type="checkbox"
+                                onChange={(e) => {
+                                  const entryDocs = docsRequis.filter(doc => doc.type === 'entry')
+                                  if (e.target.checked) {
+                                    const entryIds = entryDocs.map(doc => doc.id)
+                                    setSelectedDocuments(prev => [...new Set([...prev, ...entryIds])])
+                                  } else {
+                                    const entryIds = entryDocs.map(doc => doc.id)
+                                    setSelectedDocuments(prev => prev.filter(id => !entryIds.includes(id)))
+                                  }
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                            </th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {selectedProject.docs_needs && selectedProject.docs_needs.length > 0 ? (
+                            // Show project-specific docs_needs
+                            selectedProject.docs_needs
+                              .filter(doc => doc.type === 'entry')
+                              .map((doc, index) => (
+                                <tr key={`project-entry-${index}`} className="bg-blue-50 hover:bg-blue-100">
+                                  <td className="px-3 py-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedDocuments.includes(doc.doc_id)}
+                                      onChange={() => toggleDocumentSelection(doc.doc_id)}
+                                      className="rounded border-gray-300"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2 text-sm font-medium text-gray-900">
+                                    <TruncatedText text={doc.nom} maxLength={20} />
+                                  </td>
+                                  <td className="px-3 py-2 text-sm text-gray-600">
+                                    <TruncatedText text={doc.description} maxLength={30} />
+                                  </td>
+                                </tr>
+                              ))
+                          ) : (
+                            // Show all docsRequis entry type
+                            docsRequis
+                              .filter(doc => doc.type === 'entry')
+                              .map((doc) => (
+                                <tr key={`entry-${doc.id}`} className="hover:bg-gray-50">
+                                  <td className="px-3 py-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedDocuments.includes(doc.id)}
+                                      onChange={() => toggleDocumentSelection(doc.id)}
+                                      className="rounded border-gray-300"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2 text-sm font-medium text-gray-900">
+                                    <TruncatedText text={doc.nom} maxLength={20} />
+                                  </td>
+                                  <td className="px-3 py-2 text-sm text-gray-600">
+                                    <TruncatedText text={doc.description} maxLength={30} />
+                                  </td>
+                                </tr>
+                              ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Documents Livrables Table */}
+                  <div>
+                    <h4 className="text-md font-medium text-gray-900 mb-3">
+                      Documents Livrables ({docsRequis.filter(doc => doc.type === 'livrable').length})
+                    </h4>
+                    <div className="border rounded-md max-h-80 overflow-y-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                              <input
+                                type="checkbox"
+                                onChange={(e) => {
+                                  const livrableDocs = docsRequis.filter(doc => doc.type === 'livrable')
+                                  if (e.target.checked) {
+                                    const livrableIds = livrableDocs.map(doc => doc.id)
+                                    setSelectedDocuments(prev => [...new Set([...prev, ...livrableIds])])
+                                  } else {
+                                    const livrableIds = livrableDocs.map(doc => doc.id)
+                                    setSelectedDocuments(prev => prev.filter(id => !livrableIds.includes(id)))
+                                  }
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                            </th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {selectedProject.docs_needs && selectedProject.docs_needs.length > 0 ? (
+                            // Show project-specific docs_needs
+                            selectedProject.docs_needs
+                              .filter(doc => doc.type === 'livrable')
+                              .map((doc, index) => (
+                                <tr key={`project-livrable-${index}`} className="bg-green-50 hover:bg-green-100">
+                                  <td className="px-3 py-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedDocuments.includes(doc.doc_id)}
+                                      onChange={() => toggleDocumentSelection(doc.doc_id)}
+                                      className="rounded border-gray-300"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2 text-sm font-medium text-gray-900">
+                                    <TruncatedText text={doc.nom} maxLength={20} />
+                                  </td>
+                                  <td className="px-3 py-2 text-sm text-gray-600">
+                                    <TruncatedText text={doc.description} maxLength={30} />
+                                  </td>
+                                </tr>
+                              ))
+                          ) : (
+                            // Show all docsRequis livrable type
+                            docsRequis
+                              .filter(doc => doc.type === 'livrable')
+                              .map((doc) => (
+                                <tr key={`livrable-${doc.id}`} className="hover:bg-gray-50">
+                                  <td className="px-3 py-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedDocuments.includes(doc.id)}
+                                      onChange={() => toggleDocumentSelection(doc.id)}
+                                      className="rounded border-gray-300"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2 text-sm font-medium text-gray-900">
+                                    <TruncatedText text={doc.nom} maxLength={20} />
+                                  </td>
+                                  <td className="px-3 py-2 text-sm text-gray-600">
+                                    <TruncatedText text={doc.description} maxLength={30} />
+                                  </td>
+                                </tr>
+                              ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Action Buttons */}
@@ -2126,7 +2482,7 @@ export default function TerrainsManagement() {
                     ) : (
                       <div className="flex items-center space-x-2">
                         <Save className="w-4 h-4" />
-                        <span>Enregistrer ({affectedSalaries.length})</span>
+                        <span>Enregistrer ({affectedSalaries.length} profils, {selectedDocuments.length} docs)</span>
                       </div>
                     )}
                   </button>

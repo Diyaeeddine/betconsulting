@@ -743,7 +743,7 @@ export default function GestionRessourcesProjet() {
                               <TruncatedText text={logiciel.output} maxLength={15} />
                             </td>
                             <td className="px-4 py-3">
-                              {getStatusBadge(logiciel.statut)}
+                              {logiciel.statut}
                             </td>
                           </tr>
                         )) || (

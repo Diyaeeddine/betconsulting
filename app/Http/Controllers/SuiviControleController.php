@@ -13,6 +13,8 @@ use App\Models\Materiel;
 use App\Models\Logiciel;
 use App\Models\plan;
 use App\Models\Notification;
+use App\Models\DocsRequis;
+
 
 use Carbon\Carbon;
 
@@ -44,6 +46,7 @@ class SuiviControleController extends Controller
         $projets  = Projet::all();
         $salaries = Salarie::where('statut', 'actif')->get();
         $allProfils = Profil::all();
+        $docsRequis = DocsRequis::all(); //
 
         // Map each salarie to their profils manually
         $salaries->transform(function ($salarie) use ($allProfils) {
@@ -51,7 +54,6 @@ class SuiviControleController extends Controller
                 ->where('user_id', $salarie->id)
                 ->values() // reset array indices
                 ->map(function ($profil) {
-                    // Optional: transform profil object as needed
                     return [
                         'id' => $profil->id,
                         'nom_profil' => $profil->nom_profil,
@@ -61,12 +63,19 @@ class SuiviControleController extends Controller
             return $salarie;
         });
 
-       $mssgs = Notification::where('receiver', 'suivi-controle')
-        ->where('statut', 'actif')
-        ->get();
+        $mssgs = Notification::where('receiver', 'suivi-controle')
+            ->where('statut', 'actif')
+            ->get();
 
-        return response()->json(compact('terrains', 'projets', 'salaries','mssgs'));
+        return response()->json(compact(
+            'terrains',
+            'projets',
+            'salaries',
+            'mssgs',
+            'docsRequis' 
+        ));
     }
+
 
     public function fetchTerrains()
     {
@@ -122,6 +131,8 @@ class SuiviControleController extends Controller
             'name' => 'required|string',
             'salarie_ids' => 'required|array',
             'salarie_ids.*' => 'exists:salaries,id',
+            'docs_ids' => 'required|array',
+            'docs_ids.*' => 'exists:docs_requis,id'
         ]);
 
         $projet = Projet::where('id', $validated['projet_id'])
@@ -132,15 +143,26 @@ class SuiviControleController extends Controller
             return redirect()->back()->with('error', 'Projet not found or name mismatch.');
         }
 
-        // 1. Assign the salarie_ids to the projet (if needed)
+        // 1. Assign salarie_ids
         $projet->salarie_ids = $validated['salarie_ids'];
+
+        // 2. Assign docs_needs
+        $docsNeeds = DocsRequis::whereIn('id', $validated['docs_ids'])->get()->map(function ($doc) {
+            return [
+                'nom' => $doc->nom,
+                'type' => $doc->type,
+                'description' => $doc->description,
+                'doc_id' => $doc->id
+            ];
+        })->toArray();
+
+        $projet->docs_needs = $docsNeeds;
         $projet->save();
 
-        // 2. Add this projet ID to each selected salarie's projet_ids (if not already present)
+        // 3. Update projet_ids for each salarie
         \App\Models\Salarie::whereIn('id', $validated['salarie_ids'])->get()->each(function ($salarie) use ($projet) {
             $currentProjetIds = is_array($salarie->projet_ids) ? $salarie->projet_ids : [];
 
-            // Avoid duplicates
             if (!in_array($projet->id, $currentProjetIds)) {
                 $currentProjetIds[] = $projet->id;
                 $salarie->projet_ids = $currentProjetIds;
@@ -148,7 +170,24 @@ class SuiviControleController extends Controller
             }
         });
 
-        return redirect()->back()->with('success', 'Projet and salaries updated successfully.');
+        return redirect()->back()->with('success', 'Projet, salaries, and docs_needs updated successfully.');
+    }
+
+    public function storeDocRequis(Request $request)
+    {
+        $validated = $request->validate([
+            'nom' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'type' => 'required|in:entry,livrable'
+        ]);
+
+        $docRequis = DocsRequis::create([
+            'nom' => $validated['nom'],
+            'description' => $validated['description'] ?? '',
+            'type' => $validated['type']
+        ]);
+
+       return redirect()->back()->with('success', 'Document created');
     }
 
 

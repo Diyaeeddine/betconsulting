@@ -232,7 +232,7 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
 
    
 
-    Route::get('/suivi-controle/fetch-data', [SuiviControleController::class, 'fetchData']);
+    // Route::get('/suivi-controle/fetch-data', [SuiviControleController::class, 'fetchData']);
     Route::get('/suivi-controle/fetch-terrains', [SuiviControleController::class, 'fetchTerrains']);
     Route::get('/suivi-controle/fetch-salarie/{id}', [SuiviControleController::class, 'fetchSalarieData']);
     Route::post('/suivi-controle/terrain', [SuiviControleController::class, 'createTerrain']);
@@ -248,14 +248,19 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
     Route::delete('/suivi-controle/plans/{id}', [SuiviControleController::class, 'deletePlan']);
 
     Route::post('/suivi-controle/chat', [SuiviControleController::class, 'sendChat']);
+    
+
+    Route::get('/suivi-controle/fetch-all-data', [SuiviControleController::class, 'fetchAll']);
+    Route::get('/suivi-controle/fetch-projet/{id}', [SuiviControleController::class, 'getProjetRessources']);
+    
+    Route::post('/suivi-controle/docReqEntry', [SuiviControleController::class, 'storeDocRequis']);
 
 
 }); 
 
 
 Route::middleware('auth.basic')->group(function () {
-    Route::get('/suivi-controle/fetch-all-data', [SuiviControleController::class, 'fetchAll']);
-    Route::get('/suivi-controle/fetch-projet/{id}', [SuiviControleController::class, 'getProjetRessources']);
+    Route::get('/suivi-controle/fetch-data', [SuiviControleController::class, 'fetchData']);
 
 });
 
