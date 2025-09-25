@@ -87,16 +87,11 @@ const mainNavItems: NavItem[] = [
         ...(auth?.user?.role === 'suivi-controle'
         ? [
             {
-            title: 'Terrains',
-            href: '/suivi-controle/terrains',
-            icon: MapPin,
-            },
-            {
             title: 'Planings',
             href: '/suivi-controle/Planing',
             icon: Calendar,
             },
-             {
+            {
             title: 'Tracking',
             href: '/suivi-controle/Tracking',
             icon: LayoutGrid,
@@ -104,8 +99,23 @@ const mainNavItems: NavItem[] = [
             {
             title: 'Suivi-Projet',
             href: '/suivi-controle/suiviProjet',
-            icon: LayoutGrid,
+            icon: BookOpen,
             },
+            {
+            title: 'Ressources',
+            href: '/suivi-controle/ressources',
+            icon: Wrench,
+            },
+            {
+            title: 'Chantiers',
+            href: '/suivi-controle/terrains',
+            icon: MapPin,
+            },
+
+
+
+           
+           
         ]
         : []),
         

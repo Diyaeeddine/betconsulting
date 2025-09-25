@@ -17,6 +17,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->date('date_debut')->nullable();
             $table->date('date_fin')->nullable();
+            $table->string('statut');
             $table->json('salaries_ids')->nullable(); // store array of IDs
             $table->foreignId('plan_id')->constrained('plans')->onDelete('cascade');
             $table->timestamps();

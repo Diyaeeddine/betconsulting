@@ -226,13 +226,16 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
     Route::get('/suivi-controle/Tracking', [SuiviControleController::class, 'Tracking'])
         ->name('Tracking.suivi-controle');
 
-    Route::get('/suivi-controle/suiviProjet', [SuiviControleController::class, 'SuiviProjet'])
-        ->name('SuiviProjet.suivi-controle');
+    Route::get('/suivi-controle/ressources', [SuiviControleController::class, 'Ressources'])
+        ->name('ressources.suivi-controle');
+
+    Route::get('/suivi-controle/suiviProjet', [SuiviControleController::class, 'suiviProjet'])
+        ->name('suiviProjet.suivi-controle');
 
 
    
 
-    // Route::get('/suivi-controle/fetch-data', [SuiviControleController::class, 'fetchData']);
+    Route::get('/suivi-controle/fetch-data', [SuiviControleController::class, 'fetchData']);
     Route::get('/suivi-controle/fetch-terrains', [SuiviControleController::class, 'fetchTerrains']);
     Route::get('/suivi-controle/fetch-salarie/{id}', [SuiviControleController::class, 'fetchSalarieData']);
     Route::post('/suivi-controle/terrain', [SuiviControleController::class, 'createTerrain']);
@@ -241,9 +244,11 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
     Route::put('/suivi-controle/notif/{id}', [SuiviControleController::class, 'deactivateNotif']);
     Route::delete('/suivi-controle/terrain/{id}', [SuiviControleController::class, 'deleteTerrain']);
     Route::post('/suivi-controle/terrain/affect-grant', [SuiviControleController::class, 'affectGrantSalarie']);
+    Route::post('/suivi-controle/docReqEntry', [SuiviControleController::class, 'storeDocRequis']);
 
     Route::get('/suivi-controle/fetch-plans', [SuiviControleController::class, 'fetchDataPlanings']);
     Route::post('/suivi-controle/plans', [SuiviControleController::class, 'createPlan']);
+    Route::post('/suivi-controle/storeTask', [SuiviControleController::class, 'storeTask']);
     Route::put('/suivi-controle/plans/{id}', [SuiviControleController::class, 'updatePlan']);
     Route::delete('/suivi-controle/plans/{id}', [SuiviControleController::class, 'deletePlan']);
 
@@ -253,7 +258,6 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
     Route::get('/suivi-controle/fetch-all-data', [SuiviControleController::class, 'fetchAll']);
     Route::get('/suivi-controle/fetch-projet/{id}', [SuiviControleController::class, 'getProjetRessources']);
     
-    Route::post('/suivi-controle/docReqEntry', [SuiviControleController::class, 'storeDocRequis']);
 
 
 }); 

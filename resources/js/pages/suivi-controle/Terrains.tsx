@@ -331,6 +331,15 @@ const getPolygonColor = (statut: string) => {
   }
 }
 
+// Helper function to translate document types
+const getDocumentTypeLabel = (type: "entry" | "livrable"): string => {
+  switch (type) {
+    case 'entry': return 'Requis'
+    case 'livrable': return 'Livrable'
+    default: return type
+  }
+}
+
 // Text truncation component
 const TruncatedText = ({ text, maxLength = 50, className = "" }: { text: string, maxLength?: number, className?: string }) => {
   if (!text) return <span className={className}>-</span>
@@ -542,6 +551,7 @@ export default function TerrainsManagement() {
           onSuccess: (page) => {
             addMessage('success', 'Document ajouté avec succès')
             setShowAddDocumentPopup(false)
+            setShowProjectSalariesPopup(false) // Close all popups on success
             setDocumentFormData({ nom: "", description: "", type: "" })
             // Refresh docsRequis data
             fetchAllData()
@@ -594,7 +604,7 @@ export default function TerrainsManagement() {
 
     // Initialize selected documents based on project's docs_needs
     if (currentProject.docs_needs && currentProject.docs_needs.length > 0) {
-      // If project has docs_needs, use those doc_ids
+      // If project has docs_needs, use those doc_ids as checked
       setSelectedDocuments(currentProject.docs_needs.map(doc => doc.doc_id))
     } else {
       // If no docs_needs, start with empty selection
@@ -1795,14 +1805,17 @@ export default function TerrainsManagement() {
             </div>
           )}
 
-          {/* Add Document Popup */}
+          {/* Add Document Popup - UPDATED for better navigation */}
           {showAddDocumentPopup && (
             <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white rounded-lg p-6 w-full max-w-md m-4">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-medium text-gray-900">Ajouter un document</h3>
                   <button
-                    onClick={() => setShowAddDocumentPopup(false)}
+                    onClick={() => {
+                      setShowAddDocumentPopup(false)
+                      setShowProjectSalariesPopup(true) // Go back to project affectation popup
+                    }}
                     className="text-gray-400 hover:text-gray-600"
                   >
                     <X className="w-6 h-6" />
@@ -1845,15 +1858,18 @@ export default function TerrainsManagement() {
                       required
                     >
                       <option value="">Sélectionner le type</option>
-                      <option value="entry">Documents Requis (Entry)</option>
-                      <option value="livrable">Documents Livrables</option>
+                      <option value="entry">Requis</option>
+                      <option value="livrable">Livrable</option>
                     </select>
                   </div>
 
                   <div className="flex justify-end gap-3 pt-4">
                     <button
                       type="button"
-                      onClick={() => setShowAddDocumentPopup(false)}
+                      onClick={() => {
+                        setShowAddDocumentPopup(false)
+                        setShowProjectSalariesPopup(true) // Go back to project affectation popup
+                      }}
                       className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
                       disabled={isSubmittingDocument}
                     >
@@ -2125,7 +2141,7 @@ export default function TerrainsManagement() {
             </div>
           </div>
 
-          {/* UPDATED: Project Salaries Popup - Now includes Document Management */}
+          {/* UPDATED: Project Salaries Popup - Now includes Document Management with ALWAYS showing all documents */}
           {showProjectSalariesPopup && selectedProject && (
             <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white rounded-lg p-6 w-full max-w-7xl max-h-[90vh] overflow-y-auto m-4">
@@ -2290,7 +2306,7 @@ export default function TerrainsManagement() {
                     </div>
                   </div>
 
-                  {/* Documents Requis Table */}
+                  {/* Documents Requis Table - UPDATED to always show all docs and replace Description with Type */}
                   <div>
                     <div className="flex justify-between items-center mb-3">
                       <h4 className="text-md font-medium text-gray-900">
@@ -2325,61 +2341,36 @@ export default function TerrainsManagement() {
                               />
                             </th>
                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                          {selectedProject.docs_needs && selectedProject.docs_needs.length > 0 ? (
-                            // Show project-specific docs_needs
-                            selectedProject.docs_needs
-                              .filter(doc => doc.type === 'entry')
-                              .map((doc, index) => (
-                                <tr key={`project-entry-${index}`} className="bg-blue-50 hover:bg-blue-100">
-                                  <td className="px-3 py-2">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedDocuments.includes(doc.doc_id)}
-                                      onChange={() => toggleDocumentSelection(doc.doc_id)}
-                                      className="rounded border-gray-300"
-                                    />
-                                  </td>
-                                  <td className="px-3 py-2 text-sm font-medium text-gray-900">
-                                    <TruncatedText text={doc.nom} maxLength={20} />
-                                  </td>
-                                  <td className="px-3 py-2 text-sm text-gray-600">
-                                    <TruncatedText text={doc.description} maxLength={30} />
-                                  </td>
-                                </tr>
-                              ))
-                          ) : (
-                            // Show all docsRequis entry type
-                            docsRequis
-                              .filter(doc => doc.type === 'entry')
-                              .map((doc) => (
-                                <tr key={`entry-${doc.id}`} className="hover:bg-gray-50">
-                                  <td className="px-3 py-2">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedDocuments.includes(doc.id)}
-                                      onChange={() => toggleDocumentSelection(doc.id)}
-                                      className="rounded border-gray-300"
-                                    />
-                                  </td>
-                                  <td className="px-3 py-2 text-sm font-medium text-gray-900">
-                                    <TruncatedText text={doc.nom} maxLength={20} />
-                                  </td>
-                                  <td className="px-3 py-2 text-sm text-gray-600">
-                                    <TruncatedText text={doc.description} maxLength={30} />
-                                  </td>
-                                </tr>
-                              ))
-                          )}
+                          {docsRequis
+                            .filter(doc => doc.type === 'entry')
+                            .map((doc) => (
+                              <tr key={`entry-${doc.id}`} className="hover:bg-gray-50">
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedDocuments.includes(doc.id)}
+                                    onChange={() => toggleDocumentSelection(doc.id)}
+                                    className="rounded border-gray-300"
+                                  />
+                                </td>
+                                <td className="px-3 py-2 text-sm font-medium text-gray-900">
+                                  <TruncatedText text={doc.nom} maxLength={20} />
+                                </td>
+                                <td className="px-3 py-2 text-sm text-gray-600">
+                                  {getDocumentTypeLabel(doc.type)}
+                                </td>
+                              </tr>
+                            ))}
                         </tbody>
                       </table>
                     </div>
                   </div>
 
-                  {/* Documents Livrables Table */}
+                  {/* Documents Livrables Table - UPDATED to always show all docs and replace Description with Type */}
                   <div>
                     <h4 className="text-md font-medium text-gray-900 mb-3">
                       Documents Livrables ({docsRequis.filter(doc => doc.type === 'livrable').length})
@@ -2405,55 +2396,30 @@ export default function TerrainsManagement() {
                               />
                             </th>
                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                          {selectedProject.docs_needs && selectedProject.docs_needs.length > 0 ? (
-                            // Show project-specific docs_needs
-                            selectedProject.docs_needs
-                              .filter(doc => doc.type === 'livrable')
-                              .map((doc, index) => (
-                                <tr key={`project-livrable-${index}`} className="bg-green-50 hover:bg-green-100">
-                                  <td className="px-3 py-2">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedDocuments.includes(doc.doc_id)}
-                                      onChange={() => toggleDocumentSelection(doc.doc_id)}
-                                      className="rounded border-gray-300"
-                                    />
-                                  </td>
-                                  <td className="px-3 py-2 text-sm font-medium text-gray-900">
-                                    <TruncatedText text={doc.nom} maxLength={20} />
-                                  </td>
-                                  <td className="px-3 py-2 text-sm text-gray-600">
-                                    <TruncatedText text={doc.description} maxLength={30} />
-                                  </td>
-                                </tr>
-                              ))
-                          ) : (
-                            // Show all docsRequis livrable type
-                            docsRequis
-                              .filter(doc => doc.type === 'livrable')
-                              .map((doc) => (
-                                <tr key={`livrable-${doc.id}`} className="hover:bg-gray-50">
-                                  <td className="px-3 py-2">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedDocuments.includes(doc.id)}
-                                      onChange={() => toggleDocumentSelection(doc.id)}
-                                      className="rounded border-gray-300"
-                                    />
-                                  </td>
-                                  <td className="px-3 py-2 text-sm font-medium text-gray-900">
-                                    <TruncatedText text={doc.nom} maxLength={20} />
-                                  </td>
-                                  <td className="px-3 py-2 text-sm text-gray-600">
-                                    <TruncatedText text={doc.description} maxLength={30} />
-                                  </td>
-                                </tr>
-                              ))
-                          )}
+                          {docsRequis
+                            .filter(doc => doc.type === 'livrable')
+                            .map((doc) => (
+                              <tr key={`livrable-${doc.id}`} className="hover:bg-gray-50">
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedDocuments.includes(doc.id)}
+                                    onChange={() => toggleDocumentSelection(doc.id)}
+                                    className="rounded border-gray-300"
+                                  />
+                                </td>
+                                <td className="px-3 py-2 text-sm font-medium text-gray-900">
+                                  <TruncatedText text={doc.nom} maxLength={20} />
+                                </td>
+                                <td className="px-3 py-2 text-sm text-gray-600">
+                                  {getDocumentTypeLabel(doc.type)}
+                                </td>
+                              </tr>
+                            ))}
                         </tbody>
                       </table>
                     </div>
