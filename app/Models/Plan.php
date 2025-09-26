@@ -14,6 +14,7 @@ class Plan extends Model
         'description',
         'terrains_ids',
         'salarie_ids',
+        'plan_docs',
         'statut',
         'projet_id',
     ];
@@ -24,10 +25,15 @@ class Plan extends Model
         'salarie_ids' => 'array',
         'date_debut' => 'date',
         'date_fin' => 'date',
+        'plan_docs' => 'array',
     ];
 
     public function projet()
     {
         return $this->belongsTo(Projet::class);
+    }
+    public function tasks()
+    {
+        return $this->hasMany(Task::class, 'plan_id');
     }
 }

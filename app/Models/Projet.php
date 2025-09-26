@@ -65,4 +65,8 @@ class Projet extends Model
     {
         return $this->hasMany(Terrain::class);
     }
+    public function plans()
+    {
+        return $this->hasMany(Plan::class, 'projet_id');
+    }
 }

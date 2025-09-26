@@ -240,6 +240,7 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
     Route::get('/suivi-controle/fetch-salarie/{id}', [SuiviControleController::class, 'fetchSalarieData']);
     Route::post('/suivi-controle/terrain', [SuiviControleController::class, 'createTerrain']);
     Route::put('/suivi-controle/ProjetSals', [SuiviControleController::class, 'updateProjetSalaries']);
+    
     Route::put('/suivi-controle/terrain/{id}', [SuiviControleController::class, 'editTerrain']);
     Route::put('/suivi-controle/notif/{id}', [SuiviControleController::class, 'deactivateNotif']);
     Route::delete('/suivi-controle/terrain/{id}', [SuiviControleController::class, 'deleteTerrain']);
@@ -258,13 +259,19 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
     Route::get('/suivi-controle/fetch-all-data', [SuiviControleController::class, 'fetchAll']);
     Route::get('/suivi-controle/fetch-projet/{id}', [SuiviControleController::class, 'getProjetRessources']);
     
+    Route::get('/suivi-controle/fetch-projetData/{id}', [SuiviControleController::class, 'getProjetStats']);
+    Route::get('/suivi-controle/download-projetDoc/{id}', [SuiviControleController::class, 'getProjetDoc']);
+    Route::put('/suivi-controle/approuve-projetDoc/{id}', [SuiviControleController::class, 'approuveProjetDoc']);
+    Route::put('/suivi-controle/comment-projetDoc/{id}', [SuiviControleController::class, 'commentProjetDoc']);
+   
 
 
 }); 
 
 
 Route::middleware('auth.basic')->group(function () {
-    Route::get('/suivi-controle/fetch-data', [SuiviControleController::class, 'fetchData']);
+    Route::get('/suivi-controle/fetch-projetData/{id}', [SuiviControleController::class, 'getProjetStats']);
+
 
 });
 

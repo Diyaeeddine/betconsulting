@@ -14,6 +14,7 @@ use App\Models\Logiciel;
 use App\Models\plan;
 use App\Models\Notification;
 use App\Models\DocsRequis;
+use App\Models\Document;
 use App\Models\Task;
 use App\Models\ProjetMssg;
 
@@ -419,19 +420,21 @@ class SuiviControleController extends Controller
             'projet_id' => 'required|exists:projets,id',
             'statut' => 'required|string',
             'docs_ids' => 'nullable|array',
-            // 'docs_ids.*' => 'exists:docs_requis,id'
+            'docs_ids.*' => 'integer|exists:docs_requis,id'
         ]);
 
         $planDocs = [];
         if (!empty($validated['docs_ids'])) {
-            $planDocs = DocsRequis::whereIn('id', $validated['docs_ids'])->get()->map(function ($doc) {
-                return [
-                    'nom' => $doc->nom,
-                    'type' => $doc->type,
-                    'description' => $doc->description,
-                    'doc_id' => $doc->id
-                ];
-            })->toArray();
+            $planDocs = DocsRequis::whereIn('id', $validated['docs_ids'])
+                ->get()
+                ->map(function ($doc) {
+                    return [
+                        'nom' => $doc->nom,
+                        'type' => $doc->type,
+                        'description' => $doc->description,
+                        'doc_id' => $doc->id,
+                    ];
+                })->toArray();
         }
 
         $plan = Plan::create([
@@ -445,8 +448,10 @@ class SuiviControleController extends Controller
             'statut' => $validated['statut'],
             'plan_docs' => $planDocs,
         ]);
+
         return redirect()->back()->with('success', 'Plan créé avec succès');
     }
+
 
 
     public function updatePlan(Request $request, $id)
@@ -462,9 +467,26 @@ class SuiviControleController extends Controller
             'salarie_ids' => 'nullable|array',
             'salarie_ids.*' => 'integer|exists:salaries,id',
             'statut' => 'required|string',
+            'docs_ids' => 'nullable|array',
+            'docs_ids.*' => 'integer|exists:docs_requis,id'
         ]);
 
         $plan = Plan::findOrFail($id);
+
+        // transform docs_ids -> plan_docs
+        $planDocs = [];
+        if (!empty($validated['docs_ids'])) {
+            $planDocs = DocsRequis::whereIn('id', $validated['docs_ids'])
+                ->get()
+                ->map(function ($doc) {
+                    return [
+                        'nom' => $doc->nom,
+                        'type' => $doc->type,
+                        'description' => $doc->description,
+                        'doc_id' => $doc->id,
+                    ];
+                })->toArray();
+        }
 
         $plan->update([
             'projet_id' => $validated['projet_id'],
@@ -475,10 +497,12 @@ class SuiviControleController extends Controller
             'terrains_ids' => $validated['terrains_ids'] ?? [],
             'salarie_ids' => $validated['salarie_ids'] ?? [],
             'statut' => $validated['statut'],
+            'plan_docs' => $planDocs, 
         ]);
 
         return redirect()->back()->with('success', 'Plan mis à jour avec succès');
     }
+
 
 
     public function deletePlan($id)
@@ -699,184 +723,128 @@ class SuiviControleController extends Controller
         ]);
     }
 
-    public function projetResources($projetId)
+    public function getProjetStats($projetId)
     {
-        // Validate project exists
+        // 1. Validate project exists
         $projet = Projet::find($projetId);
         if (!$projet) {
-            return response()->json(['success' => false, 'message' => 'Projet not found.'], 404);
+            return response()->json([
+                'success' => false,
+                'message' => 'Projet not found.'
+            ], 404);
         }
 
         $today = now()->startOfDay();
 
-        // Eager-load plans and tasks (assumes Plan has tasks() relation)
-        $plans = $projet->plans()->with(['tasks'])->get();
+        // 2. Load plans with tasks
+        $plans = $projet->plans()->with('tasks')->get();
 
-        // Prepare plan -> tasks -> salaries(with profils)
         $plansWithDetails = $plans->map(function ($plan) {
-            // Ensure plan->tasks exists (if relation missing, $plan->tasks will be empty collection)
-            $tasks = $plan->tasks ?? collect();
+            $tasksWithSalaries = $plan->tasks->map(function ($task) {
+                $salarieIds = $task->salaries_ids ?? [];
 
-            $tasksWithSalaries = $tasks->map(function ($task) {
-                // tasks store salaries_ids as JSON (nullable)
-                $salarieIds = [];
-                if (isset($task->salaries_ids) && is_array($task->salaries_ids)) {
-                    $salarieIds = $task->salaries_ids;
-                } elseif (!empty($task->salaries_ids)) {
-                    // if saved as JSON string, try decode
-                    $decoded = json_decode($task->salaries_ids, true);
-                    if (is_array($decoded)) $salarieIds = $decoded;
-                }
+                $salaries = Salarie::whereIn('id', $salarieIds)
+                    ->with('profils') // eager load profils
+                    ->get()
+                    ->map(function ($salarie) {
+                        return array_merge(
+                            $salarie->toArray(),
+                            ['profils' => $salarie->profils->map(function ($profil) {
+                                return [
+                                    'id' => $profil->id,
+                                    'nom_profil' => $profil->nom_profil,
+                                    'poste_profil' => $profil->poste_profil,
+                                ];
+                            })->values()]
+                        );
+                    });
 
-                $salaries = collect();
-                if (!empty($salarieIds)) {
-                    $salaries = \App\Models\Salarie::whereIn('id', $salarieIds)->get()->map(function ($salarie) {
-                        // attach profils for each salarie (assumes Profil model has user_id -> salarie id)
-                        $profils = \App\Models\Profil::where('user_id', $salarie->id)->get()->map(function ($profil) {
-                            return [
-                                'id' => $profil->id,
-                                'nom_profil' => $profil->nom_profil,
-                                'poste_profil' => $profil->poste_profil,
-                            ];
-                        })->values();
-
-                        // return salarie with profils
-                        return array_merge($salarie->toArray(), ['profils' => $profils]);
-                    })->values();
-                }
-
-                // Attach salaries to task representation
                 $taskArray = $task->toArray();
                 $taskArray['salaries'] = $salaries;
 
                 return $taskArray;
             });
 
-            // Prepare plan array and include its tasks
-            $planArray = $plan->toArray();
-            $planArray['tasks'] = $tasksWithSalaries;
-
-            // plan_docs is already stored as JSON on plan (if any)
-            if (isset($plan->plan_docs)) {
-                $planArray['plan_docs'] = $plan->plan_docs;
-            } else {
-                $planArray['plan_docs'] = [];
-            }
-
-            return $planArray;
+            return array_merge($plan->toArray(), [
+                'tasks' => $tasksWithSalaries,
+                'plan_docs' => $plan->plan_docs ?? [],
+            ]);
         });
 
-        // Terrains and each terrain's salaries
-        $terrains = $projet->terrains()->get()->map(function ($terrain) {
-            $terrainArray = $terrain->toArray();
+        // 3. Terrains + their salaries
+        $terrains = $projet->terrains->map(function ($terrain) {
+            $salarieIds = $terrain->salarie_ids ?? [];
 
-            // terrain has salarie_ids JSON
-            $salarieIds = [];
-            if (isset($terrain->salarie_ids) && is_array($terrain->salarie_ids)) {
-                $salarieIds = $terrain->salarie_ids;
-            } elseif (!empty($terrain->salarie_ids)) {
-                $decoded = json_decode($terrain->salarie_ids, true);
-                if (is_array($decoded)) $salarieIds = $decoded;
-            }
+            $salaries = Salarie::whereIn('id', $salarieIds)
+                ->with('profils')
+                ->get()
+                ->map(function ($salarie) {
+                    return array_merge(
+                        $salarie->toArray(),
+                        ['profils' => $salarie->profils->map(function ($profil) {
+                            return [
+                                'id' => $profil->id,
+                                'nom_profil' => $profil->nom_profil,
+                                'poste_profil' => $profil->poste_profil,
+                            ];
+                        })->values()]
+                    );
+                });
 
-            $salaries = collect();
-            if (!empty($salarieIds)) {
-                $salaries = \App\Models\Salarie::whereIn('id', $salarieIds)->get()->map(function ($salarie) {
-                    $profils = \App\Models\Profil::where('user_id', $salarie->id)->get()->map(function ($profil) {
-                        return [
-                            'id' => $profil->id,
-                            'nom_profil' => $profil->nom_profil,
-                            'poste_profil' => $profil->poste_profil,
-                        ];
-                    })->values();
-
-                    return array_merge($salarie->toArray(), ['profils' => $profils]);
-                })->values();
-            }
-
-            $terrainArray['salaries'] = $salaries;
-            return $terrainArray;
+            return array_merge($terrain->toArray(), [
+                'salaries' => $salaries
+            ]);
         });
 
-        // Latest documents for this projet (latest 10)
-        $latestDocuments = \App\Models\Document::where('projet_id', $projet->id)
+        // 4. Latest documents
+        $latestDocuments = Document::where('projet_id', $projet->id)
             ->orderBy('created_at', 'desc')
             ->take(10)
             ->get();
 
-        // Projet messages (assumes ProjetMssg model and projet_mssgs table)
+        // 5. Messages
         $messages = ProjetMssg::where('projet_id', $projet->id)
             ->orderBy('created_at', 'desc')
             ->get();
 
-        // Compute delays:
+        // 6. Compute delays
         $planDelays = collect();
         $taskDelays = collect();
 
-        // iterate plansWithDetails (which contains tasks arrays)
         foreach ($plansWithDetails as $planArr) {
-            // parse plan date_fin safely
-            $planDateFin = null;
-            if (!empty($planArr['date_fin'])) {
-                try {
-                    $planDateFin = \Illuminate\Support\Carbon::parse($planArr['date_fin'])->startOfDay();
-                } catch (\Exception $e) {
-                    $planDateFin = null;
-                }
-            }
+            $planDateFin = !empty($planArr['date_fin'])
+                ? \Carbon\Carbon::parse($planArr['date_fin'])->startOfDay()
+                : null;
 
-            // Plan is delayed if date_fin is in past and statut != 'termine'
-            $planStatut = $planArr['statut'] ?? null;
-            if ($planDateFin && $planDateFin->lt($today) && strtolower($planStatut) !== 'termine') {
+            if ($planDateFin && $planDateFin->lt($today) && strtolower($planArr['statut']) !== 'termine') {
                 $planDelays->push($planArr);
             }
 
-            // Check tasks in this plan (only those tasks that have passed date_fin and not finished)
             foreach ($planArr['tasks'] as $taskArr) {
-                $taskDateFin = null;
-                if (!empty($taskArr['date_fin'])) {
-                    try {
-                        $taskDateFin = \Illuminate\Support\Carbon::parse($taskArr['date_fin'])->startOfDay();
-                    } catch (\Exception $e) {
-                        $taskDateFin = null;
-                    }
-                }
+                $taskDateFin = !empty($taskArr['date_fin'])
+                    ? \Carbon\Carbon::parse($taskArr['date_fin'])->startOfDay()
+                    : null;
 
-                // Assume tasks may or may not have 'statut' property. If exists and != 'termine', it's delayed.
-                // If no 'statut' property exists, we treat it as delayed when date passed.
                 $taskStatut = $taskArr['statut'] ?? null;
-
-                $isTaskDelayed = false;
-                if ($taskDateFin && $taskDateFin->lt($today)) {
-                    if ($taskStatut !== null) {
-                        if (strtolower($taskStatut) !== 'termine') {
-                            $isTaskDelayed = true;
-                        }
-                    } else {
-                        // no statut field -> consider delayed if date passed
-                        $isTaskDelayed = true;
-                    }
-                }
+                $isTaskDelayed = $taskDateFin && $taskDateFin->lt($today) &&
+                    (empty($taskStatut) || strtolower($taskStatut) !== 'termine');
 
                 if ($isTaskDelayed) {
-                    // attach the plan info minimal to the task for context
-                    $delayedTask = $taskArr;
-                    $delayedTask['parent_plan'] = [
-                        'id' => $planArr['id'] ?? null,
-                        'date_debut' => $planArr['date_debut'] ?? null,
-                        'date_fin' => $planArr['date_fin'] ?? null,
-                        'statut' => $planArr['statut'] ?? null,
-                        'mssg' => $planArr['mssg'] ?? null,
+                    $taskArr['parent_plan'] = [
+                        'id' => $planArr['id'],
+                        'date_debut' => $planArr['date_debut'],
+                        'date_fin' => $planArr['date_fin'],
+                        'statut' => $planArr['statut'],
+                        'mssg' => $planArr['mssg'],
                     ];
-                    $taskDelays->push($delayedTask);
+                    $taskDelays->push($taskArr);
                 }
             }
         }
 
-        // Project-level delay flag: true if any plan or task delayed
         $projectDelayed = $planDelays->isNotEmpty() || $taskDelays->isNotEmpty();
 
-        // Return structured payload
+        // 7. Return everything
         return response()->json([
             'success' => true,
             'projet' => $projet,
@@ -887,9 +855,19 @@ class SuiviControleController extends Controller
             'delays' => [
                 'project_delayed' => $projectDelayed,
                 'plan_delays' => $planDelays->values(),
-                'task_delays' => $taskDelays->values()
+                'task_delays' => $taskDelays->values(),
             ],
         ]);
+    }
+
+    public function getProjetDoc($docId){
+        return redirect()->back()->with('success', 'Download Doc called with sucess');
+    }
+    public function approuveProjetDoc($docId){
+        return redirect()->back()->with('success', 'Doc Approuve Method with success');
+    }
+    public function commentProjetDoc($docId){
+        return redirect()->back()->with('success', 'Doc Commente Method success');
     }
 
     ######################################################
