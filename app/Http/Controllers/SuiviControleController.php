@@ -135,7 +135,7 @@ class SuiviControleController extends Controller
             'name' => 'required|string',
             'salarie_ids' => 'required|array',
             'salarie_ids.*' => 'exists:salaries,id',
-            'docs_ids' => 'required|array',
+            // 'docs_ids' => 'required|array',
             // 'docs_ids.*' => 'exists:docs_requis,id'
         ]);
 
@@ -151,16 +151,16 @@ class SuiviControleController extends Controller
         $projet->salarie_ids = $validated['salarie_ids'];
 
         // 2. Assign docs_needs
-        $docsNeeds = DocsRequis::whereIn('id', $validated['docs_ids'])->get()->map(function ($doc) {
-            return [
-                'nom' => $doc->nom,
-                'type' => $doc->type,
-                'description' => $doc->description,
-                'doc_id' => $doc->id,
-            ];
-        })->toArray();
+        // $docsNeeds = DocsRequis::whereIn('id', $validated['docs_ids'])->get()->map(function ($doc) {
+        //     return [
+        //         'nom' => $doc->nom,
+        //         'type' => $doc->type,
+        //         'description' => $doc->description,
+        //         'doc_id' => $doc->id,
+        //     ];
+        // })->toArray();
 
-        $projet->docs_needs = $docsNeeds;
+        // $projet->docs_needs = $docsNeeds;
         $projet->save();
 
         // 3. Update projet_ids for each salarie
@@ -384,6 +384,7 @@ class SuiviControleController extends Controller
         $projets  = Projet::all();
         $salaries = Salarie::where('statut', 'actif')->get();
         $allProfils = Profil::all();
+        $docsRequis = DocsRequis::all();
 
         // Map each salarie to their profils manually
         $salaries->transform(function ($salarie) use ($allProfils) {
@@ -405,7 +406,7 @@ class SuiviControleController extends Controller
         ->where('statut', 'actif')
         ->get();
 
-        return response()->json(compact('plans','terrains', 'projets', 'salaries','mssgs'));
+        return response()->json(compact('plans','terrains', 'projets', 'salaries','mssgs','docsRequis'));
     }
 
     public function createPlan(Request $request)
@@ -419,34 +420,22 @@ class SuiviControleController extends Controller
             'salarie_ids' => 'nullable|array',
             'projet_id' => 'required|exists:projets,id',
             'statut' => 'required|string',
-            'docs_ids' => 'nullable|array',
-            'docs_ids.*' => 'integer|exists:docs_requis,id'
+
+            'plan_docs' => 'nullable|array',
+            'plan_docs.*.doc_req_id' => 'nullable|integer|exists:docs_requis,id',
+            'plan_docs.*.file_id' => 'nullable|integer',
         ]);
 
-        $planDocs = [];
-        if (!empty($validated['docs_ids'])) {
-            $planDocs = DocsRequis::whereIn('id', $validated['docs_ids'])
-                ->get()
-                ->map(function ($doc) {
-                    return [
-                        'nom' => $doc->nom,
-                        'type' => $doc->type,
-                        'description' => $doc->description,
-                        'doc_id' => $doc->id,
-                    ];
-                })->toArray();
-        }
-
         $plan = Plan::create([
-            'date_debut' => $validated['date_debut'],
-            'date_fin' => $validated['date_fin'],
-            'mssg' => $validated['mssg'] ?? null,
-            'description' => $validated['description'] ?? null,
-            'terrains_ids' => $validated['terrains_ids'] ?? [],
-            'salarie_ids' => $validated['salarie_ids'] ?? [],
-            'projet_id' => $validated['projet_id'],
-            'statut' => $validated['statut'],
-            'plan_docs' => $planDocs,
+            'date_debut'     => $validated['date_debut'],
+            'date_fin'       => $validated['date_fin'],
+            'mssg'           => $validated['mssg'] ?? null,
+            'description'    => $validated['description'] ?? null,
+            'terrains_ids'   => $validated['terrains_ids'] ?? [],
+            'salarie_ids'    => $validated['salarie_ids'] ?? [],
+            'projet_id'      => $validated['projet_id'],
+            'statut'         => $validated['statut'],
+            'plan_docs'      => $validated['plan_docs'] ?? [],
         ]);
 
         return redirect()->back()->with('success', 'Plan créé avec succès');
@@ -467,37 +456,24 @@ class SuiviControleController extends Controller
             'salarie_ids' => 'nullable|array',
             'salarie_ids.*' => 'integer|exists:salaries,id',
             'statut' => 'required|string',
-            'docs_ids' => 'nullable|array',
-            'docs_ids.*' => 'integer|exists:docs_requis,id'
+
+            'plan_docs' => 'nullable|array',
+            'plan_docs.*.doc_req_id' => 'nullable|integer|exists:docs_requis,id',
+            'plan_docs.*.file_id' => 'nullable|integer',
         ]);
 
         $plan = Plan::findOrFail($id);
 
-        // transform docs_ids -> plan_docs
-        $planDocs = [];
-        if (!empty($validated['docs_ids'])) {
-            $planDocs = DocsRequis::whereIn('id', $validated['docs_ids'])
-                ->get()
-                ->map(function ($doc) {
-                    return [
-                        'nom' => $doc->nom,
-                        'type' => $doc->type,
-                        'description' => $doc->description,
-                        'doc_id' => $doc->id,
-                    ];
-                })->toArray();
-        }
-
         $plan->update([
-            'projet_id' => $validated['projet_id'],
-            'date_debut' => $validated['date_debut'],
-            'date_fin' => $validated['date_fin'],
-            'mssg' => $validated['mssg'] ?? null,
-            'description' => $validated['description'] ?? null,
-            'terrains_ids' => $validated['terrains_ids'] ?? [],
-            'salarie_ids' => $validated['salarie_ids'] ?? [],
-            'statut' => $validated['statut'],
-            'plan_docs' => $planDocs, 
+            'projet_id'     => $validated['projet_id'],
+            'date_debut'    => $validated['date_debut'],
+            'date_fin'      => $validated['date_fin'],
+            'mssg'          => $validated['mssg'] ?? null,
+            'description'   => $validated['description'] ?? null,
+            'terrains_ids'  => $validated['terrains_ids'] ?? [],
+            'salarie_ids'   => $validated['salarie_ids'] ?? [],
+            'statut'        => $validated['statut'],
+            'plan_docs'     => $validated['plan_docs'] ?? [],
         ]);
 
         return redirect()->back()->with('success', 'Plan mis à jour avec succès');
@@ -725,8 +701,7 @@ class SuiviControleController extends Controller
 
     public function getProjetStats($projetId)
     {
-        // 1. Validate project exists
-        $projet = Projet::find($projetId);
+        $projet = Projet::with('responsable')->find($projetId); // ✅ Load responsable relationship
         if (!$projet) {
             return response()->json([
                 'success' => false,
@@ -736,15 +711,14 @@ class SuiviControleController extends Controller
 
         $today = now()->startOfDay();
 
-        // 2. Load plans with tasks
+        // STEP 2: Load plans and tasks with salaries
         $plans = $projet->plans()->with('tasks')->get();
-
         $plansWithDetails = $plans->map(function ($plan) {
             $tasksWithSalaries = $plan->tasks->map(function ($task) {
                 $salarieIds = $task->salaries_ids ?? [];
 
                 $salaries = Salarie::whereIn('id', $salarieIds)
-                    ->with('profils') // eager load profils
+                    ->with('profils')
                     ->get()
                     ->map(function ($salarie) {
                         return array_merge(
@@ -771,7 +745,7 @@ class SuiviControleController extends Controller
             ]);
         });
 
-        // 3. Terrains + their salaries
+        // STEP 3: Terrains
         $terrains = $projet->terrains->map(function ($terrain) {
             $salarieIds = $terrain->salarie_ids ?? [];
 
@@ -796,18 +770,36 @@ class SuiviControleController extends Controller
             ]);
         });
 
-        // 4. Latest documents
-        $latestDocuments = Document::where('projet_id', $projet->id)
-            ->orderBy('created_at', 'desc')
-            ->take(10)
-            ->get();
+        // STEP 4: Fetch docs_needs entries with their doc_req and linked document
+        $docsNeeds = $projet->docs_needs ?? [];
 
-        // 5. Messages
+        $documentsInfo = collect($docsNeeds)->map(function ($docNeed) {
+            $docReq = DocsRequis::find($docNeed['doc_req_id'] ?? null);
+
+            // Try to find the document using file_id if available
+            $document = null;
+            $found = false;
+
+            if (!empty($docNeed['file_id'])) {
+                $document = Document::find($docNeed['file_id']);
+                if ($document) {
+                    $found = true;
+                }
+            }
+
+            return [
+                'doc_req' => $docReq,
+                'document' => $document,
+                'found' => $found
+            ];
+        });
+
+        // STEP 5: Messages
         $messages = ProjetMssg::where('projet_id', $projet->id)
             ->orderBy('created_at', 'desc')
             ->get();
 
-        // 6. Compute delays
+        // STEP 6: Delays
         $planDelays = collect();
         $taskDelays = collect();
 
@@ -844,13 +836,23 @@ class SuiviControleController extends Controller
 
         $projectDelayed = $planDelays->isNotEmpty() || $taskDelays->isNotEmpty();
 
-        // 7. Return everything
+        // STEP 7: Final response
         return response()->json([
             'success' => true,
-            'projet' => $projet,
+            'projet' => array_merge(
+                $projet->toArray(),
+                [
+                    'responsable' => $projet->responsable
+                        ? [
+                            'id' => $projet->responsable->id,
+                            'name' => $projet->responsable->name,
+                        ]
+                        : null
+                ]
+            ),
             'plans' => $plansWithDetails,
             'terrains' => $terrains,
-            'latest_documents' => $latestDocuments,
+            'documents' => $documentsInfo,
             'messages' => $messages,
             'delays' => [
                 'project_delayed' => $projectDelayed,
@@ -859,6 +861,7 @@ class SuiviControleController extends Controller
             ],
         ]);
     }
+
 
     public function getProjetDoc($docId){
         return redirect()->back()->with('success', 'Download Doc called with sucess');

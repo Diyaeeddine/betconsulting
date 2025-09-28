@@ -46,11 +46,23 @@ interface Salarie {
   profils?: Profil[];
 }
 
-interface Document {
+interface DocumentRequis {
+  id: number;
   nom: string;
-  type: string;
   description: string;
-  doc_id: number;
+  type: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface DocNeed {
+  doc_req_id: number;
+  file_id: string;
+}
+
+interface PlanDocument {
+  doc_req_id: number;
+  file_id: string;
 }
 
 interface Plan {
@@ -64,7 +76,7 @@ interface Plan {
   statut: string;
   projet_id: number;
   projet: Projet;
-  plan_docs?: Document[];
+  plan_docs?: PlanDocument[];
   docs_ids?: number[];
   created_at?: string;
   updated_at?: string;
@@ -89,7 +101,7 @@ interface Projet {
   terrain_ids?: number[];
   rh_needs?: any[];
   salarie_ids?: number[];
-  docs_needs?: Document[];
+  docs_needs?: DocNeed[];
   created_at?: string;
   updated_at?: string;
 }
@@ -109,7 +121,7 @@ interface PlanFormData {
   terrains_ids: number[];
   salarie_ids: number[];
   statut: string;
-  docs_ids: number[];
+  plan_docs: PlanDocument[];
 }
 
 interface TaskFormData {
@@ -297,6 +309,7 @@ export default function PlanningManagement() {
   const [projects, setProjects] = useState<Projet[]>([]);
   const [salaries, setSalaries] = useState<Salarie[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [docsRequis, setDocsRequis] = useState<DocumentRequis[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageState[]>([]);
@@ -326,7 +339,7 @@ export default function PlanningManagement() {
     terrains_ids: [],
     salarie_ids: [],
     statut: 'prévu',
-    docs_ids: []
+    plan_docs: []
   });
 
   // Task form data
@@ -394,35 +407,58 @@ export default function PlanningManagement() {
     )
   }
 
-  // Document handling functions
-  const toggleDocumentInPlan = (docId: number) => {
+  // UPDATED: Document handling functions for new structure
+  const toggleDocumentInPlan = (docReqId: number, fileId: string = "") => {
     setPlanFormData(prev => ({
       ...prev,
-      docs_ids: prev.docs_ids.includes(docId)
-        ? prev.docs_ids.filter(id => id !== docId)
-        : [...prev.docs_ids, docId]
+      plan_docs: prev.plan_docs.some(doc => doc.doc_req_id === docReqId)
+        ? prev.plan_docs.filter(doc => doc.doc_req_id !== docReqId)
+        : [...prev.plan_docs, { doc_req_id: docReqId, file_id: fileId }]
     }));
   };
 
-  // UPDATED: Function for Create Popup - show all project docs
-  const getSelectedProjectDocuments = (): { requiredDocs: Document[], deliverableDocs: Document[] } => {
-    const selectedProject = projects.find(p => p.id.toString() === planFormData.projet_id);
-    const docsNeeds = selectedProject?.docs_needs || [];
+  // UPDATED: Function to get project documents with doc_req_id and file_id info
+  const getProjectDocumentsWithDetails = (projectId: string) => {
+    const selectedProject = projects.find(p => p.id.toString() === projectId);
+    const projectDocsNeeds = selectedProject?.docs_needs || [];
     
+    const documentsWithDetails = projectDocsNeeds.map(docNeed => {
+      const docDetails = docsRequis.find(doc => doc.id === docNeed.doc_req_id);
+      return {
+        doc_req_id: docNeed.doc_req_id,
+        file_id: docNeed.file_id,
+        nom: docDetails?.nom || `Document #${docNeed.doc_req_id}`,
+        type: docDetails?.type || 'unknown',
+        description: docDetails?.description || '',
+        hasFile: docNeed.file_id && docNeed.file_id.trim() !== ""
+      };
+    });
+
     return {
-      requiredDocs: docsNeeds.filter(doc => doc.type === 'entry'),
-      deliverableDocs: docsNeeds.filter(doc => doc.type === 'livrable')
+      requiredDocs: documentsWithDetails.filter(doc => doc.type === 'entry'),
+      deliverableDocs: documentsWithDetails.filter(doc => doc.type === 'livrable')
     };
   };
 
-  // NEW: Function for Edit Popup - show project docs with plan docs pre-checked
-  const getProjectDocumentsForEdit = (): { requiredDocs: Document[], deliverableDocs: Document[] } => {
-    const selectedProject = projects.find(p => p.id.toString() === planFormData.projet_id);
-    const docsNeeds = selectedProject?.docs_needs || [];
+  // UPDATED: Function to get plan documents for display
+  const getPlanDocumentsWithDetails = (plan: Plan) => {
+    const planDocs = plan.plan_docs || [];
     
+    const documentsWithDetails = planDocs.map(planDoc => {
+      const docDetails = docsRequis.find(doc => doc.id === planDoc.doc_req_id);
+      return {
+        doc_req_id: planDoc.doc_req_id,
+        file_id: planDoc.file_id,
+        nom: docDetails?.nom || `Document #${planDoc.doc_req_id}`,
+        type: docDetails?.type || 'unknown',
+        description: docDetails?.description || '',
+        hasFile: planDoc.file_id && planDoc.file_id.trim() !== ""
+      };
+    });
+
     return {
-      requiredDocs: docsNeeds.filter(doc => doc.type === 'entry'),
-      deliverableDocs: docsNeeds.filter(doc => doc.type === 'livrable')
+      requiredDocs: documentsWithDetails.filter(doc => doc.type === 'entry'),
+      deliverableDocs: documentsWithDetails.filter(doc => doc.type === 'livrable')
     };
   };
 
@@ -715,8 +751,8 @@ export default function PlanningManagement() {
 
       const data = await response.json();
 
-      // Destructure with default values
-      const { plans = [], terrains = [], projets = [], salaries = [], mssgs = [] } = data;
+      // Destructure with default values - Added docsRequis
+      const { plans = [], terrains = [], projets = [], salaries = [], mssgs = [], docsRequis: docsRequisData = [] } = data;
 
       // Process plans data - handle JSON strings properly and date fields
       const processedPlans = plans.map((plan: any) => ({
@@ -733,11 +769,6 @@ export default function PlanningManagement() {
           ? plan.salarie_ids
           : (typeof plan.salarie_ids === 'string'
             ? JSON.parse(plan.salarie_ids || '[]')
-            : []),
-        docs_ids: Array.isArray(plan.docs_ids)
-          ? plan.docs_ids
-          : (typeof plan.docs_ids === 'string'
-            ? JSON.parse(plan.docs_ids || '[]')
             : []),
         plan_docs: Array.isArray(plan.plan_docs)
           ? plan.plan_docs
@@ -767,7 +798,7 @@ export default function PlanningManagement() {
         salarie_ids: Array.isArray(salarie.salarie_ids) ? salarie.salarie_ids : []
       }));
 
-      // Process projects with rh_needs, salarie_ids, and docs_needs
+      // Process projects with rh_needs, salarie_ids, and docs_needs (NEW STRUCTURE)
       const projectsWithNeeds = projets.map((projet: any) => ({
         ...projet,
         rh_needs: Array.isArray(projet.rh_needs) ? projet.rh_needs : [],
@@ -784,7 +815,8 @@ export default function PlanningManagement() {
         terrains: terrainsWithProjects.length,
         projets: projectsWithNeeds.length,
         salaries: salariesWithIds.length,
-        notifications: mssgs.length
+        notifications: mssgs.length,
+        docsRequis: docsRequisData.length
       });
 
       setPlans(processedPlans);
@@ -792,6 +824,7 @@ export default function PlanningManagement() {
       setProjects(projectsWithNeeds);
       setSalaries(salariesWithIds);
       setNotifications(mssgs);
+      setDocsRequis(docsRequisData);
 
     } catch (err) {
       console.error("Erreur lors du chargement des données:", err);
@@ -969,7 +1002,7 @@ export default function PlanningManagement() {
       terrains_ids: [],
       salarie_ids: [],
       statut: 'prévu',
-      docs_ids: []
+      plan_docs: []
     });
   };
 
@@ -979,27 +1012,11 @@ export default function PlanningManagement() {
     setError(null);
   };
 
-  // UPDATED: Edit popup - populate docs_ids based on plan_docs matching project docs_needs
+  // UPDATED: Edit popup - populate plan_docs based on existing plan documents
   const openEditPopup = (plan: Plan) => {
     setSelectedPlan(plan);
     
-    // Get the project's docs_needs
-    const project = projects.find(p => p.id === plan.projet_id);
-    const projectDocsNeeds = project?.docs_needs || [];
-    
-    // Get the plan's plan_docs 
-    const planDocs = plan.plan_docs || [];
-    
-    // Find which docs_needs are in the plan_docs (by doc_id)
-    const preCheckedDocIds = projectDocsNeeds
-      .filter(projectDoc => 
-        planDocs.some(planDoc => planDoc.doc_id === projectDoc.doc_id)
-      )
-      .map(doc => doc.doc_id);
-    
-    console.log('Edit Plan Flow - Project docs_needs:', projectDocsNeeds);
-    console.log('Edit Plan Flow - Plan docs:', planDocs);
-    console.log('Edit Plan Flow - Pre-checked doc IDs:', preCheckedDocIds);
+    console.log('Edit Plan Flow - Plan docs:', plan.plan_docs);
     
     setPlanFormData({
       projet_id: plan.projet_id.toString(),
@@ -1010,7 +1027,7 @@ export default function PlanningManagement() {
       terrains_ids: plan.terrains_ids || [],
       salarie_ids: plan.salarie_ids || [],
       statut: plan.statut,
-      docs_ids: preCheckedDocIds // Use pre-checked docs from plan_docs
+      plan_docs: plan.plan_docs || [] // Use existing plan docs
     });
     
     setShowEditPopup(true);
@@ -1848,7 +1865,7 @@ export default function PlanningManagement() {
             </div>
           )}
 
-          {/* UPDATED: Create/Edit Plan Popup with Correct Document Flow */}
+          {/* UPDATED: Create/Edit Plan Popup with New Document Structure */}
           {(showCreatePopup || showEditPopup) && (
             <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white rounded-lg p-6 w-full max-w-7xl max-h-[90vh] overflow-y-auto m-4">
@@ -1863,7 +1880,7 @@ export default function PlanningManagement() {
                       <label className="block text-sm font-medium text-gray-700">Projet *</label>
                       <select
                         value={planFormData.projet_id}
-                        onChange={(e) => setPlanFormData(prev => ({ ...prev, projet_id: e.target.value, docs_ids: [] }))}
+                        onChange={(e) => setPlanFormData(prev => ({ ...prev, projet_id: e.target.value, plan_docs: [] }))}
                         className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                         required
                         disabled={isSubmitting}
@@ -1948,17 +1965,12 @@ export default function PlanningManagement() {
                     </div>
                   )}
 
-                  {/* UPDATED: Document Tables - Different Logic for Create vs Edit */}
+                  {/* UPDATED: Document Tables with New Structure */}
                   {planFormData.projet_id && (
                     <div className="space-y-6">
-                      <h4 className="text-md font-medium text-gray-900">
-                        {showCreatePopup ? "Documents du Projet" : "Documents du Projet (depuis docs_needs)"}
-                      </h4>
+                      <h4 className="text-md font-medium text-gray-900">Documents du Projet</h4>
                       {(() => {
-                        // Use the same function for both create and edit - show project's docs_needs
-                        const { requiredDocs, deliverableDocs } = showCreatePopup 
-                          ? getSelectedProjectDocuments() 
-                          : getProjectDocumentsForEdit();
+                        const { requiredDocs, deliverableDocs } = getProjectDocumentsWithDetails(planFormData.projet_id);
                         
                         if (requiredDocs.length === 0 && deliverableDocs.length === 0) {
                           return (
@@ -1975,37 +1987,45 @@ export default function PlanningManagement() {
                             {requiredDocs.length > 0 && (
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                                  Documents Requis ({planFormData.docs_ids.filter(id => requiredDocs.some(doc => doc.doc_id === id)).length} sélectionnés)
+                                  Documents Requis ({planFormData.plan_docs.filter(pd => requiredDocs.some(rd => rd.doc_req_id === pd.doc_req_id)).length} sélectionnés)
                                 </label>
                                 <div className="border rounded-md max-h-80 overflow-y-auto">
                                   <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-blue-50 sticky top-0">
                                       <tr>
                                         <th className="px-3 py-2 text-left text-xs font-medium text-blue-700 uppercase">Document</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-blue-700 uppercase">Type</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-blue-700 uppercase"></th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-blue-700 uppercase">Statut</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-blue-700 uppercase">Action</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-200">
                                       {requiredDocs.map((doc) => {
-                                        const isSelected = planFormData.docs_ids.includes(doc.doc_id);
+                                        const isSelected = planFormData.plan_docs.some(pd => pd.doc_req_id === doc.doc_req_id);
                                         
                                         return (
-                                          <tr key={doc.doc_id} className={isSelected ? "bg-green-50" : "hover:bg-gray-50"}>
+                                          <tr key={doc.doc_req_id} className={isSelected ? "bg-green-50" : "hover:bg-gray-50"}>
                                             <td className="px-3 py-2 text-sm">
                                               <div className="flex items-center gap-2">
                                                 {isSelected && <CheckCircle className="w-4 h-4 text-green-600" />}
                                                 <span className="font-medium">{doc.nom}</span>
                                               </div>
                                             </td>
-                                            <td className="px-3 py-2 text-xs text-gray-600">
-                                              {doc.type}
+                                            <td className="px-3 py-2 text-xs">
+                                              {doc.hasFile ? (
+                                                <span className="inline-flex px-2 py-1 bg-green-100 text-green-800 rounded-full">
+                                                  ✅
+                                                </span>
+                                              ) : (
+                                                <span className="inline-flex px-2 py-1 bg-red-100 text-red-800 rounded-full">
+                                                  ❌
+                                                </span>
+                                              )}
                                             </td>
                                             <td className="px-3 py-2">
                                               <input
                                                 type="checkbox"
                                                 checked={isSelected}
-                                                onChange={() => toggleDocumentInPlan(doc.doc_id)}
+                                                onChange={() => toggleDocumentInPlan(doc.doc_req_id, doc.file_id)}
                                                 disabled={isSubmitting}
                                                 className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                                               />
@@ -2023,37 +2043,45 @@ export default function PlanningManagement() {
                             {deliverableDocs.length > 0 && (
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                                  Documents Livrables ({planFormData.docs_ids.filter(id => deliverableDocs.some(doc => doc.doc_id === id)).length} sélectionnés)
+                                  Documents Livrables ({planFormData.plan_docs.filter(pd => deliverableDocs.some(dd => dd.doc_req_id === pd.doc_req_id)).length} sélectionnés)
                                 </label>
                                 <div className="border rounded-md max-h-80 overflow-y-auto">
                                   <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-green-50 sticky top-0">
                                       <tr>
                                         <th className="px-3 py-2 text-left text-xs font-medium text-green-700 uppercase">Document</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-green-700 uppercase">Type</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-green-700 uppercase"></th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-green-700 uppercase">Statut</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-green-700 uppercase">Action</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-200">
                                       {deliverableDocs.map((doc) => {
-                                        const isSelected = planFormData.docs_ids.includes(doc.doc_id);
+                                        const isSelected = planFormData.plan_docs.some(pd => pd.doc_req_id === doc.doc_req_id);
                                         
                                         return (
-                                          <tr key={doc.doc_id} className={isSelected ? "bg-green-50" : "hover:bg-gray-50"}>
+                                          <tr key={doc.doc_req_id} className={isSelected ? "bg-green-50" : "hover:bg-gray-50"}>
                                             <td className="px-3 py-2 text-sm">
                                               <div className="flex items-center gap-2">
                                                 {isSelected && <CheckCircle className="w-4 h-4 text-green-600" />}
                                                 <span className="font-medium">{doc.nom}</span>
                                               </div>
                                             </td>
-                                            <td className="px-3 py-2 text-xs text-gray-600">
-                                              {doc.type}
+                                            <td className="px-3 py-2 text-xs">
+                                              {doc.hasFile ? (
+                                                <span className="inline-flex px-2 py-1 bg-green-100 text-green-800 rounded-full">
+                                                  ✅
+                                                </span>
+                                              ) : (
+                                                <span className="inline-flex px-2 py-1 bg-red-100 text-red-800 rounded-full">
+                                                  ❌ 
+                                                </span>
+                                              )}
                                             </td>
                                             <td className="px-3 py-2">
                                               <input
                                                 type="checkbox"
                                                 checked={isSelected}
-                                                onChange={() => toggleDocumentInPlan(doc.doc_id)}
+                                                onChange={() => toggleDocumentInPlan(doc.doc_req_id, doc.file_id)}
                                                 disabled={isSubmitting}
                                                 className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                                               />
@@ -2069,18 +2097,6 @@ export default function PlanningManagement() {
                           </div>
                         );
                       })()}
-                      
-                      {/* Debug Info for Edit Mode */}
-                      {showEditPopup && selectedPlan && (
-                        <div className="bg-gray-100 rounded-lg p-4">
-                          <h5 className="text-sm font-medium text-gray-800 mb-2">Debug Info (Edit Mode):</h5>
-                          <div className="text-xs text-gray-600 space-y-1">
-                            <div>Plan docs: {selectedPlan.plan_docs?.length || 0} documents</div>
-                            <div>Project docs_needs: {projects.find(p => p.id.toString() === planFormData.projet_id)?.docs_needs?.length || 0} documents</div>
-                            <div>Currently selected: {planFormData.docs_ids.length} documents</div>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )}
 
@@ -2260,8 +2276,8 @@ export default function PlanningManagement() {
                       <div>
                         <span className="font-medium text-gray-700">Documents:</span>
                         <p className="text-gray-600">
-                          {planFormData.docs_ids.length > 0 
-                            ? `${planFormData.docs_ids.length} document${planFormData.docs_ids.length > 1 ? 's' : ''} sélectionné${planFormData.docs_ids.length > 1 ? 's' : ''}`
+                          {planFormData.plan_docs.length > 0 
+                            ? `${planFormData.plan_docs.length} document${planFormData.plan_docs.length > 1 ? 's' : ''} sélectionné${planFormData.plan_docs.length > 1 ? 's' : ''}`
                             : 'Aucun document sélectionné'
                           }
                         </p>
@@ -2349,7 +2365,7 @@ export default function PlanningManagement() {
             </div>
           )}
 
-          {/* Plan Details Popup - Shows Plan's Documents */}
+          {/* UPDATED: Plan Details Popup with New Document Display */}
           {showDetailsPopup && selectedPlan && (
             <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white rounded-lg p-6 w-full max-w-6xl max-h-[80vh] overflow-y-auto m-4">
@@ -2426,17 +2442,16 @@ export default function PlanningManagement() {
                     <p className="text-gray-900 mt-1">{selectedPlan.description || 'Aucune description'}</p>
                   </div>
 
-                  {/* Document Tables in Plan Details - Show Plan's Documents */}
+                  {/* UPDATED: Document Display with New Structure */}
                   {selectedPlan.plan_docs && selectedPlan.plan_docs.length > 0 && (
                     <div className="space-y-6">
                       <h4 className="text-md font-medium text-gray-900">Documents du Plan</h4>
                       {(() => {
-                        const requiredDocs = selectedPlan.plan_docs.filter((doc: Document) => doc.type === 'entry');
-                        const deliverableDocs = selectedPlan.plan_docs.filter((doc: Document) => doc.type === 'livrable');
+                        const { requiredDocs, deliverableDocs } = getPlanDocumentsWithDetails(selectedPlan);
                         
                         return (
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Documents Requis - Read Only */}
+                            {/* Documents Requis */}
                             {requiredDocs.length > 0 && (
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -2447,20 +2462,28 @@ export default function PlanningManagement() {
                                     <thead className="bg-blue-50 sticky top-0">
                                       <tr>
                                         <th className="px-3 py-2 text-left text-xs font-medium text-blue-700 uppercase">Document</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-blue-700 uppercase">Type</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-blue-700 uppercase">Statut</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-200">
-                                      {requiredDocs.map((doc: Document, index: number) => (
-                                        <tr key={`${doc.doc_id}-${index}`} className="bg-green-50">
+                                      {requiredDocs.map((doc, index) => (
+                                        <tr key={`${doc.doc_req_id}-${index}`} className="bg-green-50">
                                           <td className="px-3 py-2 text-sm">
                                             <div className="flex items-center gap-2">
                                               <CheckCircle className="w-4 h-4 text-green-600" />
                                               <span className="font-medium">{doc.nom}</span>
                                             </div>
                                           </td>
-                                          <td className="px-3 py-2 text-xs text-gray-600">
-                                            {doc.type}
+                                          <td className="px-3 py-2 text-xs">
+                                            {doc.hasFile ? (
+                                              <span className="inline-flex px-2 py-1 bg-green-100 text-green-800 rounded-full">
+                                               ✅
+                                              </span>
+                                            ) : (
+                                              <span className="inline-flex px-2 py-1 bg-red-100 text-red-800 rounded-full">
+                                                ❌ 
+                                              </span>
+                                            )}
                                           </td>
                                         </tr>
                                       ))}
@@ -2470,7 +2493,7 @@ export default function PlanningManagement() {
                               </div>
                             )}
 
-                            {/* Documents Livrables - Read Only */}
+                            {/* Documents Livrables */}
                             {deliverableDocs.length > 0 && (
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -2481,20 +2504,28 @@ export default function PlanningManagement() {
                                     <thead className="bg-green-50 sticky top-0">
                                       <tr>
                                         <th className="px-3 py-2 text-left text-xs font-medium text-green-700 uppercase">Document</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-green-700 uppercase">Type</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-green-700 uppercase">Statut</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-200">
-                                      {deliverableDocs.map((doc: Document, index: number) => (
-                                        <tr key={`${doc.doc_id}-${index}`} className="bg-green-50">
+                                      {deliverableDocs.map((doc, index) => (
+                                        <tr key={`${doc.doc_req_id}-${index}`} className="bg-green-50">
                                           <td className="px-3 py-2 text-sm">
                                             <div className="flex items-center gap-2">
                                               <CheckCircle className="w-4 h-4 text-green-600" />
                                               <span className="font-medium">{doc.nom}</span>
                                             </div>
                                           </td>
-                                          <td className="px-3 py-2 text-xs text-gray-600">
-                                            {doc.type}
+                                          <td className="px-3 py-2 text-xs">
+                                            {doc.hasFile ? (
+                                              <span className="inline-flex px-2 py-1 bg-green-100 text-green-800 rounded-full">
+                                                ✅
+                                              </span>
+                                            ) : (
+                                              <span className="inline-flex px-2 py-1 bg-red-100 text-red-800 rounded-full">
+                                                ❌ 
+                                              </span>
+                                            )}
                                           </td>
                                         </tr>
                                       ))}

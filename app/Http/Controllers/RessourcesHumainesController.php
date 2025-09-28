@@ -17,6 +17,7 @@ use App\Models\Progression;
 use App\Models\Profil;
 use App\Models\Formation;
 use App\Models\SousTrait;
+use App\Models\DocsRequis;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -555,8 +556,10 @@ class RessourcesHumainesController extends Controller
         return redirect()->back()->with('success', 'Matériel supprimé avec succès.');
     }
 
+
     public function store(Request $request)
     {
+        // 1. Validate incoming request
         $validated = $request->validate([
             'nom' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -575,13 +578,24 @@ class RessourcesHumainesController extends Controller
             'rh_needs' => 'required|array',
         ]);
 
-        // Create the projet
+        // 2. Get all doc requis IDs and format them
+        $docsNeeds = DocsRequis::all()->map(function ($doc) {
+            return [
+                'doc_req_id' => $doc->id,
+                'file_id' => ''
+            ];
+        })->toArray();
+
+        // 3. Add docs_needs to validated data
+        $validated['docs_needs'] = $docsNeeds;
+
+        // 4. Create the projet
         $projet = Projet::create($validated);
 
-        // Calculate total number of profiles needed
+        // 5. Calculate total profiles
         $totalProfiles = collect($validated['rh_needs'])->sum('number');
 
-        // Create the notification
+        // 6. Create notification
         Notification::create([
             'sender' => 'ressources-humaines',
             'receiver' => 'suivi-controle',
@@ -590,8 +604,10 @@ class RessourcesHumainesController extends Controller
             'recorded_at' => Carbon::now(),
         ]);
 
+        // 7. Redirect with success
         return redirect()->back()->with('success', 'Projet ajouté avec succès.');
     }
+
 
     public function update(Request $request, Projet $projet)
     {

@@ -270,6 +270,8 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
 
 
 Route::middleware('auth.basic')->group(function () {
+    Route::get('/suivi-controle/fetch-plans', [SuiviControleController::class, 'fetchDataPlanings']);
+
     Route::get('/suivi-controle/fetch-projetData/{id}', [SuiviControleController::class, 'getProjetStats']);
 
 
