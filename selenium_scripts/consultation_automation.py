@@ -34,8 +34,7 @@ class ConsultationAutomation:
             'message': '',
             'steps_completed': [],
             'errors': [],
-            'timestamp': datetime.now().isoformat(),
-            'screenshots': []
+            'timestamp': datetime.now().isoformat()
         }
     
     def setup_driver(self):
@@ -71,17 +70,6 @@ class ConsultationAutomation:
             self.results['errors'].append(error_msg)
             raise
     
-    def take_screenshot(self, name):
-        """Prend une capture d'écran pour le debug"""
-        try:
-            if self.driver:
-                screenshot_path = f"screenshot_{name}_{int(time.time())}.png"
-                self.driver.save_screenshot(screenshot_path)
-                self.results['screenshots'].append(screenshot_path)
-                logger.info(f"📸 Capture d'écran sauvegardée: {screenshot_path}")
-        except Exception as e:
-            logger.warning(f"⚠️ Impossible de prendre la capture d'écran: {str(e)}")
-    
     def navigate_to_consultation(self, consultation_url):
         """Navigue vers la page de consultation"""
         try:
@@ -95,8 +83,6 @@ class ConsultationAutomation:
             # Attendre un peu plus pour s'assurer du chargement complet
             time.sleep(3)
             
-            self.take_screenshot("page_loaded")
-            
             current_url = self.driver.current_url
             logger.info(f"✅ Page chargée avec succès: {current_url}")
             self.results['steps_completed'].append(f"Navigation vers {consultation_url}")
@@ -107,7 +93,6 @@ class ConsultationAutomation:
             error_msg = f"❌ Erreur lors de la navigation: {str(e)}"
             logger.error(error_msg)
             self.results['errors'].append(error_msg)
-            self.take_screenshot("navigation_error")
             return False
     
     def handle_system_popup(self):
@@ -166,8 +151,6 @@ class ConsultationAutomation:
             if not login_bloc:
                 logger.info("ℹ️ Aucun bloc de login trouvé - peut-être déjà connecté")
                 return True
-            
-            self.take_screenshot("login_form_found")
             
             # Localiser le champ login
             login_field_selectors = [
@@ -253,8 +236,6 @@ class ConsultationAutomation:
             
             time.sleep(0.5)
             
-            self.take_screenshot("credentials_entered")
-            
             # Cliquer sur le bouton OK
             logger.info("🖱️ Clic sur le bouton OK...")
             
@@ -272,8 +253,6 @@ class ConsultationAutomation:
             
             # GESTION DU POPUP SYSTÈME AVEC PYAUTOGUI
             self.handle_system_popup()
-            
-            self.take_screenshot("after_login")
             
             # Vérifier si le login a réussi en cherchant si le formulaire de login est toujours présent
             try:
@@ -300,7 +279,6 @@ class ConsultationAutomation:
             error_msg = f"❌ Erreur lors du login: {str(e)}"
             logger.error(error_msg)
             self.results['errors'].append(error_msg)
-            self.take_screenshot("login_error")
             return False
     
     def click_depot_tab(self):
@@ -350,8 +328,6 @@ class ConsultationAutomation:
             self.driver.execute_script("arguments[0].scrollIntoView(true);", depot_element)
             time.sleep(1)
             
-            self.take_screenshot("before_depot_click")
-            
             # Tentatives de clic avec différentes méthodes
             click_success = False
             
@@ -390,8 +366,6 @@ class ConsultationAutomation:
             # Attendre que l'onglet soit activé/affiché
             time.sleep(3)
             
-            self.take_screenshot("after_depot_click")
-            
             logger.info("✅ Onglet Dépôt cliqué avec succès")
             self.results['steps_completed'].append("Clic sur l'onglet Dépôt")
             
@@ -401,7 +375,6 @@ class ConsultationAutomation:
             error_msg = f"❌ Erreur lors du clic sur l'onglet Dépôt: {str(e)}"
             logger.error(error_msg)
             self.results['errors'].append(error_msg)
-            self.take_screenshot("depot_click_error")
             return False
     
     def wait_for_page_complete_load(self):
@@ -485,8 +458,6 @@ class ConsultationAutomation:
             self.driver.execute_script("arguments[0].scrollIntoView(true);", repondre_element)
             time.sleep(1)
             
-            self.take_screenshot("before_repondre_click")
-            
             # Tentatives de clic
             click_success = False
             
@@ -524,8 +495,6 @@ class ConsultationAutomation:
             # Attendre l'ouverture de la modal
             time.sleep(3)
             
-            self.take_screenshot("after_repondre_click")
-            
             logger.info("✅ Bouton 'Répondre à la consultation' cliqué avec succès")
             self.results['steps_completed'].append("Clic sur 'Répondre à la consultation'")
             
@@ -535,7 +504,152 @@ class ConsultationAutomation:
             error_msg = f"❌ Erreur lors du clic sur 'Répondre à la consultation': {str(e)}"
             logger.error(error_msg)
             self.results['errors'].append(error_msg)
-            self.take_screenshot("repondre_click_error")
+            return False
+    
+    def click_pieces_libres_buttons(self):
+        """Détecte et clique sur tous les boutons 'Ajouter une ou plusieurs pièces libres'"""
+        try:
+            logger.info("🎯 Recherche des boutons 'Ajouter une ou plusieurs pièces libres'...")
+            
+            # Attendre un peu pour s'assurer que la page est bien chargée
+            time.sleep(3)
+            
+            # Sélecteurs pour détecter les boutons "Ajouter une ou plusieurs pièces libres"
+            selectors = [
+                "a.ajout-el[href='#']:contains('Ajouter une ou plusieurs pièces libres')",
+                "a.ajout-el[onclick*='ajouterPieceLibreApplet']",
+                "a[id*='ajouterPieceLibreApplet']",
+                "//a[contains(text(), 'Ajouter une ou plusieurs pièces libres')]",
+                "//a[@class='ajout-el' and contains(@onclick, 'ajouterPieceLibreApplet')]"
+            ]
+            
+            pieces_libres_buttons = []
+            
+            # Essayer chaque sélecteur pour trouver tous les boutons
+            for selector in selectors:
+                try:
+                    if selector.startswith("//"):
+                        # XPath
+                        buttons = self.driver.find_elements(By.XPATH, selector)
+                    else:
+                        # CSS Selector
+                        buttons = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    
+                    if buttons:
+                        logger.info(f"✅ Trouvé {len(buttons)} bouton(s) avec le sélecteur: {selector}")
+                        pieces_libres_buttons.extend(buttons)
+                        break
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️ Erreur avec le sélecteur {selector}: {str(e)}")
+                    continue
+            
+            # Supprimer les doublons en utilisant les IDs
+            unique_buttons = []
+            seen_ids = set()
+            
+            for button in pieces_libres_buttons:
+                button_id = button.get_attribute("id")
+                if button_id and button_id not in seen_ids:
+                    unique_buttons.append(button)
+                    seen_ids.add(button_id)
+                elif not button_id:
+                    # Si pas d'ID, vérifier l'onclick pour éviter les doublons
+                    onclick = button.get_attribute("onclick")
+                    if onclick and onclick not in [b.get_attribute("onclick") for b in unique_buttons]:
+                        unique_buttons.append(button)
+            
+            if not unique_buttons:
+                logger.warning("⚠️ Aucun bouton 'Ajouter une ou plusieurs pièces libres' trouvé")
+                return True  # On continue même si pas de boutons trouvés
+            
+            logger.info(f"📋 Total de {len(unique_buttons)} bouton(s) unique(s) 'Ajouter une ou plusieurs pièces libres' détecté(s)")
+            
+            # Cliquer sur chaque bouton une seule fois avec 15 secondes d'attente entre chaque
+            clicked_count = 0
+            
+            for i, button in enumerate(unique_buttons, 1):
+                try:
+                    button_id = button.get_attribute("id") or f"button_{i}"
+                    logger.info(f"🖱️ Clic sur le bouton {i}/{len(unique_buttons)} (ID: {button_id})...")
+                    
+                    # Scroll vers l'élément pour s'assurer qu'il est visible
+                    self.driver.execute_script("arguments[0].scrollIntoView(true);", button)
+                    time.sleep(1)
+                    
+                    # Vérifier si le bouton est cliquable
+                    if not button.is_displayed() or not button.is_enabled():
+                        logger.warning(f"⚠️ Le bouton {i} n'est pas cliquable, passage au suivant")
+                        continue
+                    
+                    # Tentatives de clic
+                    click_success = False
+                    
+                    # Méthode 1: Clic normal
+                    try:
+                        button.click()
+                        click_success = True
+                        logger.info(f"✅ Clic normal sur le bouton {i} réussi")
+                    except ElementClickInterceptedException:
+                        logger.warning(f"⚠️ Clic normal intercepté pour le bouton {i}, tentative avec JavaScript...")
+                        
+                        # Méthode 2: Clic JavaScript
+                        try:
+                            self.driver.execute_script("arguments[0].click();", button)
+                            click_success = True
+                            logger.info(f"✅ Clic JavaScript sur le bouton {i} réussi")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Clic JavaScript échoué pour le bouton {i}: {str(e)}")
+                    
+                    if not click_success:
+                        # Méthode 3: Exécuter l'onclick directement
+                        try:
+                            onclick_value = button.get_attribute("onclick")
+                            if onclick_value:
+                                # Nettoyer le code onclick
+                                js_code = onclick_value.replace("return false", "").replace("return true", "")
+                                self.driver.execute_script(js_code)
+                                click_success = True
+                                logger.info(f"✅ Exécution onclick directe pour le bouton {i} réussie")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Exécution onclick échouée pour le bouton {i}: {str(e)}")
+                    
+                    if click_success:
+                        clicked_count += 1
+                        logger.info(f"🎉 Bouton {i} cliqué avec succès!")
+                        
+                        # GESTION DU POPUP SYSTÈME AVEC PYAUTOGUI après chaque clic réussi
+                        self.handle_system_popup()
+                        
+                        # GESTION DU POPUP SYSTÈME AVEC PYAUTOGUI après chaque clic réussi
+                        self.handle_system_popup()
+                        
+                        # Attendre 15 secondes pour choisir un fichier avant de passer au bouton suivant
+                        if i < len(unique_buttons):  # Ne pas attendre après le dernier bouton
+                            logger.info("⏳ Attente de 15 secondes pour choisir un fichier avant le prochain bouton...")
+                            time.sleep(15)
+                    else:
+                        logger.error(f"❌ Impossible de cliquer sur le bouton {i}")
+                        
+                except Exception as e:
+                    logger.error(f"❌ Erreur lors du clic sur le bouton {i}: {str(e)}")
+                    continue
+            
+            # Résumé
+            logger.info(f"📊 Résumé: {clicked_count}/{len(unique_buttons)} bouton(s) cliqué(s) avec succès")
+            
+            if clicked_count > 0:
+                self.results['steps_completed'].append(f"Clic réussi sur {clicked_count} bouton(s) 'Ajouter une ou plusieurs pièces libres'")
+                logger.info("✅ Traitement des boutons 'Ajouter une ou plusieurs pièces libres' terminé avec succès")
+            else:
+                logger.warning("⚠️ Aucun bouton n'a pu être cliqué")
+            
+            return True
+            
+        except Exception as e:
+            error_msg = f"❌ Erreur lors du traitement des boutons 'Ajouter une ou plusieurs pièces libres': {str(e)}"
+            logger.error(error_msg)
+            self.results['errors'].append(error_msg)
             return False
     
     def run_automation(self, consultation_url, marche_reference):
@@ -567,18 +681,23 @@ class ConsultationAutomation:
             if not self.click_repondre_consultation():
                 raise Exception("Échec du clic sur 'Répondre à la consultation'")
             
-            # Étape 6: Login (dernière étape)
+            # Étape 6: Login
             if not self.login_user():
                 raise Exception("Échec du login")
             
+            # Étape 7: Clic sur les boutons "Ajouter une ou plusieurs pièces libres"
+            if not self.click_pieces_libres_buttons():
+                logger.warning("⚠️ Problème avec les boutons 'Ajouter une ou plusieurs pièces libres', mais on continue...")
+            
             # Succès !
             self.results['success'] = True
-            self.results['message'] = "Automatisation terminée avec succès ! Login effectué après ouverture de la modal."
+            self.results['message'] = "Automatisation terminée avec succès ! Tous les boutons 'Ajouter une ou plusieurs pièces libres' ont été cliqués."
             
             logger.info("🎉 AUTOMATISATION TERMINÉE AVEC SUCCÈS !")
             
-            # Garder le navigateur ouvert quelques secondes pour voir le résultat
-            time.sleep(10)
+            # Attendre 10 secondes pour bien voir la page avant de fermer
+            logger.info("⏳ Attente de 10 secondes pour visualiser la page finale...")
+            time.sleep(40)
             
         except Exception as e:
             error_msg = f"❌ ERREUR GÉNÉRALE: {str(e)}"
@@ -586,7 +705,6 @@ class ConsultationAutomation:
             self.results['success'] = False
             self.results['message'] = error_msg
             self.results['errors'].append(error_msg)
-            self.take_screenshot("final_error")
         
         finally:
             self.cleanup()

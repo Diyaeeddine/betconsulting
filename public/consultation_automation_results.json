@@ -1,27 +1,22 @@
 {
   "success": true,
-  "message": "Automatisation terminée avec succès ! Login effectué après ouverture de la modal.",
+  "message": "Automatisation terminée avec succès ! Tous les boutons 'Ajouter une ou plusieurs pièces libres' ont été cliqués.",
   "steps_completed": [
     "Driver Chrome configuré",
-    "Navigation vers https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=931339&orgAcronyme=q9t",
+    "Navigation vers https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=930167&orgAcronyme=p8x",
     "Clic sur l'onglet Dépôt",
     "Attente du chargement complet",
     "Clic sur 'Répondre à la consultation'",
     "Gestion du popup système avec PyAutoGUI",
-    "Login réussi avec l'utilisateur: BTPCONSULTING"
+    "Login réussi avec l'utilisateur: BTPCONSULTING",
+    "Gestion du popup système avec PyAutoGUI",
+    "Gestion du popup système avec PyAutoGUI",
+    "Gestion du popup système avec PyAutoGUI",
+    "Gestion du popup système avec PyAutoGUI",
+    "Clic réussi sur 2 bouton(s) 'Ajouter une ou plusieurs pièces libres'"
   ],
   "errors": [],
-  "timestamp": "2025-09-23T23:01:55.097912",
-  "screenshots": [
-    "screenshot_page_loaded_1758668532.png",
-    "screenshot_before_depot_click_1758668533.png",
-    "screenshot_after_depot_click_1758668537.png",
-    "screenshot_before_repondre_click_1758668543.png",
-    "screenshot_after_repondre_click_1758668546.png",
-    "screenshot_login_form_found_1758668548.png",
-    "screenshot_credentials_entered_1758668550.png",
-    "screenshot_after_login_1758668566.png"
-  ],
-  "marche_reference": "10/2025/CHPKH",
-  "consultation_url": "https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=931339&orgAcronyme=q9t"
+  "timestamp": "2025-09-29T02:41:04.735311",
+  "marche_reference": "07./2025",
+  "consultation_url": "https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=930167&orgAcronyme=p8x"
 }
