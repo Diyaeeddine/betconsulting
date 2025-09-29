@@ -3,20 +3,22 @@
   "message": "Automatisation terminée avec succès ! Tous les boutons 'Ajouter une ou plusieurs pièces libres' ont été cliqués.",
   "steps_completed": [
     "Driver Chrome configuré",
+    "Référence extraite: 07./2025 -> 07._2025",
     "Navigation vers https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=930167&orgAcronyme=p8x",
     "Clic sur l'onglet Dépôt",
     "Attente du chargement complet",
     "Clic sur 'Répondre à la consultation'",
     "Gestion du popup système avec PyAutoGUI",
+    "Chemin automatique saisi: C:\\xampp\\htdocs\\betconsulting\\storage\\app\\public\\marche_public\\imported_files\\07._2025",
     "Login réussi avec l'utilisateur: BTPCONSULTING",
     "Gestion du popup système avec PyAutoGUI",
+    "Chemin automatique saisi: C:\\xampp\\htdocs\\betconsulting\\storage\\app\\public\\marche_public\\imported_files\\07._2025",
     "Gestion du popup système avec PyAutoGUI",
-    "Gestion du popup système avec PyAutoGUI",
-    "Gestion du popup système avec PyAutoGUI",
+    "Chemin automatique saisi: C:\\xampp\\htdocs\\betconsulting\\storage\\app\\public\\marche_public\\imported_files\\07._2025",
     "Clic réussi sur 2 bouton(s) 'Ajouter une ou plusieurs pièces libres'"
   ],
   "errors": [],
-  "timestamp": "2025-09-29T02:41:04.735311",
+  "timestamp": "2025-09-29T22:22:13.472677",
   "marche_reference": "07./2025",
   "consultation_url": "https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=930167&orgAcronyme=p8x"
 }

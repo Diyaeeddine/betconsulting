@@ -3,6 +3,7 @@ import time
 import json
 import os
 import logging
+import re
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -13,6 +14,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, ElementClickInterceptedException
 from webdriver_manager.chrome import ChromeDriverManager
 import pyautogui
+import pyperclip  # Pour la solution copier-coller
 
 # Configuration du logging
 logging.basicConfig(
@@ -29,6 +31,7 @@ class ConsultationAutomation:
     def __init__(self):
         self.driver = None
         self.wait = None
+        self.marche_reference = None  # Nouvelle variable pour stocker la référence
         self.results = {
             'success': False,
             'message': '',
@@ -36,6 +39,75 @@ class ConsultationAutomation:
             'errors': [],
             'timestamp': datetime.now().isoformat()
         }
+    
+    def clean_path_for_typing(self, path):
+        """Nettoie le chemin avant la saisie avec PyAutoGUI pour éviter les erreurs de formatage"""
+        try:
+            logger.info(f"🔧 Nettoyage du chemin original: {path}")
+            
+            # CORRECTION PRINCIPALE: Forcer C:\ au début du chemin
+            if 'xampp' in path:
+                # Trouver la position de "xampp" dans le chemin
+                xampp_position = path.find('xampp')
+                # Prendre tout ce qui suit "xampp" (inclus)
+                path_after_xampp = path[xampp_position:]
+                # Coller C:\ au début
+                path = f"C:\\{path_after_xampp}"
+                logger.info(f"🔧 Chemin forcé avec C:\\ (xampp trouvé): {path}")
+            else:
+                # Si pas de "xampp" trouvé, essayer de corriger le chemin
+                # 1. Corriger C/\ en C:\
+                if path.startswith('C/\\'):
+                    path = path.replace('C/\\', 'C:\\')
+                # 2. Corriger C/ en C:\
+                elif path.startswith('C/'):
+                    path = path.replace('C/', 'C:\\')
+                # 3. Corriger C\ en C:\
+                elif path.startswith('C\\'):
+                    path = path.replace('C\\', 'C:\\')
+                # 4. Si ça ne commence pas par C:, forcer C:\ au début
+                elif not path.startswith('C:\\'):
+                    # Enlever tout ce qui pourrait être au début (C, C:, etc.)
+                    if path.startswith('C'):
+                        path = path[1:].lstrip(':\\/')
+                    path = f"C:\\{path}"
+                
+                logger.info(f"🔧 Chemin corrigé (sans xampp): {path}")
+            
+            # Corrections supplémentaires
+            # 2. Corriger marche8public en marche_public
+            path = path.replace('marche8public', 'marche_public')
+            
+            # 3. Corriger imported8files en imported_files
+            path = path.replace('imported8files', 'imported_files')
+            
+            # 4. Traiter spécifiquement la référence du marché
+            if self.marche_reference:
+                path_parts = path.split('\\')
+                if len(path_parts) > 0:
+                    last_part = path_parts[-1]
+                    
+                    # Si la référence contient des caractères problématiques
+                    if last_part == self.marche_reference:
+                        # CORRECTION: Nettoyer la référence : remplacer SEULEMENT / par _ (garder les points)
+                        corrected_last_part = last_part.replace('/', '_')  # Seulement les slashes
+                        path_parts[-1] = corrected_last_part
+                        
+                        # Reconstruire le chemin
+                        path = '\\'.join(path_parts)
+            
+            # 5. Vérification finale: s'assurer que le chemin commence bien par C:\
+            if not path.startswith('C:\\'):
+                logger.warning(f"⚠️ Le chemin ne commence toujours pas par C:\\: {path}")
+                # Forcer une dernière fois
+                path = f"C:\\{path.lstrip('C:\\/')}"
+            
+            logger.info(f"🔧 Chemin final corrigé: {path}")
+            return path
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Erreur lors du nettoyage du chemin: {str(e)}")
+            return path  # Retourner le chemin original en cas d'erreur
     
     def setup_driver(self):
         """Configure et initialise le driver Chrome"""
@@ -70,6 +142,97 @@ class ConsultationAutomation:
             self.results['errors'].append(error_msg)
             raise
     
+    def extract_marche_reference(self):
+        """Extrait et stocke la référence du marché depuis la page"""
+        try:
+            logger.info("🔍 Extraction de la référence du marché...")
+            
+            # Sélecteurs spécifiques pour trouver la référence
+            reference_selectors = [
+                "#ctl0_CONTENU_PAGE_detailConsultation_reference",  # ID spécifique du span
+                "span[id='ctl0_CONTENU_PAGE_detailConsultation_reference']",
+                "span[id*='reference']",
+                "//span[@id='ctl0_CONTENU_PAGE_detailConsultation_reference']",  # XPath
+                "//span[contains(@id, 'reference')]"
+            ]
+            
+            reference_found = None
+            
+            for selector in reference_selectors:
+                try:
+                    if selector.startswith("//"):
+                        # XPath
+                        element = self.driver.find_element(By.XPATH, selector)
+                    else:
+                        # CSS Selector
+                        element = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    
+                    if element:
+                        reference_text = element.text.strip()
+                        if reference_text:
+                            reference_found = reference_text
+                            logger.info(f"✅ Référence trouvée avec {selector}: {reference_found}")
+                            break
+                        
+                except Exception as e:
+                    continue
+            
+            # Si pas trouvé, chercher dans les divs avec classe content-bloc
+            if not reference_found:
+                try:
+                    # Chercher dans les divs qui contiennent "Référence" dans le texte précédent
+                    reference_divs = self.driver.find_elements(By.XPATH, "//div[contains(text(), 'Référence')]/following-sibling::div[@class='content-bloc bloc-500']//span")
+                    
+                    for div in reference_divs:
+                        text = div.text.strip()
+                        if text and text != "Référence":
+                            reference_found = text
+                            logger.info(f"✅ Référence trouvée dans div suivant: {reference_found}")
+                            break
+                except Exception as e:
+                    logger.warning(f"⚠️ Erreur recherche dans divs: {str(e)}")
+            
+            # Si toujours pas trouvé, utiliser une référence par défaut
+            if not reference_found:
+                logger.warning("⚠️ Référence non trouvée, utilisation de la référence par défaut")
+                reference_found = "DEFAULT_REF"
+            
+            # CORRECTION PRINCIPALE: Nettoyer la référence pour créer un nom de dossier valide
+            if reference_found:
+                # Remplacer les caractères spéciaux par des underscores ou les supprimer
+                # Garder les lettres, chiffres, tirets, underscores et points
+                clean_reference = re.sub(r'[<>:"/\\|?*]', '_', reference_found)  # Caractères interdits Windows
+                clean_reference = clean_reference.replace(' ', '_')  # Espaces -> underscores
+                # CORRECTION: NE PAS remplacer les points, seulement les slashes
+                clean_reference = clean_reference.replace('/', '_')  # Slash -> underscores (GARDER LES POINTS)
+                
+                # Supprimer les underscores multiples
+                clean_reference = re.sub(r'_+', '_', clean_reference)
+                
+                # Supprimer les underscores en début/fin
+                clean_reference = clean_reference.strip('_')
+                
+                # S'assurer que ce n'est pas vide
+                if not clean_reference:
+                    clean_reference = "DEFAULT_REF"
+                
+                self.marche_reference = clean_reference
+                
+                logger.info(f"🎯 Référence originale: {reference_found}")
+                logger.info(f"🎯 Référence nettoyée stockée: {self.marche_reference}")
+                self.results['steps_completed'].append(f"Référence extraite: {reference_found} -> {self.marche_reference}")
+                
+                return True
+            else:
+                raise Exception("Impossible d'extraire la référence")
+                
+        except Exception as e:
+            error_msg = f"❌ Erreur lors de l'extraction de la référence: {str(e)}"
+            logger.error(error_msg)
+            self.results['errors'].append(error_msg)
+            # Utiliser la référence passée en paramètre comme fallback
+            return True  # On continue quand même
+    
     def navigate_to_consultation(self, consultation_url):
         """Navigue vers la page de consultation"""
         try:
@@ -82,6 +245,9 @@ class ConsultationAutomation:
             
             # Attendre un peu plus pour s'assurer du chargement complet
             time.sleep(3)
+            
+            # Extraire la référence du marché dès que la page est chargée
+            self.extract_marche_reference()
             
             current_url = self.driver.current_url
             logger.info(f"✅ Page chargée avec succès: {current_url}")
@@ -96,7 +262,7 @@ class ConsultationAutomation:
             return False
     
     def handle_system_popup(self):
-        """Gère les popups système avec PyAutoGUI"""
+        """Gère les popups système avec PyAutoGUI et saisie automatique du chemin"""
         try:
             logger.info("🔧 Gestion du popup système avec PyAutoGUI...")
             
@@ -116,6 +282,80 @@ class ConsultationAutomation:
             
             logger.info("✅ Popup système géré avec succès")
             self.results['steps_completed'].append("Gestion du popup système avec PyAutoGUI")
+            
+            # NOUVELLE FONCTIONNALITÉ: Attendre 10 secondes puis gérer la popup de sélection de fichier
+            logger.info("⏳ Attente de 10 secondes pour l'apparition de la popup de sélection de fichier...")
+            time.sleep(10)
+            
+            # Construire le chemin complet avec la référence
+            base_path = r"C:\xampp\htdocs\betconsulting\storage\app\public\marche_public\imported_files"
+            if self.marche_reference:
+                full_path = f"{base_path}\\{self.marche_reference}"
+            else:
+                full_path = base_path
+            
+            # NETTOYER LE CHEMIN AVANT LA SAISIE
+            clean_full_path = self.clean_path_for_typing(full_path)
+            
+            logger.info(f"📁 Saisie du chemin: {clean_full_path}")
+            
+            # Effacer le champ d'abord (Ctrl+A puis Delete)
+            pyautogui.hotkey('ctrl', 'a')
+            time.sleep(0.5)
+            pyautogui.press('delete')
+            time.sleep(0.5)
+            
+            # Fonction pour taper le chemin en utilisant copier-coller pour les caractères problématiques
+            def type_path_with_clipboard_start(text):
+                """Tape le chemin en utilisant copier-coller pour C:\ au début"""
+                logger.info("🔄 Démarrage de la saisie avec copier-coller pour C:\\...")
+                
+                # Étape 1: Copier et coller "C:\" au début
+                try:
+                    pyperclip.copy('C:\\')
+                    time.sleep(0.1)
+                    pyautogui.hotkey('ctrl', 'v')
+                    time.sleep(0.1)
+                    logger.info("✅ C:\\ collé avec succès via le presse-papier")
+                except Exception as e:
+                    logger.warning(f"⚠️ Erreur lors du copier-coller de C:\\: {str(e)}")
+                    # Fallback
+                    pyautogui.write('C:\\')
+                    time.sleep(0.1)
+                
+                # Étape 2: Taper le reste du chemin (après C:\)
+                remaining_path = text[3:] if text.startswith('C:\\') else text
+                
+                for i, char in enumerate(remaining_path):
+                    if char == '_':
+                        logger.info(f"📋 Underscore détecté à la position {i+3}, utilisation du copier-coller...")
+                        try:
+                            pyperclip.copy('_')
+                            time.sleep(0.1)
+                            pyautogui.hotkey('ctrl', 'v')
+                            time.sleep(0.05)
+                            logger.info("✅ Underscore collé avec succès via le presse-papier")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Erreur lors du copier-coller de l'underscore: {str(e)}")
+                            pyautogui.write('_')
+                            time.sleep(0.05)
+                    else:
+                        pyautogui.write(char)
+                        time.sleep(0.05)
+                
+                logger.info("✅ Saisie complète terminée avec copier-coller pour C:\\ et underscores")
+            
+            # Utiliser la fonction
+            type_path_with_clipboard_start(clean_full_path)
+            logger.info("✅ Chemin tapé avec succès (utilisation de copier-coller pour underscore)")
+            
+            # Appuyer sur Entrée pour valider le chemin
+            time.sleep(1)
+            pyautogui.press('enter')
+            logger.info("✅ Entrée pressée pour valider le chemin")
+            
+            logger.info("🎉 Gestion complète de la sélection de fichier terminée")
+            self.results['steps_completed'].append(f"Chemin automatique saisi: {clean_full_path}")
             
             return True
             
@@ -621,9 +861,6 @@ class ConsultationAutomation:
                         # GESTION DU POPUP SYSTÈME AVEC PYAUTOGUI après chaque clic réussi
                         self.handle_system_popup()
                         
-                        # GESTION DU POPUP SYSTÈME AVEC PYAUTOGUI après chaque clic réussi
-                        self.handle_system_popup()
-                        
                         # Attendre 15 secondes pour choisir un fichier avant de passer au bouton suivant
                         if i < len(unique_buttons):  # Ne pas attendre après le dernier bouton
                             logger.info("⏳ Attente de 15 secondes pour choisir un fichier avant le prochain bouton...")
@@ -659,6 +896,8 @@ class ConsultationAutomation:
             logger.info(f"URL: {consultation_url}")
             logger.info(f"Référence marché: {marche_reference}")
             
+            # Stocker la référence passée en paramètre comme fallback
+            self.marche_reference = marche_reference
             self.results['marche_reference'] = marche_reference
             self.results['consultation_url'] = consultation_url
             
@@ -695,8 +934,8 @@ class ConsultationAutomation:
             
             logger.info("🎉 AUTOMATISATION TERMINÉE AVEC SUCCÈS !")
             
-            # Attendre 10 secondes pour bien voir la page avant de fermer
-            logger.info("⏳ Attente de 10 secondes pour visualiser la page finale...")
+            # Attendre 40 secondes pour bien voir la page avant de fermer
+            logger.info("⏳ Attente de 40 secondes pour visualiser la page finale...")
             time.sleep(40)
             
         except Exception as e:
