@@ -309,7 +309,7 @@ export default function GestionRessourcesProjet() {
           {/* Header with Title, Project Selector, and Notifications */}
           <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 bg-white rounded-lg shadow-md border border-gray-100 p-6">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              <h1 className="text-2xl font-bold text-gray-900"> Projet : </h1>
+              <h1 className="text-2xl font-bold text-gray-900"> </h1>
               
               {/* Project Selection Dropdown */}
               <div className="min-w-64">

@@ -861,7 +861,7 @@ class SuiviControleController extends Controller
             ],
         ]);
     }
-
+    
 
     public function getProjetDoc($docId){
         return redirect()->back()->with('success', 'Download Doc called with sucess');
