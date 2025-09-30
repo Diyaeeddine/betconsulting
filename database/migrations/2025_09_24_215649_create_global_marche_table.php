@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('marche_public', function (Blueprint $table) {
+        Schema::create('global_marche', function (Blueprint $table) {
             $table->id();
             $table->string('reference')->nullable();
             $table->enum('importance', [
@@ -65,6 +65,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('marche_public');
+        Schema::dropIfExists('global_marche');
     }
 };

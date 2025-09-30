@@ -19,6 +19,8 @@ class CreateProfilsTable extends Migration
                 'construction',
                 'suivi_controle',
                 'support_gestion',
+                'administration',
+                'marche_marketing',
             ]);
 
             $table->string('poste_profil')->nullable();

@@ -32,10 +32,11 @@ interface MarchePublic {
     chemin_fichiers?: string[];
     created_at?: string;
     updated_at?: string;
+    motif_annulation?: string;
 }
 
-interface MarchesPublicsProps {
-    marchePublics: MarchePublic[];
+interface AosSelectionneProps {
+    marcheS: MarchePublic[];
 }
 
 interface FlashProps {
@@ -52,8 +53,8 @@ interface PageProps {
 
 const breadcrumbs = [
     {
-        title: 'Validation des Marchés Publics',
-        href: '/marches-publics',
+        title: 'AOs Sélectionnés',
+        href: '/marches/aos-selectionnes',
     },
 ];
 
@@ -104,9 +105,10 @@ const generateFakeFiles = (marcheId: number): string[] => {
     return fileTypes.slice(0, numFiles);
 };
 
-export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
+export default function AosSelectionne({ marcheS }: AosSelectionneProps) {
     const { props } = usePage<PageProps>();
     const successMessage = props.flash?.success;
+    const errorMessage = props.flash?.error;
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterVille, setFilterVille] = useState('');
@@ -115,9 +117,20 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
         show: false,
         files: [],
     });
-    const [validationModal, setValidationModal] = useState<{ show: boolean; marcheReference?: string; marcheId?: number }>({
+
+    // États pour le workflow d'acceptation en 3 étapes
+    const [acceptModal, setAcceptModal] = useState<{ show: boolean; marcheReference?: string; marcheId?: number }>({
         show: false,
     });
+    const [acceptanceStep, setAcceptanceStep] = useState<'select_type' | 'upload_files' | 'confirm'>('select_type');
+    const [selectedImportance, setSelectedImportance] = useState('');
+    const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+    const [isDragging, setIsDragging] = useState(false);
+
+    const [annulerModal, setAnnulerModal] = useState<{ show: boolean; marcheReference?: string; marcheId?: number }>({
+        show: false,
+    });
+    const [motifAnnulation, setMotifAnnulation] = useState('');
 
     const formatDate = (date: string | undefined | null): string => {
         if (!date) return '-';
@@ -156,33 +169,148 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
         alert(`Téléchargement de ${fileName} (simulation)`);
     };
 
-    const handleSelectMarche = (marcheId: number, marcheReference: string) => {
-        setValidationModal({ show: true, marcheId, marcheReference });
+    // Fonctions pour gérer le drag & drop
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
     };
 
-    const confirmSelectMarche = (marcheId: number) => {
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+
+        const files = Array.from(e.dataTransfer.files);
+        const validFiles = files.filter(
+            (file) =>
+                file.type === 'application/pdf' ||
+                file.name.toLowerCase().endsWith('.pdf') ||
+                file.name.toLowerCase().endsWith('.zip') ||
+                file.name.toLowerCase().endsWith('.rar'),
+        );
+
+        setUploadedFiles((prev) => [...prev, ...validFiles]);
+    };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            const files = Array.from(e.target.files);
+            setUploadedFiles((prev) => [...prev, ...files]);
+        }
+    };
+
+    const removeFile = (index: number) => {
+        setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
+    };
+
+    const handleAcceptMarche = (marcheId: number, marcheReference: string) => {
+        setAcceptModal({ show: true, marcheId, marcheReference });
+        setAcceptanceStep('select_type');
+        setSelectedImportance('');
+        setUploadedFiles([]);
+    };
+
+    // Fonction pour passer à l'étape suivante
+    const handleNextStep = () => {
+        if (acceptanceStep === 'select_type') {
+            if (!selectedImportance) {
+                alert("Veuillez sélectionner un type d'AO");
+                return;
+            }
+            setAcceptanceStep('upload_files');
+        } else if (acceptanceStep === 'upload_files') {
+            if (uploadedFiles.length === 0) {
+                alert("Veuillez ajouter au moins un fichier d'offre financière");
+                return;
+            }
+            setAcceptanceStep('confirm');
+        }
+    };
+
+    // Fonction pour revenir en arrière
+    const handlePreviousStep = () => {
+        if (acceptanceStep === 'upload_files') {
+            setAcceptanceStep('select_type');
+        } else if (acceptanceStep === 'confirm') {
+            setAcceptanceStep('upload_files');
+        }
+    };
+
+    // Fonction finale d'acceptation avec upload des fichiers
+    const confirmFinalAcceptMarche = () => {
+        const formData = new FormData();
+        formData.append('importance', selectedImportance);
+
+        uploadedFiles.forEach((file, index) => {
+            formData.append(`offre_financiere[${index}]`, file);
+        });
+
+        router.post(`/marches/${acceptModal.marcheId}/accept-initial`, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+            preserveState: false,
+            preserveScroll: true,
+            onSuccess: () => {
+                closeAcceptModal();
+                setDetailsModal({ show: false });
+            },
+            onError: () => {
+                closeAcceptModal();
+            },
+        });
+    };
+
+    const closeAcceptModal = () => {
+        setAcceptModal({ show: false });
+        setSelectedImportance('');
+        setUploadedFiles([]);
+        setAcceptanceStep('select_type');
+    };
+
+    const handleAnnulerMarche = (marcheId: number, marcheReference: string) => {
+        setAnnulerModal({ show: true, marcheId, marcheReference });
+        setMotifAnnulation('');
+    };
+
+    const confirmAnnulerMarche = () => {
+        if (!motifAnnulation.trim()) {
+            alert("Veuillez saisir un motif d'annulation");
+            return;
+        }
+
         router.post(
-            `/marches/${marcheId}/select`,
-            {},
+            `/marches/${annulerModal.marcheId}/annule`,
+            { motif_annulation: motifAnnulation },
             {
                 preserveState: false,
                 preserveScroll: true,
                 onSuccess: () => {
-                    setValidationModal({ show: false });
+                    setAnnulerModal({ show: false });
                     setDetailsModal({ show: false });
+                    setMotifAnnulation('');
                 },
                 onError: () => {
-                    setValidationModal({ show: false });
+                    setAnnulerModal({ show: false });
                 },
             },
         );
     };
 
-    const closeValidationModal = () => {
-        setValidationModal({ show: false });
+    const closeAnnulerModal = () => {
+        setAnnulerModal({ show: false });
+        setMotifAnnulation('');
     };
 
-    const filteredMarches = marchePublics.filter((marche) => {
+    const retourMarchesPublics = () => {
+        router.get('/marches-publics');
+    };
+
+    const filteredMarches = marcheS.filter((marche) => {
         const matchesSearch =
             !searchTerm ||
             marche.reference?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -196,7 +324,7 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
         return matchesSearch && matchesVille;
     });
 
-    const villes = [...new Set(marchePublics.map((m) => m.ville).filter(Boolean))];
+    const villes = [...new Set(marcheS.map((m) => m.ville).filter(Boolean))];
 
     const getStatutColor = (statut: string | undefined) => {
         const colors = {
@@ -228,74 +356,341 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         return diffDays <= 7;
     };
-    const selectedaos = () => {
-        router.get(
-            `/marches/aos-selectionnes`,
-            {},
-            {
-                preserveState: false,
-                preserveScroll: true,
-                onSuccess: () => {
-                    setValidationModal({ show: false });
-                    setDetailsModal({ show: false });
-                },
-                onError: () => {
-                    setValidationModal({ show: false });
-                },
-            },
-        );
-    };
-
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <div className="min-h-screen bg-gray-50">
-                {/* Validation Modal */}
-                {validationModal.show && (
+                {/* Accept Modal avec workflow en 3 étapes */}
+                {acceptModal.show && (
                     <div className="fixed inset-0 z-5000 flex items-center justify-center overflow-y-auto">
-                        <div className="bg-opacity-50 fixed inset-0 bg-black transition-opacity" onClick={closeValidationModal}></div>
+                        <div className="bg-opacity-50 fixed inset-0 bg-black transition-opacity" onClick={closeAcceptModal}></div>
+                        <div className="relative mx-4 w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
+                            {/* En-tête avec indicateur d'étapes */}
+                            <div className="mb-6">
+                                <h3 className="mb-4 text-lg font-medium text-gray-900">Accepter le marché - {acceptModal.marcheReference}</h3>
+
+                                {/* Indicateur d'étapes */}
+                                <div className="mb-4 flex items-center justify-between">
+                                    <div className="flex items-center space-x-2">
+                                        <div
+                                            className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
+                                                acceptanceStep === 'select_type' ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'
+                                            }`}
+                                        >
+                                            1
+                                        </div>
+                                        <span className="text-sm text-gray-600">Type d'AO</span>
+                                    </div>
+
+                                    <div
+                                        className={`mx-4 h-1 flex-1 ${
+                                            acceptanceStep === 'upload_files' || acceptanceStep === 'confirm' ? 'bg-green-600' : 'bg-gray-200'
+                                        }`}
+                                    ></div>
+
+                                    <div className="flex items-center space-x-2">
+                                        <div
+                                            className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
+                                                acceptanceStep === 'select_type'
+                                                    ? 'bg-gray-200 text-gray-500'
+                                                    : acceptanceStep === 'upload_files'
+                                                      ? 'bg-blue-600 text-white'
+                                                      : 'bg-green-600 text-white'
+                                            }`}
+                                        >
+                                            2
+                                        </div>
+                                        <span className="text-sm text-gray-600">Offre financière</span>
+                                    </div>
+
+                                    <div className={`mx-4 h-1 flex-1 ${acceptanceStep === 'confirm' ? 'bg-green-600' : 'bg-gray-200'}`}></div>
+
+                                    <div className="flex items-center space-x-2">
+                                        <div
+                                            className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
+                                                acceptanceStep === 'confirm' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'
+                                            }`}
+                                        >
+                                            3
+                                        </div>
+                                        <span className="text-sm text-gray-600">Confirmation</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Contenu selon l'étape */}
+                            <div className="min-h-[300px]">
+                                {/* Étape 1: Sélection du type d'AO */}
+                                {acceptanceStep === 'select_type' && (
+                                    <div>
+                                        <div className="mb-6 flex items-start">
+                                            <div className="flex-shrink-0">
+                                                <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                                    />
+                                                </svg>
+                                            </div>
+                                            <div className="ml-4 flex-1">
+                                                <p className="mb-4 text-sm text-gray-600">Sélectionnez le type d'appel d'offres pour ce marché.</p>
+
+                                                <div className="mb-4">
+                                                    <label className="mb-2 block text-sm font-medium text-gray-700">
+                                                        Type d'AO <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <select
+                                                        value={selectedImportance}
+                                                        onChange={(e) => setSelectedImportance(e.target.value)}
+                                                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500 focus:outline-none"
+                                                    >
+                                                        <option value="">Sélectionnez un type d'AO</option>
+                                                        {IMPORTANCE_OPTIONS.map((option) => (
+                                                            <option key={option.value} value={option.value}>
+                                                                {option.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Étape 2: Upload de l'offre financière */}
+                                {acceptanceStep === 'upload_files' && (
+                                    <div>
+                                        <div className="mb-6">
+                                            <h4 className="text-md mb-2 font-medium text-gray-900">Ajouter l'offre financière</h4>
+                                            <p className="mb-4 text-sm text-gray-600">
+                                                Glissez-déposez vos fichiers ici ou cliquez pour les sélectionner. Formats acceptés: PDF, ZIP, RAR
+                                            </p>
+
+                                            {/* Zone de drag & drop */}
+                                            <div
+                                                className={`rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
+                                                    isDragging ? 'border-blue-400 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
+                                                }`}
+                                                onDragOver={handleDragOver}
+                                                onDragLeave={handleDragLeave}
+                                                onDrop={handleDrop}
+                                            >
+                                                <svg
+                                                    className="mx-auto h-12 w-12 text-gray-400"
+                                                    stroke="currentColor"
+                                                    fill="none"
+                                                    viewBox="0 0 48 48"
+                                                >
+                                                    <path
+                                                        d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                                                        strokeWidth="2"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                    />
+                                                </svg>
+                                                <div className="mt-4">
+                                                    <label htmlFor="file-upload" className="cursor-pointer">
+                                                        <span className="mt-2 block text-sm font-medium text-gray-900">
+                                                            Glissez vos fichiers ici ou
+                                                            <span className="text-blue-600 hover:text-blue-500"> parcourez</span>
+                                                        </span>
+                                                        <input
+                                                            id="file-upload"
+                                                            name="file-upload"
+                                                            type="file"
+                                                            multiple
+                                                            className="sr-only"
+                                                            accept=".pdf,.zip,.rar"
+                                                            onChange={handleFileSelect}
+                                                        />
+                                                    </label>
+                                                    <p className="mt-1 text-xs text-gray-500">PDF, ZIP, RAR jusqu'à 10MB chacun</p>
+                                                </div>
+                                            </div>
+
+                                            {/* Liste des fichiers uploadés */}
+                                            {uploadedFiles.length > 0 && (
+                                                <div className="mt-4">
+                                                    <h5 className="mb-2 text-sm font-medium text-gray-900">
+                                                        Fichiers sélectionnés ({uploadedFiles.length})
+                                                    </h5>
+                                                    <div className="max-h-32 space-y-2 overflow-y-auto">
+                                                        {uploadedFiles.map((file, index) => (
+                                                            <div key={index} className="flex items-center justify-between rounded bg-gray-50 p-2">
+                                                                <div className="flex items-center space-x-2">
+                                                                    <svg className="h-5 w-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                                                        <path
+                                                                            fillRule="evenodd"
+                                                                            d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"
+                                                                            clipRule="evenodd"
+                                                                        />
+                                                                    </svg>
+                                                                    <span className="max-w-xs truncate text-sm text-gray-900" title={file.name}>
+                                                                        {file.name}
+                                                                    </span>
+                                                                    <span className="text-xs text-gray-500">
+                                                                        ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                                                                    </span>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => removeFile(index)}
+                                                                    className="p-1 text-red-500 hover:text-red-700"
+                                                                    type="button"
+                                                                >
+                                                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path
+                                                                            strokeLinecap="round"
+                                                                            strokeLinejoin="round"
+                                                                            strokeWidth={2}
+                                                                            d="M6 18L18 6M6 6l12 12"
+                                                                        />
+                                                                    </svg>
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Étape 3: Confirmation */}
+                                {acceptanceStep === 'confirm' && (
+                                    <div>
+                                        <div className="mb-6 flex items-start">
+                                            <div className="flex-shrink-0">
+                                                <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                    />
+                                                </svg>
+                                            </div>
+                                            <div className="ml-4 flex-1">
+                                                <h4 className="text-md mb-2 font-medium text-gray-900">Récapitulatif</h4>
+                                                <div className="space-y-3 rounded-lg bg-gray-50 p-4">
+                                                    <div>
+                                                        <span className="text-sm font-medium text-gray-700">Marché:</span>
+                                                        <span className="ml-2 text-sm text-gray-900">{acceptModal.marcheReference}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-sm font-medium text-gray-700">Type d'AO:</span>
+                                                        <span className="ml-2 text-sm text-gray-900">
+                                                            {IMPORTANCE_OPTIONS.find((opt) => opt.value === selectedImportance)?.label}
+                                                        </span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-sm font-medium text-gray-700">Fichiers d'offre:</span>
+                                                        <span className="ml-2 text-sm text-gray-900">{uploadedFiles.length} fichier(s)</span>
+                                                    </div>
+                                                </div>
+                                                <p className="mt-4 text-sm text-gray-600">
+                                                    En confirmant, le marché sera accepté et votre offre financière sera transmise au DG pour
+                                                    validation.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Boutons de navigation */}
+                            <div className="flex justify-between border-t pt-6">
+                                <div>
+                                    {acceptanceStep !== 'select_type' && (
+                                        <button
+                                            onClick={handlePreviousStep}
+                                            className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-gray-500 focus:outline-none"
+                                        >
+                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                            </svg>
+                                            Précédent
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={closeAcceptModal}
+                                        className="rounded-md border border-gray-300 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 focus:ring-2 focus:ring-gray-500 focus:outline-none"
+                                    >
+                                        Annuler
+                                    </button>
+
+                                    {acceptanceStep === 'confirm' ? (
+                                        <button
+                                            onClick={confirmFinalAcceptMarche}
+                                            className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                                        >
+                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            Accepter le marché
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={handleNextStep}
+                                            className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                        >
+                                            Suivant
+                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                            </svg>
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Annuler Modal */}
+                {annulerModal.show && (
+                    <div className="fixed inset-0 z-5000 flex items-center justify-center overflow-y-auto">
+                        <div className="bg-opacity-50 fixed inset-0 bg-black transition-opacity" onClick={closeAnnulerModal}></div>
                         <div className="relative mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
                             <div className="flex items-start">
                                 <div className="flex-shrink-0">
-                                    <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                                    <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
                                 </div>
                                 <div className="ml-4 flex-1">
-                                    <h3 className="mb-2 text-lg font-medium text-gray-900">Confirmer la sélection</h3>
-                                    <p className="mb-6 text-sm text-gray-600">
-                                        Êtes-vous sûr de vouloir sélectionner le marché "{validationModal.marcheReference}" ?
-                                    </p>
+                                    <h3 className="mb-2 text-lg font-medium text-gray-900">Annuler le marché</h3>
+                                    <p className="mb-4 text-sm text-gray-600">Marché "{annulerModal.marcheReference}"</p>
 
-                                    <div className="mb-6 rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-gray-600">
-                                        <div className="flex items-center">
-                                            <svg className="mr-2 h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                                />
-                                            </svg>
-                                            <span className="font-medium">Information :</span>
-                                        </div>
-                                        <p className="mt-1">
-                                            Ce marché sera ajouté à votre liste d'AOs sélectionnés. Vous pourrez définir le type d'AO ultérieurement.
-                                        </p>
+                                    <div className="mb-4">
+                                        <label className="mb-2 block text-sm font-medium text-gray-700">
+                                            Motif d'annulation <span className="text-red-500">*</span>
+                                        </label>
+                                        <textarea
+                                            value={motifAnnulation}
+                                            onChange={(e) => setMotifAnnulation(e.target.value)}
+                                            placeholder="Veuillez préciser le motif d'annulation..."
+                                            rows={4}
+                                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 focus:outline-none"
+                                        />
+                                        <p className="mt-1 text-xs text-gray-500">Maximum 500 caractères</p>
                                     </div>
 
                                     <div className="flex justify-end gap-3">
                                         <button
-                                            onClick={closeValidationModal}
+                                            onClick={closeAnnulerModal}
                                             className="rounded-md border border-gray-300 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 focus:ring-2 focus:ring-gray-500 focus:outline-none"
                                         >
-                                            Annuler
+                                            Fermer
                                         </button>
                                         <button
-                                            onClick={() => confirmSelectMarche(validationModal.marcheId!)}
-                                            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                            onClick={confirmAnnulerMarche}
+                                            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:outline-none"
                                         >
-                                            Confirmer la sélection
+                                            Confirmer l'annulation
                                         </button>
                                     </div>
                                 </div>
@@ -558,10 +953,16 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                         Fermer
                                     </button>
                                     <button
-                                        onClick={() => handleSelectMarche(detailsModal.marche!.id, detailsModal.marche!.reference || 'N/A')}
-                                        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                        onClick={() => handleAnnulerMarche(detailsModal.marche!.id, detailsModal.marche!.reference || 'N/A')}
+                                        className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:outline-none"
                                     >
-                                        Sélectionner
+                                        Annuler
+                                    </button>
+                                    <button
+                                        onClick={() => handleAcceptMarche(detailsModal.marche!.id, detailsModal.marche!.reference || 'N/A')}
+                                        className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                                    >
+                                        Accepter
                                     </button>
                                 </div>
                             </div>
@@ -573,7 +974,7 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                 <div className="border-b bg-white shadow-sm">
                     <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
                         <div className="flex items-center justify-between">
-                            <h1 className="text-2xl font-bold text-gray-900">Marchés Publics</h1>
+                            <h1 className="text-2xl font-bold text-gray-900">AOs Sélectionnés</h1>
                             <div className="flex items-center space-x-4">
                                 <div className="relative">
                                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -588,36 +989,54 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                     </div>
                                     <input
                                         type="text"
-                                        placeholder="Rechercher dans les marchés..."
+                                        placeholder="Rechercher dans les AOs..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
                                         className="block w-80 rounded-lg border border-gray-300 bg-white py-2 pr-3 pl-10 leading-5 placeholder-gray-500 focus:border-[#155DFC] focus:placeholder-gray-400 focus:ring-1 focus:ring-[#155DFC] focus:outline-none sm:text-sm"
                                     />
                                 </div>
                                 <button
-                                    className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                                    onClick={selectedaos}
+                                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                    onClick={retourMarchesPublics}
                                 >
                                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
-                                        />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                     </svg>
-                                    AOs sélectionnés
+                                    Retour aux marchés
                                 </button>
 
-                                <span className="inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-800">
-                                    {filteredMarches.length} marchés
+                                <span className="inline-flex items-center rounded-full bg-orange-100 px-3 py-1 text-sm font-medium text-orange-800">
+                                    {filteredMarches.length} AOs sélectionnés
                                 </span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {successMessage && <div className="mb-4 rounded bg-green-100 p-4 text-green-800">{successMessage}</div>}
+                {(successMessage || errorMessage) && (
+                    <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+                        {successMessage && (
+                            <div className="mb-4 rounded-lg border border-green-400 bg-green-100 p-4 text-green-800">
+                                <div className="flex items-center">
+                                    <svg className="mr-2 h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    {successMessage}
+                                </div>
+                            </div>
+                        )}
+                        {errorMessage && (
+                            <div className="mb-4 rounded-lg border border-red-400 bg-red-100 p-4 text-red-800">
+                                <div className="flex items-center">
+                                    <svg className="mr-2 h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    {errorMessage}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
                     {/* Filters */}
@@ -674,8 +1093,19 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                     d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                                 />
                             </svg>
-                            <h3 className="mt-4 text-lg font-medium text-gray-900">Aucun marché trouvé</h3>
-                            <p className="mt-2 text-gray-500">Aucun marché ne correspond aux critères de recherche.</p>
+                            <h3 className="mt-4 text-lg font-medium text-gray-900">Aucun AO sélectionné</h3>
+                            <p className="mt-2 text-gray-500">Aucun AO ne correspond aux critères de recherche.</p>
+                            <div className="mt-6">
+                                <button
+                                    onClick={retourMarchesPublics}
+                                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                >
+                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                    </svg>
+                                    Aller aux marchés publics
+                                </button>
+                            </div>
                         </div>
                     ) : (
                         <>
@@ -684,7 +1114,7 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                     {filteredMarches.map((marche: MarchePublic) => (
                                         <div
                                             key={marche.id}
-                                            className="relative cursor-pointer rounded-lg bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+                                            className="relative cursor-pointer rounded-lg border-l-4 border-orange-500 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
                                             onClick={() => showDetails(marche)}
                                         >
                                             {isUrgent(marche.date_limite_soumission) && (
@@ -693,8 +1123,11 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                                 </div>
                                             )}
 
-                                            <div className="mb-2 flex items-center gap-2">
+                                            <div className="mb-2 flex items-center justify-between">
                                                 <span className="text-sm font-semibold text-[#155DFC]">{marche.reference || 'N/A'}</span>
+                                                <span className="inline-flex items-center rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-800">
+                                                    Sélectionné
+                                                </span>
                                             </div>
 
                                             <h3 className="mb-3 line-clamp-2 text-sm font-medium text-gray-900">
@@ -729,11 +1162,9 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                                     <span className="font-medium">{marche.ville || '-'}</span>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span>Statut:</span>
-                                                    <span
-                                                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getStatutColor(marche.statut)}`}
-                                                    >
-                                                        {marche.statut ? STATUT_LABELS[marche.statut] : 'Détecté'}
+                                                    <span>Étape:</span>
+                                                    <span className="inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800">
+                                                        {marche.etape || 'Sélectionné'}
                                                     </span>
                                                 </div>
                                             </div>
@@ -765,7 +1196,10 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                                         Ville
                                                     </th>
                                                     <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                        Statut
+                                                        État
+                                                    </th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
+                                                        Actions
                                                     </th>
                                                 </tr>
                                             </thead>
@@ -773,8 +1207,7 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                                 {filteredMarches.map((marche: MarchePublic, index: number) => (
                                                     <tr
                                                         key={marche.id}
-                                                        className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} cursor-pointer transition-colors hover:bg-gray-100`}
-                                                        onClick={() => showDetails(marche)}
+                                                        className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} transition-colors hover:bg-gray-100`}
                                                     >
                                                         <td className="px-6 py-4 whitespace-nowrap">
                                                             <div className="flex items-center">
@@ -787,7 +1220,11 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4">
-                                                            <div className="max-w-xs truncate text-sm text-gray-900" title={marche.objet}>
+                                                            <div
+                                                                className="max-w-xs cursor-pointer truncate text-sm text-gray-900"
+                                                                title={marche.objet}
+                                                                onClick={() => showDetails(marche)}
+                                                            >
                                                                 {marche.objet || '-'}
                                                             </div>
                                                         </td>
@@ -806,11 +1243,47 @@ export default function MarchesPublics({ marchePublics }: MarchesPublicsProps) {
                                                         </td>
                                                         <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-900">{marche.ville || '-'}</td>
                                                         <td className="px-6 py-4 whitespace-nowrap">
-                                                            <span
-                                                                className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getStatutColor(marche.statut)}`}
-                                                            >
-                                                                {marche.statut ? STATUT_LABELS[marche.statut] : 'Détecté'}
+                                                            <span className="inline-flex rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-800">
+                                                                Sélectionné
                                                             </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleAcceptMarche(marche.id, marche.reference || 'N/A');
+                                                                    }}
+                                                                    className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                                                                >
+                                                                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path
+                                                                            strokeLinecap="round"
+                                                                            strokeLinejoin="round"
+                                                                            strokeWidth={2}
+                                                                            d="M5 13l4 4L19 7"
+                                                                        />
+                                                                    </svg>
+                                                                    Accepter
+                                                                </button>
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleAnnulerMarche(marche.id, marche.reference || 'N/A');
+                                                                    }}
+                                                                    className="inline-flex items-center gap-1 rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:outline-none"
+                                                                >
+                                                                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path
+                                                                            strokeLinecap="round"
+                                                                            strokeLinejoin="round"
+                                                                            strokeWidth={2}
+                                                                            d="M6 18L18 6M6 6l12 12"
+                                                                        />
+                                                                    </svg>
+                                                                    Annuler
+                                                                </button>
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 ))}

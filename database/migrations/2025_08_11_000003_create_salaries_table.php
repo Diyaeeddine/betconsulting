@@ -12,14 +12,17 @@ return new class extends Migration {
             $table->string('prenom');
             $table->string('email')->unique();
             $table->string('password')->nullable();
+            $table->rememberToken();
+            $table->string('nom_profil')->nullable();
+            $table->string('poste')->nullable();
+            $table->boolean('is_accepted')->default(false); 
             $table->string('telephone');
             $table->decimal('salaire_mensuel', 10, 2);
             $table->date('date_embauche')->nullable();
             $table->enum('statut', ['actif', 'inactif'])->default('actif');
-            $table->json('projet_ids')->default('[]');; // Stores related project IDs
+            $table->json('projet_ids')->default('[]');
             $table->timestamps();
         });
-
     }
 
     public function down(): void {

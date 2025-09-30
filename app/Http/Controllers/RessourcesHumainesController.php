@@ -25,6 +25,9 @@ use ZipArchive;
 use League\Csv\Reader;
 use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
+use Spatie\Permission\Models\Role;
+use App\Notifications\ValidationProfileNotification;
+
 
 
 class RessourcesHumainesController extends Controller
@@ -615,54 +618,49 @@ class RessourcesHumainesController extends Controller
 
 
     public function Users()
-    {
-        // Get all projects
-        $projects = Projet::select('id', 'nom')->get();
+{
+    $projects = Projet::select('id', 'nom')->get();
 
-        // Get all users and eager load their profils and vehicules
-        $users = Salarie::with(['profils', 'vehicule'])->get();
+    $users = Salarie::with(['vehicule'])->get();
 
-        // Add projects_count, profil_string, and attach vehicule
-        $users->transform(function ($user) {
-            // Projects
-            $projectIds = $user->projet_ids;
+    $users->transform(function ($user) {
+        $projectIds = $user->projet_ids;
 
-            if (is_string($projectIds)) {
-                $projectIds = json_decode($projectIds, true) ?? [];
-            } elseif (!is_array($projectIds)) {
-                $projectIds = [];
-            }
-
-            $user->projects_count = count($projectIds);
-
-            // Profils
-            $profilStrings = $user->profils->map(function ($profil) {
-                return "{$profil->poste_profil} - {$profil->nom_profil}";
-            });
-
-            $user->profil_string = $profilStrings->implode(', ');
-
-            // Add vehicule safely without modifying the relationship
-            $user->vehicule_data = $user->vehicule ?? null;
-
-            return $user;
-        });
-
-        // Hide sensitive fields
-        $users->makeHidden(['password']);
-
-        if (request()->wantsJson()) {
-            return response()->json([
-                'projects' => $projects,
-                'users'    => $users,
-            ]);
+        if (is_string($projectIds)) {
+            $projectIds = json_decode($projectIds, true) ?? [];
+        } elseif (!is_array($projectIds)) {
+            $projectIds = [];
         }
 
-        return Inertia::render('ressources-humaines/Users', [
+        $user->projects_count = count($projectIds);
+
+        if($user->poste){
+        $user->profil_string = "{$user->poste} - {$user->nom_profil}";
+
+        }
+        $user->profil_string = "{$user->nom_profil}";
+
+        $user->vehicule_data = $user->vehicule ?? null;
+
+        return $user;
+    });
+
+    $users->makeHidden(['password']);
+
+    if (request()->wantsJson()) {
+        return response()->json([
             'projects' => $projects,
             'users'    => $users,
         ]);
     }
+    
+
+    return Inertia::render('ressources-humaines/Users', [
+        'projects' => $projects,
+        'users'    => $users,
+    ]);
+}
+
 
     public function getUserProjects(Salarie $salarie)
     {
@@ -706,52 +704,57 @@ class RessourcesHumainesController extends Controller
         return response()->json($user);
     }
 
-    public function storeUsers(Request $request)
-    {
-        $validatedData = $request->validate([
-            'nom'            => 'required|string|max:255',
-            'prenom'         => 'required|string|max:255',
-            'email'          => 'required|string|email|max:255|unique:salaries',
-            'telephone'      => 'required|string|max:20',
-            'salaire_mensuel' => 'required|numeric',
-            'date_embauche'  => 'nullable|date',
-            'nom_profil'     => 'required|in:bureau_etudes,construction,suivi_controle,support_gestion',
-            'poste_profil'   => 'required|string|max:255',
+public function storeUsers(Request $request)
+{
+    $validatedData = $request->validate([
+        'nom'             => 'required|string|max:255',
+        'prenom'          => 'required|string|max:255',
+        'email'           => 'required|string|email|max:255|unique:salaries',
+        'telephone'       => 'required|string|max:20',
+        'salaire_mensuel' => 'required|numeric',
+        'date_embauche'   => 'nullable|date',
+        'nom_profil'      => 'required|in:bureau_etudes,construction,suivi_controle,support_gestion,administration,marche_marketing',
+        'poste_profil'    => 'max:255',
+    ]);
+
+    try {
+        $salarie = Salarie::create([
+            'nom'             => $validatedData['nom'],
+            'prenom'          => $validatedData['prenom'],
+            'email'           => $validatedData['email'],
+            'telephone'       => $validatedData['telephone'],
+            'salaire_mensuel' => $validatedData['salaire_mensuel'],
+            'date_embauche'   => $validatedData['date_embauche'] ?? null,
+            'statut'          => 'actif',
+            'nom_profil'      => $validatedData['nom_profil'],
+            'poste'           => $validatedData['poste_profil'],
+            'projet_ids'      => json_encode([]),
         ]);
 
-        try {
-            $salarie = Salarie::create([
-                'nom'             => $validatedData['nom'],
-                'prenom'          => $validatedData['prenom'],
-                'email'           => $validatedData['email'],
-                'telephone'       => $validatedData['telephone'],
-                'salaire_mensuel' => $validatedData['salaire_mensuel'],
-                'date_embauche'   => $validatedData['date_embauche'] ?? null,
-                'statut'          => 'actif',
-                'projet_ids'      => json_encode([]),
-            ]);
+        $adminRole = Role::where('name', 'admin')->first();
+        if ($adminRole) {
+            $admins = $adminRole->users;
 
-            $profil = Profil::create([
-                'user_id'      => $salarie->id,
-                'nom_profil'   => $validatedData['nom_profil'],
-                'poste_profil' => $validatedData['poste_profil'],
-            ]);
+            foreach ($admins as $admin) {
+                $admin->notify(new ValidationProfileNotification($salarie));
 
-            Log::info('Salarie created', ['salarie' => $salarie->toArray()]);
-            Log::info('Profil created',  ['profil'  => $profil->toArray()]);
-
-            return redirect()->back()->with([
-                'success' => 'Employé créé avec succès.',
-                'created' => [
-                    'salarie' => $salarie->only(['id', 'nom', 'prenom', 'email', 'telephone', 'statut']),
-                    'profil'  => $profil->only(['id', 'user_id', 'nom_profil', 'poste_profil']),
-                ],
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('Error creating user', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-            return redirect()->back()->with('error', 'Erreur lors de la création de l\'employé.');
+                // dd('notif envoyée');
+            }
         }
+
+        return redirect()->back()->with([
+            'success' => 'Employé créé avec succès, notification envoyée aux admins.',
+            'created' => [
+                'salarie' => $salarie->only(['id', 'nom', 'prenom', 'email', 'telephone', 'statut']),
+            ],
+        ]);
+
+    } catch (\Throwable $e) {
+        
+        return redirect()->back()->with('error', 'Erreur lors de la création de l\'employé.');
     }
+}
+
 
     public function affecteGrantUser(Request $request, Salarie $salarie)
     {

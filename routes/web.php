@@ -28,6 +28,7 @@ use Spatie\Permission\Models\Role;
 use App\Notifications\MarcheDecisionNotification;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Broadcast;
+use App\Http\Controllers\Auth\SalarieAuthController;
 
 use Illuminate\Http\Request;
 //use ZipArchive;
@@ -72,7 +73,12 @@ Route::middleware(['auth', 'verified', 'role:admin'])->group(function () {
     
     Route::get('/direction-generale/boite-decision', [DirectionGeneraleController::class, 'boiteDecision'])
         ->name('direction-generale.boiteDecision');
-    
+        Route::get('/direction-generale/boite-decision-marche', [DirectionGeneraleController::class, 'marcheDecision'])
+        ->name('direction-generale.boiteDecision');
+        Route::get('/direction-generale/boite-decision-profile', [DirectionGeneraleController::class, 'profileDecision'])
+        ->name('direction-generale.boiteDecisionProfile');
+    Route::post('/direction-generale/profile-decision/{salarie}', [DirectionGeneraleController::class, 'handleProfileDecision'])
+    ->name('direction-generale.handleProfileDecision');
     // Routes pour les actions sur les marchés
     Route::post('/direction-generale/marche/{id}/accepter', [DirectionGeneraleController::class, 'accepterMarche'])
         ->name('direction-generale.accepter-marche');
@@ -135,6 +141,57 @@ Route::middleware(['auth', 'verified', 'role:marches-marketing'])->group(functio
     Route::get('/marches-marketing/marches/{projet}', [MarchesMarketingController::class, 'show'])
         ->name('marches.projet.show');
 
+    Route::get('/marches-marketing/utilisateurs', [MarchesMarketingController::class, 'users'])
+        ->name('users.marches-marketing');
+      
+    // Routes gestion dossiers
+    Route::get('/marches-marketing/{marche}/dossiers', [SharedController::class, 'afficherDossiers'])
+        ->name('marches.dossiers');
+
+    Route::post('/marches-marketing/dossiers/{dossier}/taches', [SharedController::class, 'creerTache'])
+        ->name('dossiers.taches.create');
+
+    Route::post('/marches-marketing/taches/{tache}/upload', [SharedController::class, 'uploadFichiers'])
+        ->name('taches.upload');
+
+    Route::delete('/marches-marketing/taches/{tache}/fichiers', [SharedController::class, 'supprimerFichier'])
+        ->name('taches.fichiers.delete');
+
+Route::post('/marches-marketing/taches/{tache}/affecter', [SharedController::class, 'affecterTache'])
+    ->name('taches.affecter');
+
+Route::delete('/marches-marketing/affectations/{affectation}', [SharedController::class, 'supprimerAffectation'])
+    ->name('affectations.delete');
+
+Route::patch('/marches-marketing/taches/{tache}/statut', [SharedController::class, 'mettreAJourStatutTache'])
+    ->name('taches.update-statut');
+
+Route::delete('/marches-marketing/taches/{tache}', [SharedController::class, 'supprimerTache'])
+    ->name('taches.delete');
+// Dans web.php
+Route::get('/debug/marche/{marche}', function($marcheId) {
+    $marche = MarchePublic::with('dossiers.taches')->findOrFail($marcheId);
+    
+    return response()->json([
+        'marche_id' => $marche->id,
+        'nombre_dossiers' => $marche->dossiers->count(),
+        'dossiers' => $marche->dossiers->map(function($d) {
+            return [
+                'id' => $d->id,
+                'nom' => $d->nom_dossier,
+                'type' => $d->type_dossier,
+                'nombre_taches' => $d->taches->count(),
+                'taches' => $d->taches->map(function($t) {
+                    return [
+                        'id' => $t->id,
+                        'nom' => $t->nom_tache,
+                        'statut' => $t->statut
+                    ];
+                })
+            ];
+        })
+    ]);
+});
 });
 
 Route::middleware(['auth', 'permission:module documentation'])
@@ -165,8 +222,10 @@ Route::middleware(['auth','permission:module marche public','permission:module m
     
     Route::get('marches-publics', [SharedController::class, 'marchesPublic'])->name('marchesPublic');
     Route::get('global-marches', [SharedController::class, 'GlobalMarches'])->name('GlobalMarches');
+    Route::get('marches/aos-selectionnes', [SharedController::class, 'aosSelectionnes'])->name('aosSelectionnes');
 
     Route::post('marches/{id}/accept', [SharedController::class, 'acceptMP'])->name('marchesPublic.accept');
+    Route::post('marches/{id}/select', [SharedController::class, 'selectMP'])->name('marchesPublic.select');
     Route::post('marches/{id}/reject', [SharedController::class, 'rejectMP'])->name('marchesPublic.reject');
 
     Route::post('marches/{id}/accept-initial', [SharedController::class, 'acceptIMP'])->name('marchesPublic.acceptInitial');
@@ -507,7 +566,27 @@ Route::get('/test-pusher', function () {
     ]);
 });
 
+Route::prefix('salarie')->name('salarie.')->group(function () {
+    Route::middleware('guest:salarie')->group(function () {
+        Route::get('login', [SalarieAuthController::class, 'showLoginForm'])
+            ->name('login');
+        Route::post('/login', [SalarieAuthController::class, 'login']);
+    });
 
+    Route::middleware('auth:salarie')->group(function () {
+        Route::post('/logout', [SalarieAuthController::class, 'logout'])
+            ->name('logout');
+        
+        // Dashboard et autres pages
+        Route::get('/dashboard', function () {
+            return inertia('Salarie/Dashboard', [
+                'salarie' => Auth::guard('salarie')->user()
+            ]);
+        })->name('dashboard');
+
+        // Vos autres routes salariés ici
+    });
+});
 
 // Broadcast::routes();
 

@@ -4,58 +4,59 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\DossierMarche;
 class MarchePublic extends Model
 {
     use HasFactory;
 
-    /**
-     * Le nom de la table (optionnel si Laravel devine bien).
-     */
     protected $table = 'marche_public';
 
-    /**
-     * Les attributs assignables en masse.
-     */
     protected $fillable = [
-        'type_ao',
-        'n_reference',
+        'reference',
+        'maitre_ouvrage',
+        'pv',
+        'caution_provisoire',
+        'date_ouverture',
+        'date_limite_soumission',
+        'date_publication',
+        'statut',
+        'type_marche',
+        'budget',
+        'urgence',
+        'zone_geographique',
+        'lien_dao',
+        'lien_pv',
+        'dao',
+        'date_adjudications',
+        'ville',
+        'montant',
+        'objet',
+        'adjudicataire',
+        'date_affichage',
+        'chemin_fichiers',
+        'importance',
         'etat',
         'is_accepted',
         'etape',
-        'date_limite',
-        'heure',
-        'mo',
-        'objet',
-        'estimation',
-        'caution',
-        'attestation_reference',
-        'cnss',
-        'agrement',
-        'equipe_demandee',
-        'contrainte',
-        'autres',
-        'mode_attribution',
-        'lieu_ao',
-        'ville',
-        'lots',
-        'decision',
-        'date_decision',
-        'ordre_preparation',
-        'importance',
-        'motif_annulation',
-        'motif_refus',
+    ];
+
+    protected $casts = [
+        'caution_provisoire'     => 'decimal:2',
+        'date_ouverture'         => 'date',
+        'date_limite_soumission' => 'datetime',
+        'date_publication'       => 'datetime',
+        'date_adjudications'     => 'date',
+        'date_affichage'         => 'date',
+        'chemin_fichiers'        => 'array',
+        'is_accepted'            => 'boolean',
     ];
 
     /**
-     * Les attributs qui doivent être castés.
+     * Relation avec les dossiers du marché
      */
-    protected $casts = [
-        'is_accepted'   => 'boolean',
-        'date_limite'   => 'date',
-        'date_decision' => 'date',
-        'heure'         => 'datetime:H:i',
-        'estimation'    => 'decimal:2',
-        'caution'       => 'decimal:2',
-    ];
+    public function dossiers()
+    {
+        return $this->hasMany(DossierMarche::class, 'marche_id');
+    }
 }

@@ -28,8 +28,6 @@ export function AppSidebar() {
     };
 
     const dashboardHref = auth?.user?.role && roleDashboardMap[auth.user.role] ? roleDashboardMap[auth.user.role] : '/dashboard';
-// console.log('User permissions:', auth?.user?.permissions);
-// console.log('User role:', auth?.user?.role);
     const mainNavItems: NavItem[] = [
         {
             title: 'Dashboard',
@@ -89,7 +87,7 @@ export function AppSidebar() {
                       icon: BookOpen,
                   },
                   {
-                      title: 'Users',
+                      title: 'Utilisateurs',
                       href: '/ressources-humaines/users',
                       icon: Users,
                   },
@@ -137,7 +135,7 @@ export function AppSidebar() {
         ...(auth?.user?.role === 'admin'
             ? [
                   {
-                      title: 'Boite de descisions',
+                      title: 'Boite de decisions',
                       icon: Gavel,
                       href: '/direction-generale/boite-decision',
                   },
@@ -152,7 +150,17 @@ export function AppSidebar() {
                   },
               ]
             : []),
+        ...(auth?.user?.role === 'marches-marketing'
+            ? [
+                  {
+                      title: 'Collaborateurs Marché',
+                      href: '/marches-marketing/utilisateurs',
+                      icon: Users,
+                  },
+              ]
+            : []),
     ];
+
     
 
     return (

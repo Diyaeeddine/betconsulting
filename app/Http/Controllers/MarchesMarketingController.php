@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Projet;
 use Inertia\Inertia;
 use App\Models\Document;
+use App\Models\MarchePublic;
+use App\Models\Salarie;
 use Inertia\Response;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -16,18 +17,33 @@ class MarchesMarketingController extends Controller
         return Inertia::render('marches-marketing/Dashboard');
     }
 
-    public function marches()
-    {
-        $projets = Projet::where('etape', 'first')->get();
-        return Inertia::render('marches-marketing/Marches', ['projets' => $projets]);
-    }
+public function users()
+{          
+    $salaries = Salarie::where('is_accepted', true)
+        ->where('nom_profil', 'marche_marketing')
+        ->select([
+            'id', 'nom', 'prenom', 'email', 'telephone', 
+            'poste', 'nom_profil', 'salaire_mensuel', 
+            'date_embauche', 'statut', 'projet_ids', 'created_at'
+        ])
+        ->get();          
 
-    public function show(Projet $projet)
-    {
-        return Inertia::render('marches-marketing/ProjetShow', [
-            'projet' => $projet,
-        ]);
-    }
+    $marches = MarchePublic::select([
+        'id', 'reference', 'objet', 'maitre_ouvrage', 
+        'statut', 'type_marche', 'urgence', 
+        'date_limite_soumission', 'montant', 'ville'
+    ])
+    ->where('is_accepted',true)
+    ->where('etape','preparation')
+    ->orderBy('date_limite_soumission', 'asc')
+    ->get();
+
+    return Inertia::render('marches-marketing/Users', [
+        'salaries' => $salaries,
+        'marches' => $marches,
+    ]);      
+}
+
 
     
 }

@@ -6,7 +6,9 @@ use Inertia\Inertia;
 use Illuminate\Http\Request;
 use App\Models\MarchePublic;
 use App\Models\User;
+use App\Models\Salarie;
 use App\Notifications\MarcheDecisionNotification;
+use Carbon\Carbon;
 
 class DirectionGeneraleController extends Controller
 {
@@ -17,24 +19,132 @@ class DirectionGeneraleController extends Controller
 
 public function boiteDecision()
 {
+     
+    return Inertia::render('direction-generale/BoiteDecision');
+           
+}
+
+public function marcheDecision(){
     try {
-        $marchesPublics = MarchePublic::where('is_accepted', true)
+        $marchesPublics = MarchePublic::with(['dossiers' => function($query) {
+                $query->where('type_dossier', 'financier')
+                      ->orderBy('created_at', 'desc');
+            }])
+            ->where('is_accepted', true)
             ->where('etat', 'en cours')
             ->where('etape', 'decision admin')
+            ->orderByRaw('CASE 
+                WHEN urgence = "elevee" THEN 1 
+                WHEN urgence = "moyenne" THEN 2 
+                WHEN urgence = "faible" THEN 3 
+                ELSE 4 
+                END')
+            ->orderBy('date_limite_soumission', 'asc')
             ->orderBy('created_at', 'desc')
-            ->get();
-
-        // Debug : vérifiez ce qui est retourné
-        \Log::info('Marchés publics pour boite décision:', ['count' => $marchesPublics->count()]);
-
-        return Inertia::render('direction-generale/BoiteDecision', [
-            'marchesPublics' => $marchesPublics
+            ->get()
+            ->map(function ($marche) {
+                // Transformer les données pour une meilleure utilisation côté client
+                $marche->dossiers = $marche->dossiers->map(function ($dossier) {
+                    // Décoder les fichiers joints
+                    if ($dossier->fichiers_joints) {
+                        $dossier->fichiers_joints = is_string($dossier->fichiers_joints) 
+                            ? json_decode($dossier->fichiers_joints, true) 
+                            : $dossier->fichiers_joints;
+                    } else {
+                        $dossier->fichiers_joints = [];
+                    }
+                    
+                    return $dossier;
+                });
+                
+                // Calculer l'urgence basée sur la date limite
+                if ($marche->date_limite_soumission) {
+                    $dateLimit = Carbon::parse($marche->date_limite_soumission);
+                    $today = Carbon::now();
+                    $diffInDays = $today->diffInDays($dateLimit, false);
+                    
+                    // Ajouter une propriété calculated_urgency pour l'interface
+                    if ($diffInDays <= 0) {
+                        $marche->calculated_urgency = 'expired';
+                    } elseif ($diffInDays <= 3) {
+                        $marche->calculated_urgency = 'critical';
+                    } elseif ($diffInDays <= 7) {
+                        $marche->calculated_urgency = 'urgent';
+                    } else {
+                        $marche->calculated_urgency = 'normal';
+                    }
+                    
+                    $marche->days_remaining = $diffInDays;
+                } else {
+                    $marche->calculated_urgency = 'unknown';
+                    $marche->days_remaining = null;
+                }
+                
+                // Ajouter des métadonnées utiles
+                $marche->has_financial_dossier = $marche->dossiers->isNotEmpty();
+                $marche->total_files = $marche->dossiers->sum(function ($dossier) {
+                    return count($dossier->fichiers_joints ?? []);
+                });
+                
+                return $marche;
+            });
+            
+        return Inertia::render('direction-generale/MarcheDecision', [
+            'marches' => $marchesPublics,
+            'stats' => [
+                'total' => $marchesPublics->count(),
+                'urgent' => $marchesPublics->where('calculated_urgency', 'urgent')->count(),
+                'critical' => $marchesPublics->where('calculated_urgency', 'critical')->count(),
+                'expired' => $marchesPublics->where('calculated_urgency', 'expired')->count(),
+                'with_files' => $marchesPublics->where('has_financial_dossier', true)->count(),
+            ]
         ]);
+        
     } catch (\Exception $e) {
-        \Log::error('Erreur dans boiteDecision:', ['error' => $e->getMessage()]);
-        return Inertia::render('direction-generale/BoiteDecision', [
-            'marchesPublics' => []
+        // Log l'erreur pour debug
+        \Log::error('Erreur dans marcheDecision: ' . $e->getMessage(), [
+            'trace' => $e->getTraceAsString()
         ]);
+        
+        return Inertia::render('direction-generale/MarcheDecision', [
+            'marches' => [],
+            'stats' => [
+                'total' => 0,
+                'urgent' => 0,
+                'critical' => 0,
+                'expired' => 0,
+                'with_files' => 0,
+            ],
+            'error' => 'Une erreur est survenue lors du chargement des marchés.'
+        ]);
+    }
+}
+    public function profileDecision(){
+
+        $salaries = Salarie::
+        where('is_accepted', false)
+        ->get();
+            
+        return Inertia::render('direction-generale/ProfileDecision', [
+            'salaries' => $salaries
+        ]);
+    }
+public function handleProfileDecision(Salarie $salarie, Request $request)
+{
+    $request->validate([
+        'decision' => 'required|in:accept,reject'
+    ]);
+
+    $decision = $request->input('decision');
+    
+    $fullName = $salarie->prenom . ' ' . $salarie->nom;
+
+    if ($decision === 'accept') {
+        $salarie->update(['is_accepted' => true]);
+        return redirect()->back()->with('success', 'Profil de ' . $fullName . ' accepté avec succès !');
+    } else {
+        $salarie->delete();
+        return redirect()->back()->with('info', 'Profil de ' . $fullName . ' rejeté et supprimé.');
     }
 }
 
@@ -46,7 +156,7 @@ public function boiteDecision()
             
             // Mettre à jour l'étape
             $marche->update([
-                'etape' => 'etudes-techniques',
+                'etape' => 'preparation',
                 'decision' => 'accepte',
                 'date_decision' => now(),
                 'ordre_preparation' => 'preparation_dossier_administratif'
@@ -97,26 +207,15 @@ public function boiteDecision()
             'commentaire_refus' => $request->input('motif') // Garder aussi l'ancienne pour compatibilité si nécessaire
         ]);
 
-        // Log de l'action pour audit
-        \Log::info('Marché refusé par admin', [
-            'marche_id' => $id,
-            'marche_reference' => $marche->n_reference,
-            'motif_refus' => $request->input('motif'),
-            'admin_id' => auth()->id(),
-            'admin_name' => auth()->user()->name,
-            'date_refus' => now()
-        ]);
 
-        // Notifier l'équipe études techniques du refus
         $etudesTechniques = User::whereHas('roles', function($query) {
             $query->where('name', 'etudes-techniques');
-        })->get(); // Utiliser get() pour récupérer tous les utilisateurs
+        })->get();
 
         foreach ($etudesTechniques as $user) {
             $user->notify(new MarcheDecisionNotification($marche, 'refuse', $request->input('motif')));
         }
 
-        // Optionnel: Notifier aussi la direction si nécessaire
         $direction = User::whereHas('roles', function($query) {
             $query->where('name', 'direction');
         })->get();
