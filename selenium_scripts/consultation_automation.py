@@ -32,6 +32,7 @@ class ConsultationAutomation:
         self.driver = None
         self.wait = None
         self.marche_reference = None  # Nouvelle variable pour stocker la référence
+        self.button_folder_mapping = {}  # Nouveau: mapping bouton -> dossier
         self.results = {
             'success': False,
             'message': '',
@@ -39,7 +40,184 @@ class ConsultationAutomation:
             'errors': [],
             'timestamp': datetime.now().isoformat()
         }
-    
+
+    def clean_folder_name(self, folder_name):
+        """Nettoie le nom du dossier pour créer un nom de dossier valide"""
+        try:
+            logger.info(f"🧹 Nettoyage du nom de dossier: {folder_name}")
+            
+            # Remplacer les caractères spéciaux par des underscores ou les supprimer
+            clean_name = re.sub(r'[<>:"/\\|?*]', '_', folder_name)  # Caractères interdits Windows
+            clean_name = clean_name.replace(' ', '_')  # Espaces -> underscores
+            clean_name = clean_name.replace("'", '_')  # AJOUT: Apostrophes -> underscores
+            clean_name = clean_name.replace('/', '_')  # Slash -> underscores (garder les points)
+            
+            # Supprimer les underscores multiples
+            clean_name = re.sub(r'_+', '_', clean_name)
+            
+            # Supprimer les underscores en début/fin
+            clean_name = clean_name.strip('_')
+            
+            # S'assurer que ce n'est pas vide
+            if not clean_name:
+                clean_name = "DEFAULT_FOLDER"
+            
+            logger.info(f"🧹 Nom de dossier nettoyé: {clean_name}")
+            return clean_name
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Erreur lors du nettoyage du nom de dossier: {str(e)}")
+            return "DEFAULT_FOLDER"
+
+    def extract_button_folder_mapping(self):
+        """Extrait et mappe chaque bouton 'Ajouter une ou plusieurs pièces libres' avec son dossier correspondant"""
+        try:
+            logger.info("🗂️ Extraction du mapping boutons -> dossiers...")
+            
+            # Trouver tous les boutons "Ajouter une ou plusieurs pièces libres"
+            button_selectors = [
+                "a.ajout-el[onclick*='ajouterPieceLibreApplet']",
+                "a[id*='ajouterPieceLibreApplet']",
+                "//a[contains(text(), 'Ajouter une ou plusieurs pièces libres')]",
+                "//a[@class='ajout-el' and contains(@onclick, 'ajouterPieceLibreApplet')]"
+            ]
+            
+            all_buttons = []
+            
+            for selector in button_selectors:
+                try:
+                    if selector.startswith("//"):
+                        buttons = self.driver.find_elements(By.XPATH, selector)
+                    else:
+                        buttons = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    
+                    if buttons:
+                        logger.info(f"✅ Trouvé {len(buttons)} bouton(s) avec le sélecteur: {selector}")
+                        all_buttons.extend(buttons)
+                        break
+                        
+                except Exception as e:
+                    continue
+            
+            if not all_buttons:
+                logger.warning("⚠️ Aucun bouton trouvé pour le mapping")
+                return True
+            
+            # Pour chaque bouton, trouver le titre du dossier correspondant dans sa section parente
+            for i, button in enumerate(all_buttons):
+                try:
+                    button_id = button.get_attribute("id") or f"button_{i+1}"
+                    logger.info(f"🔍 Recherche du dossier pour le bouton {i+1} (ID: {button_id})...")
+                    
+                    folder_name = None
+                    
+                    # CORRECTION PRINCIPALE: Remonter dans l'arbre DOM pour trouver la section parente
+                    # puis chercher le titre dans cette section
+                    
+                    # Méthode 1: Chercher le div parent principal (panelCandidature, panelOffre, etc.)
+                    try:
+                        # Remonter jusqu'à trouver un div avec un ID contenant "panel" ou "candidature" ou "offre"
+                        parent_divs = [
+                            "./ancestor::div[contains(@id, 'panel')]",
+                            "./ancestor::div[contains(@id, 'candidature')]", 
+                            "./ancestor::div[contains(@id, 'Offre')]",
+                            "./ancestor::div[contains(@id, 'listeOffres')]"
+                        ]
+                        
+                        main_parent_div = None
+                        for div_xpath in parent_divs:
+                            try:
+                                main_parent_div = button.find_element(By.XPATH, div_xpath)
+                                logger.info(f"✅ Div parent trouvé: {main_parent_div.get_attribute('id')}")
+                                break
+                            except NoSuchElementException:
+                                continue
+                        
+                        if main_parent_div:
+                            # Chercher la première table avec thead dans ce div parent
+                            try:
+                                first_table_with_thead = main_parent_div.find_element(By.CSS_SELECTOR, "table.table-results.tableau-reponse.margin-0 thead")
+                                if first_table_with_thead:
+                                    # Chercher le lien avec la classe title-toggle-open dans ce thead
+                                    title_element = first_table_with_thead.find_element(By.CSS_SELECTOR, "a.title-toggle-open")
+                                    folder_name = title_element.text.strip()
+                                    logger.info(f"✅ Titre trouvé dans la section parente: {folder_name}")
+                            except NoSuchElementException:
+                                # Méthode alternative: chercher tous les a.title-toggle-open dans le div parent
+                                try:
+                                    title_elements = main_parent_div.find_elements(By.CSS_SELECTOR, "a.title-toggle-open")
+                                    if title_elements:
+                                        # Prendre le premier titre trouvé
+                                        folder_name = title_elements[0].text.strip()
+                                        logger.info(f"✅ Titre trouvé via recherche alternative: {folder_name}")
+                                except:
+                                    pass
+                        
+                    except Exception as e:
+                        logger.warning(f"⚠️ Erreur lors de la recherche dans la section parente: {str(e)}")
+                    
+                    # Méthode 2: Si toujours pas trouvé, chercher par proximité avec l'ID du bouton
+                    if not folder_name:
+                        try:
+                            # Analyser l'ID du bouton pour deviner la section
+                            if "candidature" in button_id.lower():
+                                # Chercher spécifiquement dans la section candidature
+                                candidature_titles = self.driver.find_elements(By.XPATH, "//div[contains(@id, 'candidature')]//a[@class='title-toggle-open']")
+                                if candidature_titles:
+                                    folder_name = candidature_titles[0].text.strip()
+                                    logger.info(f"✅ Titre trouvé via analyse candidature: {folder_name}")
+                            elif "offre" in button_id.lower() or "listeoffres" in button_id.lower():
+                                # Chercher spécifiquement dans la section offre
+                                offre_titles = self.driver.find_elements(By.XPATH, "//div[contains(@id, 'Offre') or contains(@id, 'listeOffres')]//a[@class='title-toggle-open']")
+                                if offre_titles:
+                                    folder_name = offre_titles[0].text.strip()
+                                    logger.info(f"✅ Titre trouvé via analyse offre: {folder_name}")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Erreur lors de l'analyse par ID: {str(e)}")
+                    
+                    # Méthode 3: Fallback - chercher tous les titres et les associer par ordre
+                    if not folder_name:
+                        try:
+                            all_titles = self.driver.find_elements(By.CSS_SELECTOR, "a.title-toggle-open")
+                            if all_titles and i < len(all_titles):
+                                folder_name = all_titles[i].text.strip()
+                                logger.info(f"✅ Titre trouvé via fallback (index {i}): {folder_name}")
+                        except:
+                            pass
+                    
+                    # Méthode 4: Dernier fallback basé sur l'index
+                    if not folder_name:
+                        folder_name = f"Dossier_{i+1}"
+                        logger.warning(f"⚠️ Titre non trouvé, utilisation du fallback: {folder_name}")
+                    
+                    # Nettoyer le nom du dossier
+                    clean_folder_name = self.clean_folder_name(folder_name)
+                    
+                    # Stocker le mapping
+                    self.button_folder_mapping[button_id] = clean_folder_name
+                    
+                    logger.info(f"🗂️ Mapping créé: {button_id} -> {folder_name} -> {clean_folder_name}")
+                    
+                except Exception as e:
+                    logger.warning(f"⚠️ Erreur lors du mapping du bouton {i+1}: {str(e)}")
+                    # Fallback
+                    button_id = button.get_attribute("id") or f"button_{i+1}"
+                    self.button_folder_mapping[button_id] = f"Dossier_{i+1}"
+            
+            logger.info(f"🎯 Mapping complet créé: {len(self.button_folder_mapping)} bouton(s) mappé(s)")
+            for btn_id, folder in self.button_folder_mapping.items():
+                logger.info(f"   📁 {btn_id} -> {folder}")
+            
+            self.results['steps_completed'].append(f"Mapping boutons-dossiers créé: {len(self.button_folder_mapping)} éléments")
+            
+            return True
+            
+        except Exception as e:
+            error_msg = f"❌ Erreur lors de l'extraction du mapping: {str(e)}"
+            logger.error(error_msg)
+            self.results['errors'].append(error_msg)
+            return True  # On continue même en cas d'erreur
+
     def clean_path_for_typing(self, path):
         """Nettoie le chemin avant la saisie avec PyAutoGUI pour éviter les erreurs de formatage"""
         try:
@@ -108,7 +286,7 @@ class ConsultationAutomation:
         except Exception as e:
             logger.warning(f"⚠️ Erreur lors du nettoyage du chemin: {str(e)}")
             return path  # Retourner le chemin original en cas d'erreur
-    
+
     def setup_driver(self):
         """Configure et initialise le driver Chrome"""
         try:
@@ -141,7 +319,7 @@ class ConsultationAutomation:
             logger.error(error_msg)
             self.results['errors'].append(error_msg)
             raise
-    
+
     def extract_marche_reference(self):
         """Extrait et stocke la référence du marché depuis la page"""
         try:
@@ -203,6 +381,7 @@ class ConsultationAutomation:
                 # Garder les lettres, chiffres, tirets, underscores et points
                 clean_reference = re.sub(r'[<>:"/\\|?*]', '_', reference_found)  # Caractères interdits Windows
                 clean_reference = clean_reference.replace(' ', '_')  # Espaces -> underscores
+                clean_reference = clean_reference.replace("'", '_')  # AJOUT: Apostrophes -> underscores
                 # CORRECTION: NE PAS remplacer les points, seulement les slashes
                 clean_reference = clean_reference.replace('/', '_')  # Slash -> underscores (GARDER LES POINTS)
                 
@@ -232,7 +411,7 @@ class ConsultationAutomation:
             self.results['errors'].append(error_msg)
             # Utiliser la référence passée en paramètre comme fallback
             return True  # On continue quand même
-    
+
     def navigate_to_consultation(self, consultation_url):
         """Navigue vers la page de consultation"""
         try:
@@ -260,8 +439,8 @@ class ConsultationAutomation:
             logger.error(error_msg)
             self.results['errors'].append(error_msg)
             return False
-    
-    def handle_system_popup(self):
+
+    def handle_system_popup(self, button_id=None):
         """Gère les popups système avec PyAutoGUI et saisie automatique du chemin"""
         try:
             logger.info("🔧 Gestion du popup système avec PyAutoGUI...")
@@ -287,12 +466,23 @@ class ConsultationAutomation:
             logger.info("⏳ Attente de 10 secondes pour l'apparition de la popup de sélection de fichier...")
             time.sleep(10)
             
-            # Construire le chemin complet avec la référence
+            # Construire le chemin complet avec la référence ET le dossier spécifique
             base_path = r"C:\xampp\htdocs\betconsulting\storage\app\public\marche_public\imported_files"
+            
+            # Construire le chemin avec référence
             if self.marche_reference:
-                full_path = f"{base_path}\\{self.marche_reference}"
+                path_with_reference = f"{base_path}\\{self.marche_reference}"
             else:
-                full_path = base_path
+                path_with_reference = base_path
+            
+            # NOUVEAU: Ajouter le dossier spécifique selon le bouton cliqué
+            if button_id and button_id in self.button_folder_mapping:
+                folder_name = self.button_folder_mapping[button_id]
+                full_path = f"{path_with_reference}\\{folder_name}"
+                logger.info(f"📁 Chemin avec dossier spécifique: {full_path}")
+            else:
+                full_path = path_with_reference
+                logger.info(f"📁 Chemin sans dossier spécifique (bouton non mappé): {full_path}")
             
             # NETTOYER LE CHEMIN AVANT LA SAISIE
             clean_full_path = self.clean_path_for_typing(full_path)
@@ -307,8 +497,8 @@ class ConsultationAutomation:
             
             # Fonction pour taper le chemin en utilisant copier-coller pour les caractères problématiques
             def type_path_with_clipboard_start(text):
-                """Tape le chemin en utilisant copier-coller pour C:\ au début"""
-                logger.info("🔄 Démarrage de la saisie avec copier-coller pour C:\\...")
+                """Tape le chemin en utilisant copier-coller pour C:\ au début et les caractères accentués"""
+                logger.info("🔄 Démarrage de la saisie avec copier-coller pour C:\\ et caractères accentués...")
                 
                 # Étape 1: Copier et coller "C:\" au début
                 try:
@@ -326,6 +516,9 @@ class ConsultationAutomation:
                 # Étape 2: Taper le reste du chemin (après C:\)
                 remaining_path = text[3:] if text.startswith('C:\\') else text
                 
+                # Caractères accentués français qui posent problème
+                accented_chars = ['à', 'á', 'â', 'ä', 'ã', 'å', 'æ', 'ç', 'è', 'é', 'ê', 'ë', 'ì', 'í', 'î', 'ï', 'ñ', 'ò', 'ó', 'ô', 'ö', 'õ', 'ø', 'ù', 'ú', 'û', 'ü', 'ý', 'ÿ', 'À', 'Á', 'Â', 'Ä', 'Ã', 'Å', 'Æ', 'Ç', 'È', 'É', 'Ê', 'Ë', 'Ì', 'Í', 'Î', 'Ï', 'Ñ', 'Ò', 'Ó', 'Ô', 'Ö', 'Õ', 'Ø', 'Ù', 'Ú', 'Û', 'Ü', 'Ý', 'Ÿ']
+                
                 for i, char in enumerate(remaining_path):
                     if char == '_':
                         logger.info(f"📋 Underscore détecté à la position {i+3}, utilisation du copier-coller...")
@@ -339,15 +532,31 @@ class ConsultationAutomation:
                             logger.warning(f"⚠️ Erreur lors du copier-coller de l'underscore: {str(e)}")
                             pyautogui.write('_')
                             time.sleep(0.05)
+                    elif char in accented_chars:
+                        logger.info(f"📋 Caractère accentué '{char}' détecté à la position {i+3}, utilisation du copier-coller...")
+                        try:
+                            pyperclip.copy(char)
+                            time.sleep(0.1)
+                            pyautogui.hotkey('ctrl', 'v')
+                            time.sleep(0.05)
+                            logger.info(f"✅ Caractère accentué '{char}' collé avec succès via le presse-papier")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Erreur lors du copier-coller du caractère accentué '{char}': {str(e)}")
+                            # Fallback : essayer de taper quand même
+                            try:
+                                pyautogui.write(char)
+                                time.sleep(0.05)
+                            except:
+                                logger.warning(f"⚠️ Impossible de taper le caractère '{char}', il sera ignoré")
                     else:
                         pyautogui.write(char)
                         time.sleep(0.05)
                 
-                logger.info("✅ Saisie complète terminée avec copier-coller pour C:\\ et underscores")
+                logger.info("✅ Saisie complète terminée avec copier-coller pour C:\\, underscores et caractères accentués")
             
             # Utiliser la fonction
             type_path_with_clipboard_start(clean_full_path)
-            logger.info("✅ Chemin tapé avec succès (utilisation de copier-coller pour underscore)")
+            logger.info("✅ Chemin tapé avec succès (utilisation de copier-coller pour underscore et caractères accentués)")
             
             # Appuyer sur Entrée pour valider le chemin
             time.sleep(1)
@@ -364,7 +573,7 @@ class ConsultationAutomation:
             logger.error(error_msg)
             self.results['errors'].append(error_msg)
             return False
-    
+
     def login_user(self, login="BTPCONSULTING", password="Imane2804"):
         """Effectue le login avec les identifiants fournis"""
         try:
@@ -520,7 +729,7 @@ class ConsultationAutomation:
             logger.error(error_msg)
             self.results['errors'].append(error_msg)
             return False
-    
+
     def click_depot_tab(self):
         """Clique sur l'onglet Dépôt"""
         try:
@@ -616,7 +825,7 @@ class ConsultationAutomation:
             logger.error(error_msg)
             self.results['errors'].append(error_msg)
             return False
-    
+
     def wait_for_page_complete_load(self):
         """Attend le chargement complet de la page après le clic sur Dépôt"""
         try:
@@ -649,7 +858,7 @@ class ConsultationAutomation:
             logger.error(error_msg)
             self.results['errors'].append(error_msg)
             return False
-    
+
     def click_repondre_consultation(self):
         """Clique sur le bouton 'Répondre à la consultation'"""
         try:
@@ -745,7 +954,7 @@ class ConsultationAutomation:
             logger.error(error_msg)
             self.results['errors'].append(error_msg)
             return False
-    
+
     def click_pieces_libres_buttons(self):
         """Détecte et clique sur tous les boutons 'Ajouter une ou plusieurs pièces libres'"""
         try:
@@ -753,6 +962,9 @@ class ConsultationAutomation:
             
             # Attendre un peu pour s'assurer que la page est bien chargée
             time.sleep(3)
+            
+            # NOUVEAU: Extraire le mapping boutons -> dossiers AVANT de cliquer
+            self.extract_button_folder_mapping()
             
             # Sélecteurs pour détecter les boutons "Ajouter une ou plusieurs pièces libres"
             selectors = [
@@ -813,6 +1025,13 @@ class ConsultationAutomation:
                     button_id = button.get_attribute("id") or f"button_{i}"
                     logger.info(f"🖱️ Clic sur le bouton {i}/{len(unique_buttons)} (ID: {button_id})...")
                     
+                    # Afficher le dossier correspondant
+                    if button_id in self.button_folder_mapping:
+                        folder_name = self.button_folder_mapping[button_id]
+                        logger.info(f"📁 Dossier correspondant: {folder_name}")
+                    else:
+                        logger.warning(f"⚠️ Aucun dossier mappé pour le bouton {button_id}")
+                    
                     # Scroll vers l'élément pour s'assurer qu'il est visible
                     self.driver.execute_script("arguments[0].scrollIntoView(true);", button)
                     time.sleep(1)
@@ -859,7 +1078,8 @@ class ConsultationAutomation:
                         logger.info(f"🎉 Bouton {i} cliqué avec succès!")
                         
                         # GESTION DU POPUP SYSTÈME AVEC PYAUTOGUI après chaque clic réussi
-                        self.handle_system_popup()
+                        # NOUVEAU: Passer l'ID du bouton pour utiliser le bon dossier
+                        self.handle_system_popup(button_id)
                         
                         # Attendre 15 secondes pour choisir un fichier avant de passer au bouton suivant
                         if i < len(unique_buttons):  # Ne pas attendre après le dernier bouton
@@ -888,7 +1108,7 @@ class ConsultationAutomation:
             logger.error(error_msg)
             self.results['errors'].append(error_msg)
             return False
-    
+
     def run_automation(self, consultation_url, marche_reference):
         """Exécute le processus d'automatisation complet"""
         try:
@@ -930,7 +1150,7 @@ class ConsultationAutomation:
             
             # Succès !
             self.results['success'] = True
-            self.results['message'] = "Automatisation terminée avec succès ! Tous les boutons 'Ajouter une ou plusieurs pièces libres' ont été cliqués."
+            self.results['message'] = "Automatisation terminée avec succès ! Tous les boutons 'Ajouter une ou plusieurs pièces libres' ont été cliqués avec les bons dossiers."
             
             logger.info("🎉 AUTOMATISATION TERMINÉE AVEC SUCCÈS !")
             
@@ -947,7 +1167,7 @@ class ConsultationAutomation:
         
         finally:
             self.cleanup()
-    
+
     def cleanup(self):
         """Nettoie les ressources"""
         try:
@@ -956,7 +1176,7 @@ class ConsultationAutomation:
                 self.driver.quit()
         except Exception as e:
             logger.warning(f"⚠️ Erreur lors de la fermeture: {str(e)}")
-    
+
     def save_results(self):
         """Sauvegarde les résultats en JSON"""
         try:
@@ -973,12 +1193,12 @@ def main():
     if len(sys.argv) != 3:
         print("❌ Usage: python consultation_automation.py <consultation_url> <marche_reference>")
         sys.exit(1)
-    
+
     consultation_url = sys.argv[1]
     marche_reference = sys.argv[2]
-    
+
     automation = ConsultationAutomation()
-    
+
     try:
         automation.run_automation(consultation_url, marche_reference)
     finally:

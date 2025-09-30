@@ -505,3 +505,39 @@
 2025-09-29 22:22:15,550 - INFO - Get LATEST chromedriver version for google-chrome
 2025-09-29 22:22:15,881 - INFO - Get LATEST chromedriver version for google-chrome
 2025-09-29 22:22:16,354 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-29 23:11:00,948 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=930167&orgAcronyme=p8x
+2025-09-29 23:11:00,948 - INFO - Référence marché: 07./2025
+2025-09-29 23:11:00,950 - INFO - ====== WebDriver manager ======
+2025-09-29 23:11:03,155 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-29 23:11:03,598 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-29 23:11:03,887 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-30 00:39:41,243 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=930167&orgAcronyme=p8x
+2025-09-30 00:39:41,244 - INFO - Référence marché: 07./2025
+2025-09-30 00:39:41,245 - INFO - ====== WebDriver manager ======
+2025-09-30 00:39:43,579 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-30 00:39:44,146 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-30 00:39:44,488 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-30 00:39:45,322 - INFO - WebDriver version 140.0.7339.207 selected
+2025-09-30 00:39:45,328 - INFO - Modern chrome version https://storage.googleapis.com/chrome-for-testing-public/140.0.7339.207/win32/chromedriver-win32.zip
+2025-09-30 00:39:45,328 - INFO - About to download new driver from https://storage.googleapis.com/chrome-for-testing-public/140.0.7339.207/win32/chromedriver-win32.zip
+2025-09-30 00:39:45,679 - INFO - Driver downloading response is 200
+2025-09-30 00:40:20,709 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-30 00:40:21,378 - INFO - Driver has been saved in cache [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207]
+2025-09-30 00:56:01,566 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=930167&orgAcronyme=p8x
+2025-09-30 00:56:01,567 - INFO - Référence marché: 07./2025
+2025-09-30 00:56:01,569 - INFO - ====== WebDriver manager ======
+2025-09-30 00:56:03,455 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-30 00:56:03,846 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-30 00:56:04,161 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-30 01:15:38,074 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=930167&orgAcronyme=p8x
+2025-09-30 01:15:38,074 - INFO - Référence marché: 07./2025
+2025-09-30 01:15:38,085 - INFO - ====== WebDriver manager ======
+2025-09-30 01:15:39,749 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-30 01:15:40,178 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-30 01:15:40,483 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
+2025-09-30 01:32:19,461 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=930167&orgAcronyme=p8x
+2025-09-30 01:32:19,462 - INFO - Référence marché: 07./2025
+2025-09-30 01:32:19,475 - INFO - ====== WebDriver manager ======
+2025-09-30 01:32:21,413 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-30 01:32:21,799 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-30 01:32:22,160 - INFO - Driver [C:\Users\Haitam\.wdm\drivers\chromedriver\win64\140.0.7339.207\chromedriver-win32/chromedriver.exe] found in cache
