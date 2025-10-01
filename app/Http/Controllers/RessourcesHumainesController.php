@@ -731,14 +731,15 @@ public function storeUsers(Request $request)
             'projet_ids'      => json_encode([]),
         ]);
 
+        // Assigner automatiquement le rôle 'salarie'
+        $salarie->assignRole('salarie');
+
         $adminRole = Role::where('name', 'admin')->first();
         if ($adminRole) {
             $admins = $adminRole->users;
 
             foreach ($admins as $admin) {
                 $admin->notify(new ValidationProfileNotification($salarie));
-
-                // dd('notif envoyée');
             }
         }
 
@@ -750,7 +751,6 @@ public function storeUsers(Request $request)
         ]);
 
     } catch (\Throwable $e) {
-        
         return redirect()->back()->with('error', 'Erreur lors de la création de l\'employé.');
     }
 }

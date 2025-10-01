@@ -1,7 +1,7 @@
 import AppLayout from '@/layouts/app-layout';
 import { router } from '@inertiajs/react';
-import { ChevronDown, Clock, File, Plus, Trash2, User, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { ChevronDown, Clock, Download, FileText, FolderPlus, Plus, Trash2, User, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 interface Salarie {
     id: number;
@@ -9,7 +9,6 @@ interface Salarie {
     prenom: string;
     email: string;
     poste?: string;
-    nom_profil?: string;
 }
 
 interface Affectation {
@@ -17,13 +16,16 @@ interface Affectation {
     salarie_id: number;
     role_affectation: string;
     date_affectation: string;
+    date_limite_assignee?: string;
+    duree_estimee_affectation?: number;
+    unite_duree_affectation?: string;
+    description_affectation?: string;
     salarie?: Salarie;
 }
 
 interface Tache {
     id: number;
     nom_tache: string;
-    description?: string;
     statut: string;
     priorite: string;
     date_limite?: string;
@@ -50,24 +52,38 @@ interface Marche {
     dossiers: Dossier[];
 }
 
-interface GestionDossiersProps {
-    marche: Marche;
-    salaries: Salarie[];
-}
-
-export default function GestionDossiers({ marche, salaries }: GestionDossiersProps) {
+export default function GestionDossiers({ marche, salaries }: { marche: Marche; salaries: Salarie[] }) {
     const [expandedDossier, setExpandedDossier] = useState<number | null>(null);
     const [showNewTaskForm, setShowNewTaskForm] = useState<number | null>(null);
+    const [showNewDossierForm, setShowNewDossierForm] = useState(false);
     const [openDropdown, setOpenDropdown] = useState<number | null>(null);
     const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     const [newTask, setNewTask] = useState({
         nom_tache: '',
-        description: '',
         priorite: 'moyenne',
         date_limite: '',
     });
+
+    const [newDossier, setNewDossier] = useState({
+        type_dossier: 'administratif',
+        nom_dossier: '',
+        description: '',
+        date_limite: '',
+    });
+
+    const [affectationForm, setAffectationForm] = useState<
+        Record<
+            number,
+            {
+                date_limite_assignee: string;
+                duree_estimee: string;
+                unite_duree: 'heures' | 'jours';
+                description_affectation: string;
+            }
+        >
+    >({});
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -75,14 +91,50 @@ export default function GestionDossiers({ marche, salaries }: GestionDossiersPro
                 setOpenDropdown(null);
             }
         };
-
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    const progressionGlobale = useMemo(() => {
+        if (!marche.dossiers || marche.dossiers.length === 0) return 0;
+        const somme = marche.dossiers.reduce((acc, d) => acc + (Number(d.pourcentage_avancement) || 0), 0);
+        const moyenne = somme / marche.dossiers.length;
+        return Math.round(moyenne);
+    }, [marche.dossiers]);
+
     const showNotification = (type: 'success' | 'error', message: string) => {
         setNotification({ type, message });
         setTimeout(() => setNotification(null), 3000);
+    };
+
+    const initAffectationForm = (tacheId: number) => {
+        if (!affectationForm[tacheId]) {
+            setAffectationForm((prev) => ({
+                ...prev,
+                [tacheId]: {
+                    date_limite_assignee: '',
+                    duree_estimee: '',
+                    unite_duree: 'heures',
+                    description_affectation: '',
+                },
+            }));
+        }
+    };
+
+    const handleCreateDossier = () => {
+        if (!newDossier.nom_dossier) {
+            showNotification('error', 'Le nom du dossier est requis');
+            return;
+        }
+        router.post(`/marches-marketing/${marche.id}/dossiers`, newDossier, {
+            preserveScroll: true,
+            onSuccess: () => {
+                showNotification('success', 'Dossier créé avec succès');
+                setShowNewDossierForm(false);
+                setNewDossier({ type_dossier: 'administratif', nom_dossier: '', description: '', date_limite: '' });
+            },
+            onError: () => showNotification('error', 'Erreur lors de la création'),
+        });
     };
 
     const handleCreateTask = (dossierId: number) => {
@@ -90,25 +142,45 @@ export default function GestionDossiers({ marche, salaries }: GestionDossiersPro
             showNotification('error', 'Le nom de la tâche est requis');
             return;
         }
-
         router.post(`/marches-marketing/dossiers/${dossierId}/taches`, newTask, {
+            preserveScroll: true,
             onSuccess: () => {
                 showNotification('success', 'Tâche créée avec succès');
                 setShowNewTaskForm(null);
-                setNewTask({ nom_tache: '', description: '', priorite: 'moyenne', date_limite: '' });
+                setNewTask({ nom_tache: '', priorite: 'moyenne', date_limite: '' });
             },
             onError: () => showNotification('error', 'Erreur lors de la création'),
         });
     };
 
     const handleAffectTask = (tacheId: number, salarieId: number) => {
+        const form = affectationForm[tacheId] || {
+            date_limite_assignee: '',
+            duree_estimee: '',
+            unite_duree: 'heures',
+            description_affectation: '',
+        };
+
         router.post(
             `/marches-marketing/taches/${tacheId}/affecter`,
-            { salarie_id: salarieId, role_affectation: 'collaborateur' },
             {
+                salarie_id: salarieId,
+                role_affectation: 'collaborateur',
+                date_limite_assignee: form.date_limite_assignee || undefined,
+                duree_estimee: form.duree_estimee || undefined,
+                unite_duree: form.unite_duree,
+                description_affectation: form.description_affectation || undefined,
+            },
+            {
+                preserveScroll: true,
                 onSuccess: () => {
                     showNotification('success', 'Tâche affectée avec succès');
                     setOpenDropdown(null);
+                    setAffectationForm((prev) => {
+                        const updated = { ...prev };
+                        delete updated[tacheId];
+                        return updated;
+                    });
                 },
                 onError: () => showNotification('error', "Erreur lors de l'affectation"),
             },
@@ -117,6 +189,7 @@ export default function GestionDossiers({ marche, salaries }: GestionDossiersPro
 
     const handleDeleteAffectation = (affectationId: number) => {
         router.delete(`/marches-marketing/affectations/${affectationId}`, {
+            preserveScroll: true,
             onSuccess: () => showNotification('success', 'Affectation supprimée'),
             onError: () => showNotification('error', 'Erreur lors de la suppression'),
         });
@@ -124,11 +197,15 @@ export default function GestionDossiers({ marche, salaries }: GestionDossiersPro
 
     const handleDeleteTask = (tacheId: number) => {
         if (!confirm('Êtes-vous sûr de vouloir supprimer cette tâche ?')) return;
-
         router.delete(`/marches-marketing/taches/${tacheId}`, {
+            preserveScroll: true,
             onSuccess: () => showNotification('success', 'Tâche supprimée'),
             onError: () => showNotification('error', 'Erreur lors de la suppression'),
         });
+    };
+
+    const handleDownloadFile = (fichier: string) => {
+        window.open(`/storage/${fichier}`, '_blank');
     };
 
     const getStatutBadge = (statut: string) => {
@@ -136,7 +213,9 @@ export default function GestionDossiers({ marche, salaries }: GestionDossiersPro
             en_attente: 'bg-gray-100 text-gray-700',
             en_cours: 'bg-blue-100 text-blue-700',
             terminee: 'bg-green-100 text-green-700',
+            termine: 'bg-green-100 text-green-700',
             validee: 'bg-green-100 text-green-700',
+            valide: 'bg-green-100 text-green-700',
         };
         return styles[statut as keyof typeof styles] || 'bg-gray-100 text-gray-700';
     };
@@ -155,8 +234,10 @@ export default function GestionDossiers({ marche, salaries }: GestionDossiersPro
         return new Date(date).toLocaleDateString('fr-FR');
     };
 
-    const progressionGlobale =
-        marche.dossiers.length > 0 ? Math.round(marche.dossiers.reduce((acc, d) => acc + d.pourcentage_avancement, 0) / marche.dossiers.length) : 0;
+    const formaterDuree = (duree?: number, unite?: string): string => {
+        if (!duree) return '-';
+        return unite === 'jours' ? `${duree}j` : `${duree}h`;
+    };
 
     return (
         <AppLayout>
@@ -206,6 +287,65 @@ export default function GestionDossiers({ marche, salaries }: GestionDossiersPro
                 </div>
 
                 <div className="mx-auto max-w-7xl px-6 py-6">
+                    <div className="mb-4 flex justify-end">
+                        <button
+                            onClick={() => setShowNewDossierForm(!showNewDossierForm)}
+                            className="flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700"
+                        >
+                            <FolderPlus className="h-4 w-4" />
+                            Créer un nouveau dossier
+                        </button>
+                    </div>
+
+                    {showNewDossierForm && (
+                        <div className="mb-4 rounded-lg border bg-white p-4">
+                            <h3 className="mb-3 font-medium">Nouveau dossier</h3>
+                            <div className="grid grid-cols-2 gap-3">
+                                <select
+                                    value={newDossier.type_dossier}
+                                    onChange={(e) => setNewDossier({ ...newDossier, type_dossier: e.target.value })}
+                                    className="rounded-md border px-3 py-2 text-sm"
+                                >
+                                    <option value="administratif">Administratif</option>
+                                    <option value="technique">Technique</option>
+                                    <option value="offre_technique">Offre Technique</option>
+                                    <option value="financier">Financier</option>
+                                </select>
+                                <input
+                                    type="text"
+                                    placeholder="Nom du dossier *"
+                                    value={newDossier.nom_dossier}
+                                    onChange={(e) => setNewDossier({ ...newDossier, nom_dossier: e.target.value })}
+                                    className="rounded-md border px-3 py-2 text-sm"
+                                />
+                                <input
+                                    type="date"
+                                    value={newDossier.date_limite}
+                                    onChange={(e) => setNewDossier({ ...newDossier, date_limite: e.target.value })}
+                                    className="rounded-md border px-3 py-2 text-sm"
+                                />
+                                <input
+                                    type="text"
+                                    placeholder="Description"
+                                    value={newDossier.description}
+                                    onChange={(e) => setNewDossier({ ...newDossier, description: e.target.value })}
+                                    className="rounded-md border px-3 py-2 text-sm"
+                                />
+                            </div>
+                            <div className="mt-3 flex gap-2">
+                                <button
+                                    onClick={handleCreateDossier}
+                                    className="rounded-md bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700"
+                                >
+                                    Créer le dossier
+                                </button>
+                                <button onClick={() => setShowNewDossierForm(false)} className="rounded-md border px-4 py-2 text-sm hover:bg-gray-50">
+                                    Annuler
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="space-y-4">
                         {marche.dossiers.map((dossier) => (
                             <div key={dossier.id} className="rounded-lg border bg-white">
@@ -275,19 +415,12 @@ export default function GestionDossiers({ marche, salaries }: GestionDossiersPro
                                             <select
                                                 value={newTask.priorite}
                                                 onChange={(e) => setNewTask({ ...newTask, priorite: e.target.value })}
-                                                className="rounded-md border px-3 py-2 text-sm"
+                                                className="col-span-2 rounded-md border px-3 py-2 text-sm"
                                             >
                                                 <option value="faible">Priorité Faible</option>
                                                 <option value="moyenne">Priorité Moyenne</option>
                                                 <option value="elevee">Priorité Élevée</option>
                                             </select>
-                                            <input
-                                                type="text"
-                                                placeholder="Description"
-                                                value={newTask.description}
-                                                onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                                                className="rounded-md border px-3 py-2 text-sm"
-                                            />
                                         </div>
                                         <div className="mt-3 flex gap-2">
                                             <button
@@ -331,34 +464,52 @@ export default function GestionDossiers({ marche, salaries }: GestionDossiersPro
                                                                         {tache.statut.replace('_', ' ')}
                                                                     </span>
                                                                 </div>
-                                                                {tache.description && (
-                                                                    <p className="mt-1 text-xs text-gray-600">{tache.description}</p>
-                                                                )}
 
-                                                                <div className="mt-2 flex items-center gap-2">
+                                                                <div className="mt-2 flex flex-wrap items-center gap-2">
                                                                     {tache.affectations?.map((aff) => (
-                                                                        <div
-                                                                            key={aff.id}
-                                                                            className="flex items-center gap-1 rounded bg-blue-100 px-2 py-1 text-xs"
-                                                                        >
-                                                                            <User className="h-3 w-3" />
-                                                                            <span>
-                                                                                {aff.salarie?.prenom} {aff.salarie?.nom}
-                                                                            </span>
-                                                                            <button
-                                                                                onClick={() => handleDeleteAffectation(aff.id)}
-                                                                                className="ml-1 text-red-600 hover:text-red-700"
-                                                                            >
-                                                                                <X className="h-3 w-3" />
-                                                                            </button>
+                                                                        <div key={aff.id} className="group relative">
+                                                                            <div className="flex items-center gap-1 rounded bg-blue-100 px-2 py-1 text-xs">
+                                                                                <User className="h-3 w-3" />
+                                                                                <span>
+                                                                                    {aff.salarie?.prenom} {aff.salarie?.nom}
+                                                                                </span>
+                                                                                {(aff.duree_estimee_affectation || aff.date_limite_assignee) && (
+                                                                                    <span className="ml-1 text-blue-600">
+                                                                                        (
+                                                                                        {aff.duree_estimee_affectation &&
+                                                                                            formaterDuree(
+                                                                                                aff.duree_estimee_affectation,
+                                                                                                aff.unite_duree_affectation,
+                                                                                            )}
+                                                                                        {aff.duree_estimee_affectation &&
+                                                                                            aff.date_limite_assignee &&
+                                                                                            ' - '}
+                                                                                        {aff.date_limite_assignee &&
+                                                                                            formatDate(aff.date_limite_assignee)}
+                                                                                        )
+                                                                                    </span>
+                                                                                )}
+                                                                                <button
+                                                                                    onClick={() => handleDeleteAffectation(aff.id)}
+                                                                                    className="ml-1 text-red-600 hover:text-red-700"
+                                                                                >
+                                                                                    <X className="h-3 w-3" />
+                                                                                </button>
+                                                                            </div>
+                                                                            {aff.description_affectation && (
+                                                                                <div className="invisible absolute top-full left-0 z-10 mt-1 w-64 rounded-md border bg-white p-2 text-xs shadow-lg group-hover:visible">
+                                                                                    {aff.description_affectation}
+                                                                                </div>
+                                                                            )}
                                                                         </div>
                                                                     ))}
 
                                                                     <div className="relative" ref={openDropdown === tache.id ? dropdownRef : null}>
                                                                         <button
-                                                                            onClick={() =>
-                                                                                setOpenDropdown(openDropdown === tache.id ? null : tache.id)
-                                                                            }
+                                                                            onClick={() => {
+                                                                                initAffectationForm(tache.id);
+                                                                                setOpenDropdown(openDropdown === tache.id ? null : tache.id);
+                                                                            }}
                                                                             className="flex items-center gap-1 rounded border border-dashed px-2 py-1 text-xs hover:bg-gray-50"
                                                                         >
                                                                             + Affecter
@@ -366,7 +517,103 @@ export default function GestionDossiers({ marche, salaries }: GestionDossiersPro
                                                                         </button>
 
                                                                         {openDropdown === tache.id && (
-                                                                            <div className="absolute top-full left-0 z-10 mt-1 w-64 rounded-md border bg-white shadow-lg">
+                                                                            <div className="absolute top-full left-0 z-10 mt-1 w-96 rounded-md border bg-white shadow-lg">
+                                                                                <div className="space-y-2 border-b p-3">
+                                                                                    <div>
+                                                                                        <label className="mb-1 block text-xs font-medium text-gray-700">
+                                                                                            Date limite
+                                                                                        </label>
+                                                                                        <input
+                                                                                            type="date"
+                                                                                            value={
+                                                                                                affectationForm[tache.id]?.date_limite_assignee || ''
+                                                                                            }
+                                                                                            onChange={(e) =>
+                                                                                                setAffectationForm((prev) => ({
+                                                                                                    ...prev,
+                                                                                                    [tache.id]: {
+                                                                                                        ...prev[tache.id],
+                                                                                                        date_limite_assignee: e.target.value,
+                                                                                                    },
+                                                                                                }))
+                                                                                            }
+                                                                                            className="w-full rounded-md border px-2 py-1.5 text-xs"
+                                                                                            min={new Date().toISOString().split('T')[0]}
+                                                                                        />
+                                                                                    </div>
+                                                                                    <div className="grid grid-cols-2 gap-2">
+                                                                                        <div>
+                                                                                            <label className="mb-1 block text-xs font-medium text-gray-700">
+                                                                                                Durée estimée
+                                                                                            </label>
+                                                                                            <input
+                                                                                                type="number"
+                                                                                                step="0.5"
+                                                                                                min="0"
+                                                                                                placeholder="Durée"
+                                                                                                value={affectationForm[tache.id]?.duree_estimee || ''}
+                                                                                                onChange={(e) =>
+                                                                                                    setAffectationForm((prev) => ({
+                                                                                                        ...prev,
+                                                                                                        [tache.id]: {
+                                                                                                            ...prev[tache.id],
+                                                                                                            duree_estimee: e.target.value,
+                                                                                                        },
+                                                                                                    }))
+                                                                                                }
+                                                                                                className="w-full rounded-md border px-2 py-1.5 text-xs"
+                                                                                            />
+                                                                                        </div>
+                                                                                        <div>
+                                                                                            <label className="mb-1 block text-xs font-medium text-gray-700">
+                                                                                                Unité
+                                                                                            </label>
+                                                                                            <select
+                                                                                                value={
+                                                                                                    affectationForm[tache.id]?.unite_duree || 'heures'
+                                                                                                }
+                                                                                                onChange={(e) =>
+                                                                                                    setAffectationForm((prev) => ({
+                                                                                                        ...prev,
+                                                                                                        [tache.id]: {
+                                                                                                            ...prev[tache.id],
+                                                                                                            unite_duree: e.target.value as
+                                                                                                                | 'heures'
+                                                                                                                | 'jours',
+                                                                                                        },
+                                                                                                    }))
+                                                                                                }
+                                                                                                className="w-full rounded-md border px-2 py-1.5 text-xs"
+                                                                                            >
+                                                                                                <option value="heures">Heures</option>
+                                                                                                <option value="jours">Jours</option>
+                                                                                            </select>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div>
+                                                                                        <label className="mb-1 block text-xs font-medium text-gray-700">
+                                                                                            Instructions / Description
+                                                                                        </label>
+                                                                                        <textarea
+                                                                                            value={
+                                                                                                affectationForm[tache.id]?.description_affectation ||
+                                                                                                ''
+                                                                                            }
+                                                                                            onChange={(e) =>
+                                                                                                setAffectationForm((prev) => ({
+                                                                                                    ...prev,
+                                                                                                    [tache.id]: {
+                                                                                                        ...prev[tache.id],
+                                                                                                        description_affectation: e.target.value,
+                                                                                                    },
+                                                                                                }))
+                                                                                            }
+                                                                                            placeholder="Instructions spécifiques pour cette affectation..."
+                                                                                            className="w-full rounded-md border px-2 py-1.5 text-xs"
+                                                                                            rows={2}
+                                                                                        />
+                                                                                    </div>
+                                                                                </div>
                                                                                 <div className="max-h-60 overflow-y-auto p-1">
                                                                                     {salaries.map((salarie) => (
                                                                                         <button
@@ -397,30 +644,31 @@ export default function GestionDossiers({ marche, salaries }: GestionDossiersPro
                                                                     </div>
                                                                 )}
 
-                                                                {/* Affichage des fichiers déposés */}
                                                                 {tache.fichiers_produits && tache.fichiers_produits.length > 0 ? (
                                                                     <div className="flex flex-col gap-1">
                                                                         {tache.fichiers_produits.map((fichier, index) => {
                                                                             const nomFichier = fichier.split('/').pop() || fichier;
                                                                             return (
-                                                                                <div
+                                                                                <button
                                                                                     key={index}
-                                                                                    className="flex items-center gap-1.5 rounded-md bg-green-50 px-2.5 py-1 text-xs text-green-700"
+                                                                                    onClick={() => handleDownloadFile(fichier)}
+                                                                                    className="flex items-center gap-1.5 rounded-md bg-green-50 px-2.5 py-1 text-xs text-green-700 transition-colors hover:bg-green-100"
+                                                                                    title="Cliquer pour télécharger"
                                                                                 >
-                                                                                    <File className="h-3.5 w-3.5" />
+                                                                                    <Download className="h-3.5 w-3.5" />
                                                                                     <span
                                                                                         className="max-w-xs truncate font-medium"
                                                                                         title={nomFichier}
                                                                                     >
                                                                                         {nomFichier}
                                                                                     </span>
-                                                                                </div>
+                                                                                </button>
                                                                             );
                                                                         })}
                                                                     </div>
                                                                 ) : (
                                                                     <div className="flex items-center gap-1.5 rounded-md bg-gray-100 px-2.5 py-1 text-xs text-gray-600">
-                                                                        <X className="h-3.5 w-3.5" />
+                                                                        <FileText className="h-3.5 w-3.5" />
                                                                         <span>Aucun fichier</span>
                                                                     </div>
                                                                 )}

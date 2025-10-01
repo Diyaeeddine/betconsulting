@@ -11,7 +11,16 @@ class SalarieAuthController extends Controller
 {
     public function showLoginForm()
     {
-        return inertia('Auth/SalarieLogin');
+        // Forcer la déconnexion du guard web si actif
+        if (Auth::guard('web')->check()) {
+            Auth::guard('web')->logout();
+            request()->session()->flush();
+            request()->session()->regenerate();
+        }
+        
+        return inertia('auth/SalarieLogin', [
+            'status' => session('status'),
+        ]);
     }
 
     public function login(Request $request)
@@ -21,7 +30,6 @@ class SalarieAuthController extends Controller
             'password' => 'required',
         ]);
 
-        // Vérifier si le salarié existe et est accepté
         $salarie = \App\Models\Salarie::where('email', $credentials['email'])->first();
 
         if (!$salarie) {
@@ -42,22 +50,21 @@ class SalarieAuthController extends Controller
             ]);
         }
 
-        if (Auth::guard('salarie')->attempt($credentials, $request->boolean('remember'))) {
-            $request->session()->regenerate();
-            return redirect()->intended('/salarie/dashboard');
+        // CRITIQUE: Déconnecter le guard web avant d'authentifier
+        if (Auth::guard('web')->check()) {
+            Auth::guard('web')->logout();
         }
+        
+        // Nettoyer complètement la session
+        $request->session()->flush();
+
+        if (Auth::guard('salarie')->attempt($credentials, $request->boolean('remember'))) {
+    $request->session()->regenerate();
+    return redirect()->route('salarie.dashboard');
+}
 
         throw ValidationException::withMessages([
             'email' => 'Les identifiants fournis sont incorrects.',
         ]);
-    }
-
-    public function logout(Request $request)
-    {
-        Auth::guard('salarie')->logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
-
-        return redirect('/salarie/login');
     }
 }

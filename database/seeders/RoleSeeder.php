@@ -113,12 +113,11 @@ class RoleSeeder extends Seeder
         $fst->assignRole($roleFST);
 
         // ===== 13. Salarie (Employee role) =====
+        
         $roleSalarie = Role::firstOrCreate(['name' => 'salarie']);
 
-        // ===== MAINTENANT ASSIGNER LES PERMISSIONS AUX RÔLES =====
-        // (Toutes les permissions ont été créées dans PermissionSeeder)
-        
-        // Admin : toutes les permissions
+
+
         $roleDG->givePermissionTo(Permission::all());
         
         $roleMM->givePermissionTo(['module documentation','module marche public', 'module marche global','les marches', 'decision ao']);

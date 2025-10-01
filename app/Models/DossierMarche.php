@@ -10,6 +10,10 @@ use App\Models\TacheDossier;
 class DossierMarche extends Model
 {
     protected $table = 'dossiers_marche';
+    
+    protected $appends = ['pourcentage_avancement_numerique'];
+
+    protected $with = ['taches'];
 
     protected $fillable = [
         'marche_id',
@@ -39,38 +43,67 @@ class DossierMarche extends Model
         return $this->belongsTo(MarchePublic::class, 'marche_id');
     }
 
-public function taches(): HasMany
-{
-    return $this->hasMany(TacheDossier::class, 'dossier_marche_id')
-                ->orderBy('ordre');
-}
-
-public function calculerAvancement()
-{
-    $this->refresh();
-    $this->load('taches');
-    
-    $totalTaches = $this->taches->count();
-    
-    if ($totalTaches === 0) {
-        $this->update(['pourcentage_avancement' => 0]);
-        return 0;
+    public function taches(): HasMany
+    {
+        return $this->hasMany(TacheDossier::class, 'dossier_marche_id')
+                    ->orderBy('ordre');
     }
 
-    $tachesTerminees = $this->taches
+    // ✅ CORRECTION : Calcul de l'avancement + mise à jour automatique du statut
+    public function calculerAvancement()
+{
+    $totalTaches = $this->taches()->count();
+    
+    if ($totalTaches === 0) {
+        $this->update([
+            'pourcentage_avancement' => 0.00,
+            'statut' => 'en_attente'
+        ]);
+        return 0.00;
+    }
+
+    $tachesTerminees = $this->taches()
         ->whereIn('statut', ['terminee', 'validee'])
         ->count();
     
     $pourcentage = round(($tachesTerminees / $totalTaches) * 100, 2);
     
-    $this->update(['pourcentage_avancement' => $pourcentage]);
+    $nouveauStatut = $this->determinerStatut($pourcentage, $totalTaches, $tachesTerminees);
     
-    return $pourcentage;
+    $this->update([
+        'pourcentage_avancement' => (float) $pourcentage,
+        'statut' => $nouveauStatut,
+        'date_finalisation' => ($nouveauStatut === 'termine') ? now() : $this->date_finalisation
+    ]);
+    
+    return (float) $pourcentage;
 }
+    // ✅ Logique pour déterminer le statut du dossier
+    private function determinerStatut($pourcentage, $totalTaches, $tachesTerminees)
+    {
+        // Si toutes les tâches sont terminées
+        if ($tachesTerminees === $totalTaches && $totalTaches > 0) {
+            return 'termine';
+        }
+        
+        // Si au moins une tâche est en cours
+        $tachesEnCours = $this->taches()->where('statut', 'en_cours')->count();
+        if ($tachesEnCours > 0) {
+            return 'en_cours';
+        }
+        
+        // Si des tâches sont terminées mais pas toutes
+        if ($tachesTerminees > 0 && $tachesTerminees < $totalTaches) {
+            return 'en_cours';
+        }
+        
+        // Sinon, en attente
+        return 'en_attente';
+    }
 
+    // ✅ Méthode pour générer les tâches par défaut
     public function genererTachesParDefaut()
     {
-        // Tâches par défaut selon le type de dossier
         $tachesParDefaut = [
             'administratif' => [
                 'Vérifier les documents légaux',
@@ -110,4 +143,11 @@ public function calculerAvancement()
             ]);
         }
     }
+
+public function getPourcentageAvancementNumeriqueAttribute()
+{
+    return (float) $this->pourcentage_avancement;
+}
+
+    
 }

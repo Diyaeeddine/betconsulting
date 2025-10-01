@@ -502,11 +502,11 @@ export default function AosSelectionne({ marcheS }: AosSelectionneProps) {
                                                             type="file"
                                                             multiple
                                                             className="sr-only"
-                                                            accept=".pdf,.zip,.rar"
+                                                            accept=".pdf,.zip"
                                                             onChange={handleFileSelect}
                                                         />
                                                     </label>
-                                                    <p className="mt-1 text-xs text-gray-500">PDF, ZIP, RAR jusqu'à 10MB chacun</p>
+                                                    <p className="mt-1 text-xs text-gray-500">PDF, ZIP jusqu'à 10MB chacun</p>
                                                 </div>
                                             </div>
 

@@ -29,12 +29,43 @@ use App\Notifications\MarcheDecisionNotification;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Broadcast;
 use App\Http\Controllers\Auth\SalarieAuthController;
-
+use App\Http\Controllers\Auth\UniversalLogoutController;
 use Illuminate\Http\Request;
 //use ZipArchive;
 
+
+
+Route::prefix('salarie')->name('salarie.')->group(function () {
+    Route::middleware('guest.salarie')->group(function () {
+        Route::get('login', [SalarieAuthController::class, 'showLoginForm'])
+            ->name('login');
+        Route::post('login', [SalarieAuthController::class, 'login']);
+    });
+    
+    Route::middleware('auth:salarie')->group(function () {
+        Route::get('dashboard', function () {
+            return inertia('salarie/Dashboard');
+        })->name('dashboard');
+    });
+});
+
+Route::middleware(['auth:salarie'])->group(function () {
+    // Route::get('/dashboard', [SalarieController::class, 'index'])->name('dashboard');
+    Route::get('/salarie/marches/taches', [SalarieController::class, 'mesTachesMarches'])->name('salarie.marches.taches');
+    Route::post('/salarie/marches/taches/{tacheId}/upload', [SalarieController::class, 'uploadFichiersTache'])->name('salarie.marches.taches.upload');
+    Route::post('/salarie/marches/taches/{tacheId}/terminer', [SalarieController::class, 'marquerTacheTerminee'])->name('salarie.marches.taches.terminer');
+    Route::get('/salarie/marches/taches/{tacheId}/telecharger', [SalarieController::class, 'telechargerFichierTache'])->name('salarie.marches.taches.telecharger');
+});
+
+
 Route::get('/', function () {
-    $user = auth()->user();
+    // Vérifier d'abord le guard salarie
+    if (Auth::guard('salarie')->check()) {
+        return redirect()->route('salarie.dashboard');
+    }
+    
+    // Ensuite vérifier le guard web
+    $user = Auth::guard('web')->user();
 
     if (!$user) {
         return redirect()->route('login');
@@ -57,7 +88,6 @@ Route::get('/', function () {
         default => redirect()->route('login'),
     };
 })->name('home');
-
 // Route::get('/dashboard', function () {
 //     return Inertia::render('dashboard', [
 //         'auth' => [
@@ -79,7 +109,6 @@ Route::middleware(['auth', 'verified', 'role:admin'])->group(function () {
         ->name('direction-generale.boiteDecisionProfile');
     Route::post('/direction-generale/profile-decision/{salarie}', [DirectionGeneraleController::class, 'handleProfileDecision'])
     ->name('direction-generale.handleProfileDecision');
-    // Routes pour les actions sur les marchés
     Route::post('/direction-generale/marche/{id}/accepter', [DirectionGeneraleController::class, 'accepterMarche'])
         ->name('direction-generale.accepter-marche');
     
@@ -148,6 +177,9 @@ Route::middleware(['auth', 'verified', 'role:marches-marketing'])->group(functio
     Route::get('/marches-marketing/{marche}/dossiers', [SharedController::class, 'afficherDossiers'])
         ->name('marches.dossiers');
 
+    Route::post('/marches-marketing/{marche}/dossiers', [SharedController::class, 'creerDossier'])
+        ->name('dossiers.create');
+
     Route::post('/marches-marketing/dossiers/{dossier}/taches', [SharedController::class, 'creerTache'])
         ->name('dossiers.taches.create');
 
@@ -157,41 +189,17 @@ Route::middleware(['auth', 'verified', 'role:marches-marketing'])->group(functio
     Route::delete('/marches-marketing/taches/{tache}/fichiers', [SharedController::class, 'supprimerFichier'])
         ->name('taches.fichiers.delete');
 
-Route::post('/marches-marketing/taches/{tache}/affecter', [SharedController::class, 'affecterTache'])
-    ->name('taches.affecter');
+    Route::post('/marches-marketing/taches/{tache}/affecter', [SharedController::class, 'affecterTache'])
+        ->name('taches.affecter');
 
-Route::delete('/marches-marketing/affectations/{affectation}', [SharedController::class, 'supprimerAffectation'])
-    ->name('affectations.delete');
+    Route::delete('/marches-marketing/affectations/{affectation}', [SharedController::class, 'supprimerAffectation'])
+        ->name('affectations.delete');
 
-Route::patch('/marches-marketing/taches/{tache}/statut', [SharedController::class, 'mettreAJourStatutTache'])
-    ->name('taches.update-statut');
+    Route::patch('/marches-marketing/taches/{tache}/statut', [SharedController::class, 'mettreAJourStatutTache'])
+        ->name('taches.update-statut');
 
-Route::delete('/marches-marketing/taches/{tache}', [SharedController::class, 'supprimerTache'])
-    ->name('taches.delete');
-// Dans web.php
-Route::get('/debug/marche/{marche}', function($marcheId) {
-    $marche = MarchePublic::with('dossiers.taches')->findOrFail($marcheId);
-    
-    return response()->json([
-        'marche_id' => $marche->id,
-        'nombre_dossiers' => $marche->dossiers->count(),
-        'dossiers' => $marche->dossiers->map(function($d) {
-            return [
-                'id' => $d->id,
-                'nom' => $d->nom_dossier,
-                'type' => $d->type_dossier,
-                'nombre_taches' => $d->taches->count(),
-                'taches' => $d->taches->map(function($t) {
-                    return [
-                        'id' => $t->id,
-                        'nom' => $t->nom_tache,
-                        'statut' => $t->statut
-                    ];
-                })
-            ];
-        })
-    ]);
-});
+    Route::delete('/marches-marketing/taches/{tache}', [SharedController::class, 'supprimerTache'])
+        ->name('taches.delete');
 });
 
 Route::middleware(['auth', 'permission:module documentation'])
@@ -454,11 +462,11 @@ Route::middleware(['auth', 'verified', 'role:suivi-controle'])->group(function (
 
 
 
-// Salarie
-Route::middleware(['auth', 'verified', 'role:salarie'])->group(function () {
-    Route::get('/salarie/dashboard', [SuiviControleController::class, 'index'])
-        ->name('dashboard.salarie');
-});
+// // Salarie
+// Route::middleware(['auth', 'verified', 'role:salarie'])->group(function () {
+//     Route::get('/salarie/dashboard', [SalarieController::class, 'index'])
+//         ->name('salarie.dashboard');
+// });
 
 Route::get('/dashboard', function () {
     $user = auth()->user();
@@ -475,7 +483,7 @@ Route::get('/dashboard', function () {
         $user->hasRole('qualite-audit') => redirect()->route('dashboard.qualite-audit'),
         $user->hasRole('ressources-humaines') => redirect()->route('dashboard.ressources-humaines'),
         $user->hasRole('suivi-controle') => redirect()->route('dashboard.suivi-controle'),
-        $user->hasRole('salarie') => redirect()->route('dashboard.salarie'),
+        $user->hasRole('salarie') => redirect()->route('salarie.dashboard'),
 
         default => redirect('/'),
     };
@@ -566,27 +574,7 @@ Route::get('/test-pusher', function () {
     ]);
 });
 
-Route::prefix('salarie')->name('salarie.')->group(function () {
-    Route::middleware('guest:salarie')->group(function () {
-        Route::get('login', [SalarieAuthController::class, 'showLoginForm'])
-            ->name('login');
-        Route::post('/login', [SalarieAuthController::class, 'login']);
-    });
 
-    Route::middleware('auth:salarie')->group(function () {
-        Route::post('/logout', [SalarieAuthController::class, 'logout'])
-            ->name('logout');
-        
-        // Dashboard et autres pages
-        Route::get('/dashboard', function () {
-            return inertia('Salarie/Dashboard', [
-                'salarie' => Auth::guard('salarie')->user()
-            ]);
-        })->name('dashboard');
-
-        // Vos autres routes salariés ici
-    });
-});
 
 // Broadcast::routes();
 

@@ -298,81 +298,56 @@ public function acceptIMP(Request $request, $id)
             'statut' => 'en_preparation'
         ]);
 
-        // Gérer les fichiers d'offre financière
-        $fichiersChemins = [];
-        
-        if ($request->hasFile('offre_financiere')) {
-            foreach ($request->file('offre_financiere') as $index => $file) {
-                $originalName = $file->getClientOriginalName();
-                $fileName = time() . '_' . $index . '_' . Str::random(10) . '.' . $file->getClientOriginalExtension();
-                
-                $path = $file->storeAs(
-                    'offres_financieres/' . $marche->id, 
-                    $fileName, 
-                    'public'
-                );
-                
-                $fichiersChemins[] = [
-                    'nom_original' => $originalName,
-                    'nom_fichier' => $fileName,
-                    'chemin' => $path,
-                    'taille' => $file->getSize(),
-                    'type' => $file->getMimeType(),
-                    'date_upload' => now()->toISOString(),
-                    'uploaded_by' => Auth::user()->id
-                ];
-            }
-        }
-
-        // ✅ CORRECTION : Créer le dossier financier avec les fichiers ET les tâches par défaut
+        // Créer le dossier financier
         $dossierFinancier = DossierMarche::create([
             'marche_id' => $marche->id,
             'type_dossier' => 'financier',
             'nom_dossier' => 'Offre Financière',
             'description' => 'Dossier d\'offre financière pour le marché ' . $marche->reference,
-            'statut' => 'en_cours', // ✅ En cours car des fichiers ont été uploadés
-            'pourcentage_avancement' => 0, // ✅ 0 car les tâches ne sont pas encore créées
+            'statut' => 'en_cours',
             'date_creation' => now(),
             'date_limite' => $marche->date_limite_soumission,
-            'fichiers_joints' => json_encode($fichiersChemins),
-            'commentaires' => 'Offre financière soumise par ' . Auth::user()->name
         ]);
 
-        // ✅ Créer immédiatement les tâches du dossier financier
-        $tachesFinancieres = [
-            ['nom' => 'Acte d\'engagement', 'duree' => 2],
-            ['nom' => 'Bordereau des prix global', 'duree' => 8],
-            ['nom' => 'Détail estimatif (BPU)', 'duree' => 12]
-        ];
-
-        foreach ($tachesFinancieres as $index => $tacheData) {
-            TacheDossier::create([
-                'dossier_marche_id' => $dossierFinancier->id,
-                'nom_tache' => $tacheData['nom'],
-                'priorite' => 'moyenne',
-                'statut' => 'en_attente',
-                'ordre' => $index + 1,
-                'duree_estimee' => $tacheData['duree']
-            ]);
+        $fichiersChemins = [];
+        $tachesCreees = 0;
+        
+        if ($request->hasFile('offre_financiere')) {
+            foreach ($request->file('offre_financiere') as $file) {
+                $extension = strtolower($file->getClientOriginalExtension());
+                
+                // Si c'est un ZIP ou RAR, extraire les fichiers
+                if (in_array($extension, ['zip', 'rar'])) {
+                    $tachesCreees += $this->traiterFichierArchive($file, $dossierFinancier, $marche->id, $fichiersChemins);
+                } 
+                // Sinon, traiter comme fichier simple
+                else {
+                    $tachesCreees += $this->traiterFichierSimple($file, $dossierFinancier, $marche->id, $fichiersChemins);
+                }
+            }
         }
 
-        // Mettre à jour chemin_fichiers du marché
-        $existingFiles = $marche->chemin_fichiers ? json_decode($marche->chemin_fichiers, true) : [];
-        $newFiles = array_column($fichiersChemins, 'chemin');
-        $allFiles = array_merge($existingFiles, $newFiles);
-        
-        $marche->update([
-            'chemin_fichiers' => json_encode($allFiles)
+        // Mettre à jour fichiers_joints du dossier
+        $dossierFinancier->update([
+            'fichiers_joints' => json_encode($fichiersChemins)
         ]);
+
+        // Mettre à jour chemin_fichiers du marché
+        $existingFiles = $marche->chemin_fichiers ?? [];
+        $newFiles = array_column($fichiersChemins, 'chemin');
+        $marche->update([
+            'chemin_fichiers' => json_encode(array_merge($existingFiles, $newFiles))
+        ]);
+
+        // Recalculer l'avancement
+        $dossierFinancier->refresh();
+        $dossierFinancier->calculerAvancement();
 
         // Notifications admins
         try {
             $adminRole = Role::where('name', 'admin')->first();
-            
             if ($adminRole) {
-                $admins = $adminRole->users;
-                
-                foreach ($admins as $admin) {
+                foreach ($adminRole->users as $admin) {
                     $admin->notify(new MarcheDecisionNotification($marche, Auth::user(), $admin->id));
                 }
             }
@@ -383,21 +358,193 @@ public function acceptIMP(Request $request, $id)
         DB::commit();
 
         return redirect()->back()->with('success', 
-            'Marché accepté avec succès ! Votre offre financière (' . count($fichiersChemins) . ' fichier(s)) a été transmise pour décision administrative.'
+            "Marché accepté avec succès ! {$tachesCreees} tâche(s) créée(s) automatiquement depuis vos fichiers."
         );
 
     } catch (Exception $e) {
         DB::rollback();
         
+        // Nettoyer les fichiers en cas d'erreur
         if (!empty($fichiersChemins)) {
             foreach ($fichiersChemins as $fichier) {
                 Storage::disk('public')->delete($fichier['chemin']);
             }
         }
         
-        return redirect()->back()->with('error', 'Erreur lors de l\'acceptation du marché: ' . $e->getMessage());
+        return redirect()->back()->with('error', 'Erreur lors de l\'acceptation: ' . $e->getMessage());
     }
 }
+
+/**
+ * Traiter un fichier archive (ZIP/RAR)
+ */
+private function traiterFichierArchive($file, $dossierFinancier, $marcheId, &$fichiersChemins)
+{
+    $tachesCreees = 0;
+    $extension = strtolower($file->getClientOriginalExtension());
+    
+    // Stocker temporairement l'archive
+    $archivePath = $file->store('temp', 'public');
+    $fullArchivePath = storage_path('app/public/' . $archivePath);
+    $extractPath = storage_path('app/public/temp/extract_' . time() . '_' . Str::random(8));
+    
+    // Créer le dossier d'extraction
+    if (!file_exists($extractPath)) {
+        mkdir($extractPath, 0755, true);
+    }
+
+    try {
+        if ($extension === 'zip') {
+            // Extraction ZIP
+            $zip = new \ZipArchive();
+            if ($zip->open($fullArchivePath) === true) {
+                $zip->extractTo($extractPath);
+                $zip->close();
+            } else {
+                throw new \Exception('Impossible d\'ouvrir le fichier ZIP');
+            }
+        } 
+        elseif ($extension === 'rar') {
+            // Extraction RAR (nécessite l'extension PHP rar)
+            if (!extension_loaded('rar')) {
+                // Si l'extension RAR n'est pas disponible, traiter comme fichier simple
+                return $this->traiterFichierSimple($file, $dossierFinancier, $marcheId, $fichiersChemins);
+            }
+            
+            $rar = \RarArchive::open($fullArchivePath);
+            if ($rar) {
+                $entries = $rar->getEntries();
+                foreach ($entries as $entry) {
+                    $entry->extract($extractPath);
+                }
+                $rar->close();
+            }
+        }
+
+        // Scanner tous les fichiers extraits
+        $files = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($extractPath, \RecursiveDirectoryIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::LEAVES_ONLY
+        );
+
+        $ordre = 1;
+        foreach ($files as $extractedFile) {
+            if (!$extractedFile->isFile()) continue;
+            
+            $nomFichier = $extractedFile->getFilename();
+            
+            // Ignorer les fichiers système et cachés
+            if (strpos($nomFichier, '.') === 0 || 
+                strpos($nomFichier, '__MACOSX') !== false ||
+                strpos($nomFichier, 'Thumbs.db') !== false) {
+                continue;
+            }
+
+            // Déplacer vers le dossier final
+            $finalFileName = time() . '_' . $ordre . '_' . Str::slug(pathinfo($nomFichier, PATHINFO_FILENAME)) . '.' . pathinfo($nomFichier, PATHINFO_EXTENSION);
+            $finalPath = 'offres_financieres/' . $marcheId . '/' . $finalFileName;
+            
+            Storage::disk('public')->put($finalPath, file_get_contents($extractedFile->getRealPath()));
+
+            $fichiersChemins[] = [
+                'nom_original' => $nomFichier,
+                'nom_fichier' => $finalFileName,
+                'chemin' => $finalPath,
+                'taille' => $extractedFile->getSize(),
+                'type' => mime_content_type($extractedFile->getRealPath()),
+                'date_upload' => now()->toISOString(),
+                'uploaded_by' => Auth::id()
+            ];
+
+            // Créer une tâche pour ce fichier
+            $nomTache = pathinfo($nomFichier, PATHINFO_FILENAME);
+            
+            TacheDossier::create([
+                'dossier_marche_id' => $dossierFinancier->id,
+                'nom_tache' => $nomTache,
+                'statut' => 'terminee',
+                'priorite' => 'moyenne',
+                'ordre' => $ordre,
+                'date_debut' => now(),
+                'date_fin' => now(),
+                'fichiers_produits' => [$finalPath]
+            ]);
+
+            $tachesCreees++;
+            $ordre++;
+        }
+
+        // Nettoyer les fichiers temporaires
+        if (file_exists($extractPath)) {
+            $this->deleteDirectory($extractPath);
+        }
+        Storage::disk('public')->delete($archivePath);
+
+    } catch (\Exception $e) {
+        // En cas d'erreur, nettoyer et traiter comme fichier simple
+        Log::error('Erreur extraction archive: ' . $e->getMessage());
+        
+        if (file_exists($extractPath)) {
+            $this->deleteDirectory($extractPath);
+        }
+        Storage::disk('public')->delete($archivePath);
+        
+        return $this->traiterFichierSimple($file, $dossierFinancier, $marcheId, $fichiersChemins);
+    }
+
+    return $tachesCreees;
+}
+
+
+private function traiterFichierSimple($file, $dossierFinancier, $marcheId, &$fichiersChemins)
+{
+    $nomOriginal = $file->getClientOriginalName();
+    $nomFichier = time() . '_' . Str::random(10) . '.' . $file->getClientOriginalExtension();
+    
+    $path = $file->storeAs('offres_financieres/' . $marcheId, $nomFichier, 'public');
+    
+    $fichiersChemins[] = [
+        'nom_original' => $nomOriginal,
+        'nom_fichier' => $nomFichier,
+        'chemin' => $path,
+        'taille' => $file->getSize(),
+        'type' => $file->getMimeType(),
+        'date_upload' => now()->toISOString(),
+        'uploaded_by' => Auth::id()
+    ];
+    
+    // Créer une tâche avec le nom du fichier
+    $nomTache = pathinfo($nomOriginal, PATHINFO_FILENAME);
+    
+    TacheDossier::create([
+        'dossier_marche_id' => $dossierFinancier->id,
+        'nom_tache' => $nomTache,
+        'statut' => 'terminee',
+        'priorite' => 'moyenne',
+        'ordre' => 1,
+        'date_debut' => now(),
+        'date_fin' => now(),
+        'fichiers_produits' => [$path]
+    ]);
+    
+    return 1;
+}
+
+/**
+ * Supprimer un répertoire récursivement
+ */
+private function deleteDirectory($dir)
+{
+    if (!file_exists($dir)) return;
+    
+    $files = array_diff(scandir($dir), ['.', '..']);
+    foreach ($files as $file) {
+        $path = $dir . '/' . $file;
+        is_dir($path) ? $this->deleteDirectory($path) : unlink($path);
+    }
+    rmdir($dir);
+}
+
 
 public function annulerMP(Request $request, $id)
 {
@@ -475,69 +622,101 @@ public function aosSelectionnes(){
     }
 
 public function afficherDossiers($marcheId)
-{
-    $marche = MarchePublic::with([
+    {
+        $marche = MarchePublic::with([
         'dossiers' => function($query) {
             $query->with('taches.affectations.salarie');
         }
-    ])->findOrFail($marcheId);
+        ])->findOrFail($marcheId);
 
-    // ✅ Vérifier si les 4 types de dossiers standard existent
-    $typesRequis = ['administratif', 'technique', 'offre_technique', 'financier'];
-    $typesExistants = $marche->dossiers->pluck('type_dossier')->toArray();
-    $typesManquants = array_diff($typesRequis, $typesExistants);
+        // ✅ Vérifier si les 4 types de dossiers standard existent
+        $typesRequis = ['administratif', 'technique', 'offre_technique', 'financier'];
+        $typesExistants = $marche->dossiers->pluck('type_dossier')->toArray();
+        $typesManquants = array_diff($typesRequis, $typesExistants);
 
-    // Créer uniquement les dossiers manquants
-    if (!empty($typesManquants)) {
-        $this->creerDossiersManquants($marche, $typesManquants);
-        $marche->refresh();
-    }
-
-    // ✅ CORRECTION : Créer les tâches UNIQUEMENT pour les dossiers qui n'en ont pas
-    foreach ($marche->dossiers as $dossier) {
-        if ($dossier->taches->isEmpty()) {
-            $this->creerTachesParDefaut($dossier);
+        // Créer uniquement les dossiers manquants
+        if (!empty($typesManquants)) {
+            $this->creerDossiersManquants($marche, $typesManquants);
+            $marche->refresh();
         }
+
+        // ✅ Créer les tâches UNIQUEMENT pour les dossiers qui n'en ont pas
+        foreach ($marche->dossiers as $dossier) {
+            if ($dossier->taches->isEmpty()) {
+                $this->creerTachesParDefaut($dossier);
+            }
+        }
+
+        // ✅ CRITIQUE : Recalculer l'avancement de TOUS les dossiers
+        foreach ($marche->dossiers as $dossier) {
+            $dossier->calculerAvancement();
+        }
+
+        // Recharger avec toutes les relations
+        $marche->refresh()->load('dossiers.taches.affectations.salarie');
+
+        $salariesMarkeeting = Salarie::where('nom_profil', 'marche_marketing')
+            ->where('statut', 'actif')
+            ->select('id', 'nom', 'prenom', 'email', 'poste')
+            ->get();
+
+        return Inertia::render('marches-marketing/GestionDossiers', [
+            'marche' => $marche,
+            'salaries' => $salariesMarkeeting,
+        ]);
+    }
+public function creerDossier(Request $request, $marcheId)
+    {
+        $validated = $request->validate([
+            'type_dossier' => 'required|in:administratif,technique,offre_technique,financier',
+            'nom_dossier' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'date_limite' => 'nullable|date'
+        ]);
+
+        $marche = MarchePublic::findOrFail($marcheId);
+
+        $dossier = DossierMarche::create([
+            'marche_id' => $marcheId,
+            'type_dossier' => $validated['type_dossier'],
+            'nom_dossier' => $validated['nom_dossier'],
+            'description' => $validated['description'] ?? null,
+            'statut' => 'en_attente',
+            'pourcentage_avancement' => 0,
+            'date_limite' => $validated['date_limite'] ?? $marche->date_limite_soumission,
+            'date_creation' => now()
+        ]);
+
+        // Créer les tâches par défaut selon le type
+        $this->creerTachesParDefaut($dossier);
+
+        return back()->with('success', 'Dossier créé avec succès');
     }
 
-    // Recharger avec toutes les relations
-    $marche->refresh()->load('dossiers.taches.affectations.salarie');
-
-    $salariesMarkeeting = Salarie::where('nom_profil', 'marche_marketing')
-        ->where('statut', 'actif')
-        ->select('id', 'nom', 'prenom', 'email', 'poste')
-        ->get();
-
-    return Inertia::render('marches-marketing/GestionDossiers', [
-        'marche' => $marche,
-        'salaries' => $salariesMarkeeting,
-    ]);
-}
-
-// ✅ Créer seulement les dossiers manquants
 private function creerDossiersManquants($marche, $typesManquants)
-{
-    $dossiersConfig = [
-        'administratif' => 'Dossier Administratif',
-        'technique' => 'Dossier Technique',
-        'offre_technique' => 'Offre Technique',
-        'financier' => 'Offre Financière'
-    ];
+    {
+        $dossiersConfig = [
+            'administratif' => 'Dossier Administratif',
+            'technique' => 'Dossier Technique',
+            'offre_technique' => 'Offre Technique',
+            'financier' => 'Offre Financière'
+        ];
 
-    foreach ($typesManquants as $type) {
-        if (isset($dossiersConfig[$type])) {
-            DossierMarche::create([
-                'marche_id' => $marche->id,
-                'type_dossier' => $type,
-                'nom_dossier' => $dossiersConfig[$type],
-                'statut' => 'en_attente',
-                'pourcentage_avancement' => 0,
-                'date_limite' => $marche->date_limite_soumission,
-                'date_creation' => now()
-            ]);
+        foreach ($typesManquants as $type) {
+            if (isset($dossiersConfig[$type])) {
+                DossierMarche::create([
+                    'marche_id' => $marche->id,
+                    'type_dossier' => $type,
+                    'nom_dossier' => $dossiersConfig[$type],
+                    'statut' => 'en_attente',
+                    'pourcentage_avancement' => 0,
+                    'date_limite' => $marche->date_limite_soumission,
+                    'date_creation' => now()
+                ]);
+            }
         }
     }
-}
+
 
 // ✅ CORRECTION : Tâches exactes selon votre documentation
 private function creerTachesParDefaut($dossier)
@@ -582,41 +761,38 @@ private function creerTachesParDefaut($dossier)
             'priorite' => 'moyenne',
             'statut' => 'en_attente',
             'ordre' => $index + 1,
-            'duree_estimee' => $tacheData['duree']
+            'duree_estimee' => $tacheData['duree'] // ✅ Déjà en heures
         ]);
     }
 }
-
-
-    // Créer une nouvelle tâche
     public function creerTache(Request $request, $dossierId)
-    {
-        $validated = $request->validate([
-            'nom_tache' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'priorite' => 'required|in:faible,moyenne,elevee',
-            'date_limite' => 'nullable|date'
-        ]);
+{
+    $validated = $request->validate([
+        'nom_tache' => 'required|string|max:255',
+        'description' => 'nullable|string',
+        'priorite' => 'required|in:faible,moyenne,elevee',
+        'date_limite' => 'nullable|date',
+        'duree_estimee' => 'nullable|numeric|min:0|max:999.99' // ✅ Nouveau champ
+    ]);
 
-        $dossier = DossierMarche::findOrFail($dossierId);
+    $dossier = DossierMarche::findOrFail($dossierId);
 
-        $tache = TacheDossier::create([
-            'dossier_marche_id' => $dossierId,
-            'nom_tache' => $validated['nom_tache'],
-            'description' => $validated['description'] ?? null,
-            'priorite' => $validated['priorite'],
-            'statut' => 'en_attente',
-            'date_limite' => $validated['date_limite'] ?? null,
-            'ordre' => $dossier->taches()->count() + 1
-        ]);
-         $dossier = DossierMarche::find($tache->dossier_marche_id);
-        $dossier->refresh();
-        $dossier->calculerAvancement();
+    TacheDossier::create([
+        'dossier_marche_id' => $dossierId,
+        'nom_tache' => $validated['nom_tache'],
+        'description' => $validated['description'] ?? null,
+        'priorite' => $validated['priorite'],
+        'statut' => 'en_attente',
+        'date_limite' => $validated['date_limite'] ?? null,
+        'duree_estimee' => $validated['duree_estimee'] ?? null, // ✅ Stocke en heures
+        'ordre' => $dossier->taches()->count() + 1
+    ]);
 
-        return back()->with('success', 'Tâche créée avec succès');
-    }
+    $dossier->refresh();
+    $dossier->calculerAvancement();
 
-    // Upload de fichiers pour une tâche
+    return back()->with('success', 'Tâche créée avec succès');
+}
     public function uploadFichiers(Request $request, $tacheId)
     {
         $request->validate([
@@ -634,52 +810,27 @@ private function creerTachesParDefaut($dossier)
 
         $tache->update([
             'fichiers_produits' => $fichiersProduits,
-            'statut' => 'en_cours' // Automatiquement passer en "en_cours" lors de l'upload
+            'statut' => 'en_cours'
         ]);
 
-        // Recalculer l'avancement du dossier
-        // $tache->dossier->calculerAvancement();
         $dossier = DossierMarche::find($tache->dossier_marche_id);
         $dossier->refresh();
         $dossier->calculerAvancement();
+
         return back()->with('success', 'Fichier(s) téléchargé(s) avec succès');
     }
 
-    // Supprimer un fichier
-    public function supprimerFichier(Request $request, $tacheId)
-    {
-        $request->validate([
-            'fichier' => 'required|string'
-        ]);
-
-        $tache = TacheDossier::findOrFail($tacheId);
-        $fichiersProduits = $tache->fichiers_produits ?? [];
-
-        // Supprimer du stockage
-        Storage::disk('public')->delete($request->fichier);
-
-        // Retirer du tableau
-        $fichiersProduits = array_filter($fichiersProduits, fn($f) => $f !== $request->fichier);
-
-        $tache->update([
-            'fichiers_produits' => array_values($fichiersProduits)
-        ]);
-
-        return back()->with('success', 'Fichier supprimé');
-    }
-
-    // Affecter une tâche à un salarié
-    public function affecterTache(Request $request, $tacheId)
+public function affecterTache(Request $request, $tacheId)
 {
     $validated = $request->validate([
         'salarie_id' => 'required|exists:salaries,id',
         'role_affectation' => 'nullable|string',
-        'duree_assignee' => 'nullable|numeric|min:0.5' // Durée en heures
+        'date_limite_assignee' => 'nullable|date|after_or_equal:today'
     ]);
 
     $tache = TacheDossier::findOrFail($tacheId);
 
-    // Vérifier si déjà affecté
+    // Vérifier si le salarié est déjà affecté activement
     $existant = AffectationTache::where('tache_dossier_id', $tacheId)
         ->where('salarie_id', $validated['salarie_id'])
         ->where('statut_affectation', 'active')
@@ -689,33 +840,25 @@ private function creerTachesParDefaut($dossier)
         return back()->with('error', 'Ce salarié est déjà affecté à cette tâche');
     }
 
-    // Calculer date limite assignée basée sur la durée
-    $dateLimiteAssignee = null;
-    if (isset($validated['duree_assignee'])) {
-        $heures = $validated['duree_assignee'];
-        $jours = ceil($heures / 8); // 8h par jour
-        $dateLimiteAssignee = now()->addDays($jours);
-    } elseif ($tache->duree_estimee) {
-        $jours = ceil($tache->duree_estimee / 8);
-        $dateLimiteAssignee = now()->addDays($jours);
-    }
-
+    // Création de l’affectation
     AffectationTache::create([
-        'tache_dossier_id' => $tacheId,
-        'salarie_id' => $validated['salarie_id'],
-        'role_affectation' => $validated['role_affectation'] ?? 'collaborateur',
-        'date_affectation' => now(),
-        'date_limite_assignee' => $dateLimiteAssignee,
+        'tache_dossier_id'   => $tacheId,
+        'salarie_id'         => $validated['salarie_id'],
+        'role_affectation'   => $validated['role_affectation'] ?? 'collaborateur',
+        'date_affectation'   => now(),
+        'date_limite_assignee' => $validated['date_limite_assignee'] ?? null,
         'statut_affectation' => 'active'
     ]);
 
-    // Mettre à jour le statut de la tâche
+    // Si la tâche était en attente → la passer en cours
     if ($tache->statut === 'en_attente') {
         $tache->update([
-            'statut' => 'en_cours',
+            'statut'     => 'en_cours',
             'date_debut' => now()
         ]);
     }
+
+    // Mise à jour du dossier et recalcul de l’avancement
     $dossier = DossierMarche::find($tache->dossier_marche_id);
     $dossier->refresh();
     $dossier->calculerAvancement();
@@ -723,77 +866,76 @@ private function creerTachesParDefaut($dossier)
     return back()->with('success', 'Tâche affectée avec succès');
 }
 
-    // Supprimer une affectation
+
     public function supprimerAffectation($affectationId)
-{
-    $affectation = AffectationTache::findOrFail($affectationId);
-    $tache = $affectation->tache;
-    
-    $affectation->delete();
-    
-    // Si plus aucune affectation active, remettre en attente
-    $affectationsRestantes = $tache->affectations()
-        ->where('statut_affectation', 'active')
-        ->count();
-    
-    if ($affectationsRestantes === 0) {
-        $tache->update([
-            'statut' => 'en_attente',
-            'date_debut' => null
+    {
+        $affectation = AffectationTache::findOrFail($affectationId);
+        $tache = $affectation->tache;
+        
+        $affectation->delete();
+        
+        $affectationsRestantes = $tache->affectations()
+            ->where('statut_affectation', 'active')
+            ->count();
+        
+        if ($affectationsRestantes === 0) {
+            $tache->update([
+                'statut' => 'en_attente',
+                'date_debut' => null
+            ]);
+        }
+
+        $dossier = DossierMarche::find($tache->dossier_marche_id);
+        $dossier->refresh();
+        $dossier->calculerAvancement();
+        
+        return back()->with('success', 'Affectation supprimée');
+    }
+
+    public function mettreAJourStatutTache(Request $request, $tacheId)
+    {
+        $validated = $request->validate([
+            'statut' => 'required|in:en_attente,en_cours,terminee,validee'
         ]);
+
+        $tache = TacheDossier::findOrFail($tacheId);
+        
+        $updateData = ['statut' => $validated['statut']];
+        
+        switch ($validated['statut']) {
+            case 'en_cours':
+                if (!$tache->date_debut) {
+                    $updateData['date_debut'] = now();
+                }
+                break;
+                
+            case 'terminee':
+            case 'validee':
+                if (!in_array($tache->statut, ['terminee', 'validee'])) {
+                    $updateData['date_fin'] = now();
+                }
+                break;
+                
+            case 'en_attente':
+                $updateData['date_debut'] = null;
+                $updateData['date_fin'] = null;
+                break;
+        }
+        
+        $tache->update($updateData);
+        
+        $dossier = DossierMarche::find($tache->dossier_marche_id);
+        $dossier->refresh();
+        $dossier->calculerAvancement();
+        
+        return back()->with('success', 'Statut mis à jour');
     }
-    
-    return back()->with('success', 'Affectation supprimée');
-}
 
-    // Mettre à jour le statut d'une tâche
-public function mettreAJourStatutTache(Request $request, $tacheId)
-{
-    $validated = $request->validate([
-        'statut' => 'required|in:en_attente,en_cours,terminee,validee'
-    ]);
-
-    $tache = TacheDossier::findOrFail($tacheId);
-    
-    $updateData = ['statut' => $validated['statut']];
-    
-    switch ($validated['statut']) {
-        case 'en_cours':
-            if (!$tache->date_debut) {
-                $updateData['date_debut'] = now();
-            }
-            break;
-            
-        case 'terminee':
-        case 'validee':
-            if (!in_array($tache->statut, ['terminee', 'validee'])) {
-                $updateData['date_fin'] = now();
-            }
-            break;
-            
-        case 'en_attente':
-            $updateData['date_debut'] = null;
-            $updateData['date_fin'] = null;
-            break;
-    }
-    
-    $tache->update($updateData);
-    
-    // ✅ CRITIQUE : Recharger le dossier et recalculer
-    $dossier = DossierMarche::find($tache->dossier_marche_id);
-    $dossier->refresh();
-    $dossier->calculerAvancement();
-    
-    return back()->with('success', 'Statut mis à jour');
-}
-
-    // Supprimer une tâche
     public function supprimerTache($tacheId)
     {
         $tache = TacheDossier::findOrFail($tacheId);
         $dossier = $tache->dossier;
         
-        // Supprimer les fichiers associés
         if ($tache->fichiers_produits) {
             foreach ($tache->fichiers_produits as $fichier) {
                 Storage::disk('public')->delete($fichier);
@@ -802,7 +944,7 @@ public function mettreAJourStatutTache(Request $request, $tacheId)
         
         $tache->delete();
         
-        // Recalculer l'avancement
+        $dossier->refresh();
         $dossier->calculerAvancement();
 
         return back()->with('success', 'Tâche supprimée');

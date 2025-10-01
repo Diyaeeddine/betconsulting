@@ -3,7 +3,7 @@ import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenuButton } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
-import { Ban, BookOpen, Building2, CircleCheckBig, CircleX, Clock3, FolderKanban, Gavel, Globe, LayoutDashboard, LayoutGrid, Paperclip, Rss, ShoppingCart, TrendingUp, UserPlus, Users } from "lucide-react"
+import { Ban, BookOpen, Building2, CircleCheckBig, CircleX, ClipboardList, Clock3, FolderKanban, Gavel, Globe, LayoutDashboard, LayoutGrid, Paperclip, Rss, ShoppingCart, TrendingUp, UserPlus, Users } from "lucide-react"
 import { Link, usePage } from '@inertiajs/react';
 import BetconsultingDashLogo from './betconsulting-dash-logo';
 import { Route, Car, Wrench} from "lucide-react"
@@ -13,7 +13,7 @@ export function AppSidebar() {
     
     const { auth } = usePage<SharedData>().props;
     const roleDashboardMap: Record<string, string> = {
-        'admin': '/direction-generale/dashboard',
+        admin: '/direction-generale/dashboard',
         'marches-marketing': '/marches-marketing/dashboard',
         'etudes-techniques': '/etudes-techniques/dashboard',
         'suivi-controle': '/suivi-controle/dashboard',
@@ -23,8 +23,9 @@ export function AppSidebar() {
         'financier-comptabilite': '/financier-comptabilite/dashboard',
         'logistique-generaux': '/logistique-generaux/dashboard',
         'communication-digitale': '/communication-digitale/dashboard',
-        'juridique': '/juridique/dashboard',
+        juridique: '/juridique/dashboard',
         'fournisseurs-traitants': '/fournisseurs-traitants/dashboard',
+        'salarie': '/salarie/dashboard',
     };
 
     const dashboardHref = auth?.user?.role && roleDashboardMap[auth.user.role] ? roleDashboardMap[auth.user.role] : '/dashboard';
@@ -156,6 +157,15 @@ export function AppSidebar() {
                       title: 'Collaborateurs Marché',
                       href: '/marches-marketing/utilisateurs',
                       icon: Users,
+                  },
+              ]
+            : []),
+        ...(auth?.user?.role === 'salarie'
+            ? [
+                  {
+                      title: 'Mes Taches',
+                      href: '/salarie/marches/taches',
+                      icon: ClipboardList,
                   },
               ]
             : []),

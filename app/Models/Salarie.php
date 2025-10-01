@@ -6,11 +6,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-
-class Salarie extends Authenticatable  // ✅ Hérite de Authenticatable
+use Spatie\Permission\Traits\HasRoles;
+class Salarie extends Authenticatable 
 {
-    use HasFactory, Notifiable;
-
+    use HasFactory, Notifiable, HasRoles ;
+    protected $guard = 'salarie';
     protected $fillable = [
         'nom', 
         'prenom', 
@@ -31,19 +31,21 @@ class Salarie extends Authenticatable  // ✅ Hérite de Authenticatable
         'salaire_mensuel' => 'decimal:2',
         'date_embauche' => 'date',
         'projet_ids' => 'array',
-        'password' => 'hashed',  // ✅ Hash automatique
+        'password' => 'hashed', 
     ];
 
     protected $hidden = [
         'password',
-        'remember_token',  // ✅ Ajouté
+        'remember_token',  
     ];
 
-    // ✅ Accessor pour compatibilité avec Breeze
-    public function getNameAttribute()
-    {
-        return "{$this->prenom} {$this->nom}";
-    }
+public function getNameAttribute(): string
+{
+    $prenom = $this->prenom ?? '';
+    $nom = $this->nom ?? '';
+    return trim("{$prenom} {$nom}") ?: 'Utilisateur';
+}
+
 
     // Relations existantes
     public function vehicule() {
@@ -93,4 +95,5 @@ class Salarie extends Authenticatable  // ✅ Hérite de Authenticatable
     public function getInitialesAttribute() {
         return strtoupper(substr($this->prenom, 0, 1) . substr($this->nom, 0, 1));
     }
+
 }
