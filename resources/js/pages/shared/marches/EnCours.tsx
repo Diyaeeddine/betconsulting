@@ -33,6 +33,7 @@ interface MarchePublic {
     etape?: string;
     created_at?: string;
     updated_at?: string;
+    a_modification_requise?: boolean;
 }
 
 interface EnCoursProps {
@@ -243,11 +244,25 @@ export default function EnCours({ marcheP }: EnCoursProps) {
 
         return (
             <div
-                className={`rounded-lg border border-gray-200 bg-white p-4 transition-shadow hover:shadow-md ${
+                className={`rounded-lg border ${marche.a_modification_requise ? 'border-2' : 'border-gray-200'} bg-white p-4 transition-shadow hover:shadow-md ${
                     isClickable ? 'cursor-pointer hover:border-blue-300' : ''
                 }`}
                 onClick={isClickable ? () => router.visit(`/marches-marketing/${marche.id}/dossiers`) : () => openModal(marche)}
             >
+                {/* ✅ ALERTE MODIFICATION REQUISE */}
+                {marche.a_modification_requise && (
+                    <div className="mb-3 flex items-center gap-2 rounded-md border border-orange-200 bg-orange-50 px-3 py-2">
+                        <svg className="h-4 w-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path
+                                fillRule="evenodd"
+                                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                clipRule="evenodd"
+                            />
+                        </svg>
+                        <span className="text-xs font-medium text-orange-800">Modifications requises</span>
+                    </div>
+                )}
+
                 <div className="mb-3 flex items-start justify-between">
                     <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-blue-600">{marche.reference || 'N/A'}</span>
@@ -258,11 +273,6 @@ export default function EnCours({ marcheP }: EnCoursProps) {
                                 {IMPORTANCE_LABELS[marche.importance]}
                             </span>
                         )}
-                        {/* {isClickable && (
-                            <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">
-                                Cliquer pour gérer
-                            </span>
-                        )} */}
                     </div>
                     {marche.urgence && (
                         <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${getUrgenceColor(marche.urgence)}`}>
@@ -270,7 +280,6 @@ export default function EnCours({ marcheP }: EnCoursProps) {
                         </span>
                     )}
                 </div>
-
                 <h3 className="mb-3 line-clamp-2 text-sm font-medium text-gray-900">{marche.objet || 'Objet non spécifié'}</h3>
 
                 <div className="mb-4 space-y-2 text-xs text-gray-600">
@@ -337,11 +346,21 @@ export default function EnCours({ marcheP }: EnCoursProps) {
                             return (
                                 <tr
                                     key={marche.id}
-                                    className={`hover:bg-gray-50 ${isClickable ? 'cursor-pointer' : ''}`}
+                                    className={`hover:bg-gray-50 ${isClickable ? 'cursor-pointer' : ''} ${marche.a_modification_requise ? 'bg-orange-50' : ''}`}
                                     onClick={isClickable ? () => router.visit(`/marches-marketing/${marche.id}/dossiers`) : () => openModal(marche)}
                                 >
                                     <td className="px-4 py-3 text-sm">
                                         <div className="flex items-center gap-2">
+                                            {/* ✅ AJOUTER CETTE ICÔNE */}
+                                            {marche.a_modification_requise && (
+                                                <svg className="h-4 w-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path
+                                                        fillRule="evenodd"
+                                                        d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                                        clipRule="evenodd"
+                                                    />
+                                                </svg>
+                                            )}
                                             <span className="font-semibold text-blue-600">{marche.reference || 'N/A'}</span>
                                             {marche.importance && (
                                                 <span

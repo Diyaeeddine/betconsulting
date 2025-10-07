@@ -114,7 +114,7 @@ class RoleSeeder extends Seeder
 
         // ===== 13. Salarie (Employee role) =====
         
-        $roleSalarie = Role::firstOrCreate(['name' => 'salarie']);
+        Role::firstOrCreate(['name' => 'salarie', 'guard_name' => 'salarie']);
 
 
 

@@ -12,6 +12,7 @@ use App\Http\Controllers\InnovationTransitionController;
 use App\Http\Controllers\JuridiqueController;
 use App\Http\Controllers\LogistiqueGenerauxController;
 use App\Http\Controllers\MarchesMarketingController;
+use App\Http\Controllers\TracabiliteController;
 use App\Http\Controllers\SharedController;
 use App\Http\Controllers\QualiteAuditController;
 use App\Http\Controllers\RessourcesHumainesController;
@@ -23,9 +24,8 @@ use App\Models\User;
 use App\Models\Document;
 use App\Models\MarchePublic;
 use App\Notifications\DocumentExpirationNotification;
-use App\Models\Notification;
+// use App\Models\Notification;
 use Spatie\Permission\Models\Role;
-use App\Notifications\MarcheDecisionNotification;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Broadcast;
 use App\Http\Controllers\Auth\SalarieAuthController;
@@ -42,26 +42,34 @@ Route::prefix('salarie')->name('salarie.')->group(function () {
         Route::post('login', [SalarieAuthController::class, 'login']);
     });
     
-    Route::middleware('auth:salarie')->group(function () {
-        Route::get('dashboard', function () {
-            return inertia('salarie/Dashboard');
-        })->name('dashboard');
+    Route::middleware(['auth:salarie'])->group(function () {
+        Route::get('profile', [SalarieController::class, 'index'])->name('profile');
+        Route::post('conge/demander', [SalarieController::class, 'demanderConge'])->name('conge.demander');
+        Route::post('certificat-maladie/demander', [SalarieController::class, 'demanderCertificatMaladie'])->name('certificat.demander');
     });
 });
 
 Route::middleware(['auth:salarie'])->group(function () {
-    // Route::get('/dashboard', [SalarieController::class, 'index'])->name('dashboard');
-    Route::get('/salarie/marches/taches', [SalarieController::class, 'mesTachesMarches'])->name('salarie.marches.taches');
-    Route::post('/salarie/marches/taches/{tacheId}/upload', [SalarieController::class, 'uploadFichiersTache'])->name('salarie.marches.taches.upload');
-    Route::post('/salarie/marches/taches/{tacheId}/terminer', [SalarieController::class, 'marquerTacheTerminee'])->name('salarie.marches.taches.terminer');
-    Route::get('/salarie/marches/taches/{tacheId}/telecharger', [SalarieController::class, 'telechargerFichierTache'])->name('salarie.marches.taches.telecharger');
+    Route::get('/salarie/marches/taches', [SalarieController::class, 'mesTachesMarches'])
+        ->name('salarie.marches.taches');
+    Route::get('/salarie/marches/taches/dossier/{dossier}', [SalarieController::class, 'showDossier'])
+        ->name('salarie.marches.dossier');
+    Route::post('/salarie/marches/taches/{tacheId}/upload', [SalarieController::class, 'uploadFichiersTache'])
+        ->name('salarie.marches.taches.upload');
+    Route::post('/salarie/marches/taches/{tacheId}/terminer', [SalarieController::class, 'marquerTacheTerminee'])
+        ->name('salarie.marches.taches.terminer');
+    Route::get('/salarie/marches/taches/{tacheId}/telecharger', [SalarieController::class, 'telechargerFichierTache'])
+        ->name('salarie.marches.taches.telecharger');
+    Route::get('/salarie/marches/taches/{id}', [SalarieController::class, 'show'])
+        ->name('salarie.taches.show');
+    Route::delete('/salarie/marches/documents/{documentId}', [SalarieController::class, 'supprimerDocument'])
+        ->name('salarie.marches.documents.supprimer');
 });
-
 
 Route::get('/', function () {
     // Vérifier d'abord le guard salarie
     if (Auth::guard('salarie')->check()) {
-        return redirect()->route('salarie.dashboard');
+        return redirect()->route('salarie.profile');
     }
     
     // Ensuite vérifier le guard web
@@ -111,6 +119,10 @@ Route::middleware(['auth', 'verified', 'role:admin'])->group(function () {
     ->name('direction-generale.handleProfileDecision');
     Route::post('/direction-generale/marche/{id}/accepter', [DirectionGeneraleController::class, 'accepterMarche'])
         ->name('direction-generale.accepter-marche');
+        Route::post('/direction-generale/marche/{id}/approuver-final', [DirectionGeneraleController::class, 'approuverFinal'])
+    ->name('direction-generale.approuverFinal');
+    Route::post('/direction-generale/marche/{id}/demander-modification', [DirectionGeneraleController::class, 'demanderModification'])
+    ->name('direction-generale.demanderModification');
     
     Route::post('/direction-generale/marche/{id}/refuser', [DirectionGeneraleController::class, 'refuserMarche'])
         ->name('direction-generale.refuser-marche');
@@ -185,6 +197,9 @@ Route::middleware(['auth', 'verified', 'role:marches-marketing'])->group(functio
 
     Route::post('/marches-marketing/taches/{tache}/upload', [SharedController::class, 'uploadFichiers'])
         ->name('taches.upload');
+        
+    Route::post('/marches-marketing/taches/{tache}/remplacer-fichiers', [SharedController::class, 'remplacerFichierTache'])
+        ->name('taches.remplacer-fichiers');
 
     Route::delete('/marches-marketing/taches/{tache}/fichiers', [SharedController::class, 'supprimerFichier'])
         ->name('taches.fichiers.delete');
@@ -222,6 +237,13 @@ Route::middleware(['auth', 'permission:module documentation'])
         ->name('documents.complementaires.renew');
     Route::get('/documents-complementaires/archives', [SharedController::class, 'archivedComplementaryDocuments'])
         ->name('documents.complementaires.archives');
+
+
+            Route::get('/documentation/marches', [DocumentationRechercheController::class, 'RechercheDocumentation'])
+        ->name('documentation.marches.index');
+    
+    Route::get('/documentation/marches/{id}', [DocumentationRechercheController::class, 'AfficherRechercheDocumentation'])
+        ->name('documentation.marches.show');
     });
 
 Route::middleware(['auth','permission:module marche public','permission:module marche global','permission:les marches'])
@@ -483,7 +505,7 @@ Route::get('/dashboard', function () {
         $user->hasRole('qualite-audit') => redirect()->route('dashboard.qualite-audit'),
         $user->hasRole('ressources-humaines') => redirect()->route('dashboard.ressources-humaines'),
         $user->hasRole('suivi-controle') => redirect()->route('dashboard.suivi-controle'),
-        $user->hasRole('salarie') => redirect()->route('salarie.dashboard'),
+        // $user->hasRole('salarie') => redirect()->route('salarie.profile'),
 
         default => redirect('/'),
     };
@@ -538,7 +560,18 @@ Route::middleware(['auth'])->group(function () {
 
 Broadcast::routes(['middleware' => ['auth:web']]);
 
+Route::middleware(['auth','web'])->group(function () {
 
+    Route::get('/marches-marketing/tracabilite', [TracabiliteController::class, 'tracabilite'])
+        ->name('users.marches-marketing');
+
+Route::get('/dossiers/{dossierId}/fichiers', [TracabiliteController::class, 'getDossierFichiers']);
+Route::get('/dossiers/{dossierId}/taches', [TracabiliteController::class, 'getDossierTaches']);
+Route::get('/dossiers/{dossierId}/timeline', [TracabiliteController::class, 'getDossierTimeline']);
+Route::get('/participants/{participantId}/taches', [TracabiliteController::class, 'getParticipantTaches']);
+Route::get('/participants/{participantId}/temps', [TracabiliteController::class, 'getParticipantTemps']);
+Route::get('/marches/{marcheId}/historique', [TracabiliteController::class, 'getMarcheHistorique']);
+});
 
 Route::get('/test-pusher', function () {
     $user = auth()->user() ?? User::first();
@@ -556,13 +589,10 @@ Route::get('/test-pusher', function () {
         ]);
     }
 
-    // 1️⃣ Créer la notification dans la DB
     $user->notify(new DocumentExpirationNotification($document, 5));
 
-    // 2️⃣ Récupérer la dernière notification créée
     $latestNotification = $user->notifications()->latest()->first();
 
-    // 3️⃣ Envoyer l'event immédiatement à Pusher
     event(new NewNotification($latestNotification, $user->id));
 
     return response()->json([
@@ -573,6 +603,8 @@ Route::get('/test-pusher', function () {
         'channel' => 'private-user.' . $user->id
     ]);
 });
+
+
 
 
 
@@ -593,82 +625,6 @@ Route::get('/test-pusher', function () {
 
 //     return 'Event broadcasted';
 // });
-
-
-Route::get('/test-notification-admin', function () {
-    try {
-        Log::info("Test de notification admin démarré");
-        
-        // Créer un marché fictif pour le test (ou utiliser un existant)
-        $marche = MarchePublic::first(); // Prendre le premier marché
-        
-        if (!$marche) {
-            // Si pas de marché, en créer un temporaire
-            $marche = new MarchePublic();
-            $marche->id = 999; // ID fictif
-            $marche->title = "Test Marché AO";
-            $marche->objet = "Test pour notification admin";
-            $marche->etape = "decision admin";
-            $marche->is_accepted = true;
-        }
-        
-        // Simuler l'utilisateur qui accepte (utilisateur connecté)
-        $userWhoAccepted = auth()->user();
-        
-        if (!$userWhoAccepted) {
-            return response()->json([
-                'error' => 'Vous devez être connecté pour tester'
-            ], 401);
-        }
-        
-        // Trouver tous les admins
-        $adminRole = Role::where('name', 'admin')->first();
-        
-        if (!$adminRole) {
-            return response()->json([
-                'error' => 'Rôle admin non trouvé'
-            ], 404);
-        }
-        
-        $admins = $adminRole->users;
-        
-        if ($admins->isEmpty()) {
-            return response()->json([
-                'error' => 'Aucun admin trouvé'
-            ], 404);
-        }
-        
-        // Envoyer la notification à tous les admins
-        $notificationsSent = 0;
-        foreach ($admins as $admin) {
-            $admin->notify(new MarcheDecisionNotification($marche, $userWhoAccepted, $admin->id));
-            $notificationsSent++;
-            
-            Log::info("Notification test envoyée à l'admin", [
-                'admin_id' => $admin->id,
-                'admin_email' => $admin->email
-            ]);
-        }
-        
-        return response()->json([
-            'success' => true,
-            'message' => "Notification de test envoyée à {$notificationsSent} admin(s)",
-            'admins_notified' => $admins->pluck('email'),
-            'marche_test' => $marche->title ?? $marche->objet ?? 'Marché test',
-            'sent_by' => $userWhoAccepted->name
-        ]);
-        
-    } catch (Exception $e) {
-        Log::error("Erreur lors du test de notification admin", [
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ]);
-        
-        return response()->json([
-            'error' => 'Erreur lors du test: ' . $e->getMessage()
-        ], 500);
-    }
-})->middleware(['web', 'auth']);
 
 
 require __DIR__ . '/settings.php';

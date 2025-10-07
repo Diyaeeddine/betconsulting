@@ -304,7 +304,7 @@ export default function Users({ salaries = [], marches = [] }: Props) {
                                             <th className="p-2 text-left text-sm font-medium tracking-wide uppercase">SERVICE</th>
                                             <th className="p-2 text-left text-sm font-medium tracking-wide uppercase">PROJETS</th>
                                             <th className="p-2 text-left text-sm font-medium tracking-wide uppercase">CHARGE</th>
-                                            <th className="p-2 text-left text-sm font-medium tracking-wide uppercase">SALAIRE</th>
+                                            {/* <th className="p-2 text-left text-sm font-medium tracking-wide uppercase">SALAIRE</th> */}
                                             <th className="p-2 text-left text-sm font-medium tracking-wide uppercase">ACTIONS</th>
                                         </tr>
                                     </thead>
@@ -402,11 +402,6 @@ export default function Users({ salaries = [], marches = [] }: Props) {
                                                                 />
                                                             </div>
                                                         </div>
-                                                    </td>
-
-                                                    {/* Salaire */}
-                                                    <td className="p-4">
-                                                        <span className="font-medium text-gray-900">{formatSalary(salarie.salaire_mensuel)}</span>
                                                     </td>
 
                                                     {/* Actions */}
@@ -515,15 +510,15 @@ export default function Users({ salaries = [], marches = [] }: Props) {
                                                 <p>
                                                     <strong>Projets actifs:</strong> {getProjectCount(selectedUser.projet_ids)}
                                                 </p>
-                                                <p>
+                                                {/* <p>
                                                     <strong>Charge de travail:</strong>
                                                     <Badge className={`ml-2 ${getChargeColor(selectedUser.charge_travail)}`}>
                                                         {selectedUser.charge_travail || 0}%
                                                     </Badge>
-                                                </p>
-                                                <p>
+                                                </p> */}
+                                                {/* <p>
                                                     <strong>Salaire mensuel:</strong> {formatSalary(selectedUser.salaire_mensuel)}
-                                                </p>
+                                                </p> */}
                                             </div>
                                         </div>
                                     </div>

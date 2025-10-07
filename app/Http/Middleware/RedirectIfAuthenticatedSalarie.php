@@ -11,7 +11,7 @@ class RedirectIfAuthenticatedSalarie
     public function handle(Request $request, Closure $next, string $guard = 'salarie')
     {
         if (Auth::guard($guard)->check()) {
-            return redirect()->route('salarie.dashboard');
+            return redirect()->route('salarie.profile');
         }
 
         return $next($request);

@@ -3,7 +3,8 @@ import type { Config } from 'ziggy-js';
 
 export interface Auth {
     permissions: any;
-    user: User;
+    user: User | null;
+    type?: 'user' | 'salarie' | null;
 }
 
 export interface BreadcrumbItem {
@@ -18,12 +19,11 @@ export interface NavGroup {
 
 export interface NavItem {
     title: string;
-    href?: string; 
+    href?: string;
     icon?: LucideIcon | null;
     isActive?: boolean;
-    items?: NavItem[]; 
+    items?: NavItem[];
 }
-
 
 export interface SharedData {
     name: string;
@@ -44,5 +44,8 @@ export interface User {
     email_verified_at: string | null;
     created_at: string;
     updated_at: string;
+    poste?: string;
+    nom_profil?: string;
+    matricule?: string;
     [key: string]: unknown;
 }

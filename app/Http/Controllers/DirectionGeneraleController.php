@@ -7,8 +7,10 @@ use Illuminate\Http\Request;
 use App\Models\MarchePublic;
 use App\Models\User;
 use App\Models\Salarie;
-use App\Notifications\MarcheDecisionNotification;
+use App\Models\HistoriqueMarche;
+// use App\Notifications\MarcheDecisionNotification;
 use Carbon\Carbon;
+
 
 class DirectionGeneraleController extends Controller
 {
@@ -143,41 +145,111 @@ public function handleProfileDecision(Salarie $salarie, Request $request)
         $salarie->update(['is_accepted' => true]);
         return redirect()->back()->with('success', 'Profil de ' . $fullName . ' accepté avec succès !');
     } else {
-        $salarie->delete();
-        return redirect()->back()->with('info', 'Profil de ' . $fullName . ' rejeté et supprimé.');
+        return redirect()->back()->with('info', 'Profil de ' . $fullName . ' rejeté doit le modifier.');
     }
 }
 
-    public function accepterMarche(Request $request, $id)
-    {
-        try {
-            // Trouver le marché
-            $marche = MarchePublic::findOrFail($id);
+    // public function accepterMarche(Request $request, $id)
+    // {
+    //     try {
+    //         // Trouver le marché
+    //         $marche = MarchePublic::findOrFail($id);
             
-            // Mettre à jour l'étape
-            $marche->update([
-                'etape' => 'preparation',
-                'decision' => 'accepte',
-                'date_decision' => now(),
-                'ordre_preparation' => 'preparation_dossier_administratif'
+    //         // Mettre à jour l'étape
+    //         $marche->update([
+    //             'etape' => 'preparation',
+    //             'date_decision' => now(),
+    //         ]);
+
+    //         return redirect()->back()->with('success', 'Marché accepté avec succès');
+
+    //     } catch (\Exception $e) {
+    //         return redirect()->back()->withErrors(['error' => 'Erreur lors de l\'acceptation du marché: ' . $e->getMessage()]);
+    //     }
+    // }
+
+    public function approuverFinal(Request $request, $id)
+{
+    try {
+        $request->validate([
+            'commentaire' => 'required|string|max:1000'
+        ]);
+
+        $marche = MarchePublic::findOrFail($id);
+        
+        
+        $marche->update([
+            'etape' => 'preparation',
+            'date_decision' => now()
+        ]);
+
+        $dossierFinancier = $marche->dossiers()
+            ->where('type_dossier', 'financier')
+            ->first();
+
+        if ($dossierFinancier) {
+            $dossierFinancier->update([
+                'statut' => 'valide',
+                'commentaires' => $request->commentaire,
+                'date_finalisation' => now()
             ]);
-
-            // Trouver l'utilisateur des études techniques
-            $etudesTechniques = User::whereHas('roles', function($query) {
-                $query->where('name', 'etudes-techniques');
-            })->first();
-
-            if ($etudesTechniques) {
-                // Envoyer la notification de décision
-                $etudesTechniques->notify(new MarcheDecisionNotification($marche, 'accepte'));
-            }
-
-            return redirect()->back()->with('success', 'Marché accepté avec succès');
-
-        } catch (\Exception $e) {
-            return redirect()->back()->withErrors(['error' => 'Erreur lors de l\'acceptation du marché: ' . $e->getMessage()]);
         }
+
+        HistoriqueMarche::enregistrer(
+            marcheId: $marche->id,
+            typeEvenement: 'approbation_finale',
+            description: "Marché approuvé par la Direction Générale",
+            dossierId: $dossierFinancier->id,
+            commentaire: $request->commentaire
+        );
+
+        return redirect()->back()->with('success', 'Marché approuvé avec succès. Commentaire envoyé au service marché marketing.');
+        
+    } catch (\Exception $e) {
+        return redirect()->back()->withErrors(['error' => 'Erreur lors de l\'approbation finale : ' . $e->getMessage()]);
     }
+}
+
+public function demanderModification(Request $request, $id)
+{
+    try {
+        $request->validate([
+            'commentaire' => 'required|string|max:1000'
+        ]);
+
+        $marche = MarchePublic::findOrFail($id);
+
+        $marche->update([
+            'etape' => 'preparation',
+            'date_decision' => now()
+        ]);
+
+        $dossierFinancier = $marche->dossiers()
+            ->where('type_dossier', 'financier')
+            ->first();
+
+        if (!$dossierFinancier) {
+            return redirect()->back()->withErrors(['error' => 'Aucun dossier financier trouvé pour ce marché.']);
+        }
+
+        $dossierFinancier->update([
+            'statut' => 'modification_requis',
+            'commentaires' => $request->commentaire
+        ]);
+        HistoriqueMarche::enregistrer(
+            marcheId: $marche->id,
+            typeEvenement: 'demande_modification_dg',
+            description: "Modification demandée par la Direction Générale",
+            dossierId: $dossierFinancier->id,
+            commentaire: $request->commentaire
+        );
+
+        return redirect()->back()->with('success', 'Demande de modification envoyée avec succès au service marché marketing.');
+        
+    } catch (\Exception $e) {
+        return redirect()->back()->withErrors(['error' => 'Erreur lors de la demande de modification : ' . $e->getMessage()]);
+    }
+}
 
     public function refuserMarche(Request $request, $id)
 {
@@ -206,15 +278,17 @@ public function handleProfileDecision(Salarie $salarie, Request $request)
             'motif_refus' => $request->input('motif'), // Nouvelle colonne pour le motif de refus
             'commentaire_refus' => $request->input('motif') // Garder aussi l'ancienne pour compatibilité si nécessaire
         ]);
-
-
-        $etudesTechniques = User::whereHas('roles', function($query) {
-            $query->where('name', 'etudes-techniques');
-        })->get();
-
-        foreach ($etudesTechniques as $user) {
-            $user->notify(new MarcheDecisionNotification($marche, 'refuse', $request->input('motif')));
-        }
+        
+        // APRÈS le update, AVANT les notifications :
+        HistoriqueMarche::enregistrer(
+            marcheId: $marche->id,
+            typeEvenement: 'refus_dg',
+            description: "Marché refusé par la Direction Générale",
+            commentaire: $request->input('motif'),
+            donneesSupp: [
+                'decision' => 'refuse'
+            ]
+        );
 
         $direction = User::whereHas('roles', function($query) {
             $query->where('name', 'direction');

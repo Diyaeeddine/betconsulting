@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Notification;
+// use App\Models\Notification;
 use Carbon\Carbon;
 
 class Document extends Model
@@ -61,45 +61,32 @@ class Document extends Model
      * Vérifier les documents qui expirent bientôt et notifier
      */
     public static function checkExpiringDocuments()
-    {
-        $documents = self::where('archived', false)
-            ->whereNotNull('date_expiration')
-            ->get();
+{
+    $documents = self::where('archived', false)
+        ->whereNotNull('date_expiration')
+        ->get();
 
-        foreach ($documents as $document) {
-            $daysUntilExpiration = now()->diffInDays($document->date_expiration, false);
+    foreach ($documents as $document) {
+        $daysUntilExpiration = now()->diffInDays($document->date_expiration, false);
 
-            $thresholds = [
-                'mensuel' => 7,
-                'trimestriel' => 14,
-                'semestriel' => 30,
-                'annuel' => 60,
-            ];
+        $thresholds = [
+            'mensuel' => 7,
+            'trimestriel' => 14,
+            'semestriel' => 30,
+            'annuel' => 60,
+        ];
 
-            $notifyBefore = $thresholds[$document->periodicite] ?? null;
+        $notifyBefore = $thresholds[$document->periodicite] ?? null;
 
-            if ($notifyBefore && $daysUntilExpiration <= $notifyBefore && $daysUntilExpiration >= 0) {
-                $existingNotification = Notification::where('user_id', $document->user_id)
-                    ->where('type', 'document_expiration')
-                    ->where('commentaire', 'like', '%' . $document->type . '%')
-                    ->where('is_read', false)
-                    ->first();
-
-                if (!$existingNotification) {
-                    Notification::create([
-                        'user_id' => $document->user_id,
-                        'titre' => 'Document bientôt expiré',
-                        'commentaire' => "Le document '{$document->type}' expire dans {$daysUntilExpiration} jour(s). Veuillez le renouveler.",
-                        'type' => 'document_expiration',
-                        'is_read' => false,
-                        'done' => false
-                    ]);
-
-                    event(new \App\Events\DocumentExpirationNotification($document));
-                }
-            }
+        if ($notifyBefore && $daysUntilExpiration <= $notifyBefore && $daysUntilExpiration >= 0) {
+            // ⚡️ Notifier via le système Laravel
+            $document->user?->notify(
+                new \App\Notifications\DocumentExpirationNotification($document, $daysUntilExpiration)
+            );
         }
     }
+}
+
 
     public function user()
     {

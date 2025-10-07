@@ -3,14 +3,31 @@ import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenuButton } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
-import { Ban, BookOpen, Building2, CircleCheckBig, CircleX, ClipboardList, Clock3, FolderKanban, Gavel, Globe, LayoutDashboard, LayoutGrid, Paperclip, Rss, ShoppingCart, TrendingUp, UserPlus, Users } from "lucide-react"
 import { Link, usePage } from '@inertiajs/react';
+import {
+    Ban,
+    BookOpen,
+    Building2,
+    Car,
+    CircleCheckBig,
+    CircleX,
+    ClipboardList,
+    Clock3,
+    Gavel,
+    Globe,
+    LayoutDashboard,
+    LayoutGrid,
+    Paperclip,
+    Rss,
+    ShoppingCart,
+    Telescope,
+    User,
+    Users,
+    Wrench,
+} from 'lucide-react';
 import BetconsultingDashLogo from './betconsulting-dash-logo';
-import { Route, Car, Wrench} from "lucide-react"
-import { Notifications } from './ui/notifications';
 
 export function AppSidebar() {
-    
     const { auth } = usePage<SharedData>().props;
     const roleDashboardMap: Record<string, string> = {
         admin: '/direction-generale/dashboard',
@@ -25,10 +42,10 @@ export function AppSidebar() {
         'communication-digitale': '/communication-digitale/dashboard',
         juridique: '/juridique/dashboard',
         'fournisseurs-traitants': '/fournisseurs-traitants/dashboard',
-        'salarie': '/salarie/dashboard',
+        
     };
 
-    const dashboardHref = auth?.user?.role && roleDashboardMap[auth.user.role] ? roleDashboardMap[auth.user.role] : '/dashboard';
+    const dashboardHref = auth?.user?.role && roleDashboardMap[auth.user.role] ? roleDashboardMap[auth.user.role] : '';
     const mainNavItems: NavItem[] = [
         {
             title: 'Dashboard',
@@ -48,13 +65,11 @@ export function AppSidebar() {
                       href: '/ressources-humaines/bons-commandes',
                       icon: ShoppingCart,
                   },
-
                   {
                       title: 'Résultats Bon de Commande',
                       href: '/ressources-humaines/resultats-bon-commande-page',
                       icon: BookOpen,
                   },
-
                   {
                       title: 'Tracking',
                       href: '/ressources-humaines/tracking',
@@ -75,13 +90,11 @@ export function AppSidebar() {
                       href: '/ressources-humaines/materiels',
                       icon: Wrench,
                   },
-
                   {
                       title: 'Progressions',
                       href: '/ressources-humaines/progressions',
                       icon: Car,
                   },
-
                   {
                       title: 'Formations',
                       href: '/ressources-humaines/formations',
@@ -158,10 +171,20 @@ export function AppSidebar() {
                       href: '/marches-marketing/utilisateurs',
                       icon: Users,
                   },
+                  {
+                      title: 'Tracabilite',
+                      href: '/marches-marketing/tracabilite',
+                      icon: Telescope,
+                  },
               ]
             : []),
         ...(auth?.user?.role === 'salarie'
             ? [
+                  {
+                      title: 'Profile',
+                      href: '/salarie/profile',
+                      icon: User,
+                  },
                   {
                       title: 'Mes Taches',
                       href: '/salarie/marches/taches',
@@ -171,8 +194,6 @@ export function AppSidebar() {
             : []),
     ];
 
-    
-
     return (
         <Sidebar collapsible="icon" variant="floating">
             <SidebarHeader className="relative z-10">
@@ -181,8 +202,8 @@ export function AppSidebar() {
                         <Link href={dashboardHref} prefetch>
                             <BetconsultingDashLogo className="w-[140px]" />
                         </Link>
-                    </SidebarMenuButton>    
-                    <Notifications />
+                    </SidebarMenuButton>
+                    {/* {auth?.type === 'salarie' ? <NotificationsSalaries /> : <Notifications />} */}
                 </div>
             </SidebarHeader>
 

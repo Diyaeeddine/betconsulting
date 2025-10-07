@@ -1,14 +1,30 @@
 import { Breadcrumbs } from '@/components/breadcrumbs';
-import { SidebarTrigger } from '@/components/ui/sidebar';
-import { type BreadcrumbItem as BreadcrumbItemType } from '@/types';
+import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
+import { SharedData, type BreadcrumbItem as BreadcrumbItemType } from '@/types';
+import { Notifications } from './ui/notifications';
+import { NotificationsSalaries } from './ui/notificationssalaries';
+import { usePage } from '@inertiajs/react';
 
-export function AppSidebarHeader({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItemType[] }) {
+export function AppSidebarHeader({ breadcrumbs = [], auth: authProp }: { breadcrumbs?: BreadcrumbItemType[]; auth?: { type?: string } }) {
+    const sidebar = useSidebar();
+    const { auth } = usePage<SharedData>().props;
+    
+    const isOpen = sidebar.open ?? false;
+
     return (
-<header className="fixed top-0 z-10 flex h-16 w-full shrink-0 items-center gap-2 border-b border-sidebar-border/50 bg-white px-6 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 md:px-4">
-            <div className="flex items-center gap-2">
-                <SidebarTrigger className="-ml-1" />
+        <div
+            className="fixed top-0 right-0 z-30 flex items-center justify-between gap-4 border-b bg-white p-4 transition-all duration-300"
+            style={{
+                left: isOpen ? '256px' : '72px', // 🧩 valeurs précises (ajustées)
+                width: isOpen ? 'calc(100% - 256px)' : 'calc(100% - 72px)',
+            }}
+        >
+            <div className="flex min-w-0 items-center gap-2">
+                <SidebarTrigger />
                 <Breadcrumbs breadcrumbs={breadcrumbs} />
             </div>
-        </header>
+
+            <div className="mr-6 flex-shrink-0">{auth?.type === 'salarie' ? <NotificationsSalaries /> : <Notifications />}</div>
+        </div>
     );
 }

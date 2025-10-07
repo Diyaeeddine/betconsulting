@@ -39,7 +39,7 @@ class MarcheDecisionNotification extends Notification implements ShouldBroadcast
             'commentaire' => $this->getCommentaire(),
             'priority' => $this->getPriority(),
             'action_required' => $this->isActionRequired(),
-            'icon' => $this->getIcon(),
+            // 'icon' => $this->getIcon(),
             'type' => 'marche_decision',
             // Compatibilité avec votre système existant
             'document_type' => 'Marché Public - ' . $this->marche->type_ao,
@@ -65,7 +65,7 @@ class MarcheDecisionNotification extends Notification implements ShouldBroadcast
                 'commentaire' => $this->getCommentaire(),
                 'priority' => $this->getPriority(),
                 'action_required' => $this->isActionRequired(),
-                'icon' => $this->getIcon(),
+                // 'icon' => $this->getIcon(),
                 'type' => 'marche_decision',
                 // Compatibilité avec votre système existant
                 'document_type' => 'Marché Public - ' . $this->marche->type_ao,
@@ -85,16 +85,16 @@ class MarcheDecisionNotification extends Notification implements ShouldBroadcast
             
             switch ($urgency) {
                 case 'critique':
-                    return "🚨 Marché accepté - Action URGENTE requise !";
+                    return "Marché accepté - Action URGENTE requise !";
                 case 'urgent':
-                    return "⚠️ Marché accepté - Préparation du dossier";
+                    return "Marché accepté - Préparation du dossier";
                 case 'normal':
-                    return "📋 Nouveau marché accepté à traiter";
+                    return "Nouveau marché accepté à traiter";
                 default:
-                    return "✅ Marché public accepté";
+                    return "Marché public accepté";
             }
         } else {
-            return "❌ Marché public refusé";
+            return "Marché public refusé";
         }
     }
 
@@ -163,20 +163,6 @@ class MarcheDecisionNotification extends Notification implements ShouldBroadcast
         }
 
         return \Carbon\Carbon::now()->diffInDays(\Carbon\Carbon::parse($this->marche->date_limite), false);
-    }
-
-    private function getIcon(): string
-    {
-        if ($this->decision === 'refuse') {
-            return '❌';
-        }
-        
-        return match($this->getUrgencyLevel()) {
-            'critique' => '🚨',
-            'urgent' => '⚠️',
-            'normal' => '📋',
-            default => '✅'
-        };
     }
 
     public function broadcastOn()

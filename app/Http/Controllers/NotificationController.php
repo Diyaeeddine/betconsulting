@@ -9,6 +9,22 @@ use Illuminate\Notifications\DatabaseNotification;
 class NotificationController extends Controller
 {
     /**
+     * Mapping des types de classes vers les types frontend
+     */
+    private function getNotificationType($classType)
+    {
+        $typeMapping = [
+            'App\Notifications\DocumentExpirationNotification' => 'document_expiration',
+            // 'App\Notifications\MarcheDecisionNotification' => 'marche_decision',
+            'App\Notifications\MarcheValidationAdminNotification' => 'marche_validation_admin',
+            'App\Notifications\TachePreparationNotification' => 'tache_preparation',
+            'App\Notifications\ValidationProfileNotification' => 'validation_profile_salarie',
+        ];
+
+        return $typeMapping[$classType] ?? 'general';
+    }
+
+    /**
      * Récupère toutes les notifications de l'utilisateur connecté
      */
     public function index()
@@ -19,42 +35,58 @@ class NotificationController extends Controller
             return response()->json(['error' => 'Utilisateur non authentifié'], 401);
         }
         
-        // Utiliser le système de notifications Laravel
         $notifications = $user->notifications()
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($notification) {
                 $data = $notification->data;
                 
+                // Utiliser le type depuis data si disponible, sinon mapper depuis la classe
+                $type = $data['type'] ?? $this->getNotificationType($notification->type);
+                
                 return [
                     'id' => $notification->id,
-                    'type' => $notification->type,
-                    'data' => $data,
-                    'read_at' => $notification->read_at ? $notification->read_at->toISOString() : null,
-                    'created_at' => $notification->created_at->toISOString(),
-                    'is_read' => $notification->read_at !== null,
-                    
-                    // Extraire TOUTES les données depuis le champ 'data'
+                    'type' => $type, 
                     'titre' => $data['titre'] ?? 'Notification',
                     'commentaire' => $data['commentaire'] ?? '',
+                    'created_at' => $notification->created_at->toISOString(),
+                    'read_at' => $notification->read_at ? $notification->read_at->toISOString() : null,
                     
-                    // Données enrichies pour tous types de notifications
+                    // Métadonnées
                     'priority' => $data['priority'] ?? 'info',
-                    'icon' => $data['icon'] ?? '📄',
+                    'action_required' => $data['action_required'] ?? false,
+                    
+                    // Documents
                     'document_id' => $data['document_id'] ?? null,
                     'document_type' => $data['document_type'] ?? null,
                     'days_until_expiration' => $data['days_until_expiration'] ?? null,
                     'date_expiration' => $data['date_expiration'] ?? null,
                     'periodicite' => $data['periodicite'] ?? null,
-                    'action_required' => $data['action_required'] ?? false,
                     
-                    // Données spécifiques aux marchés
+                    // Marchés
                     'marche_id' => $data['marche_id'] ?? null,
                     'reference' => $data['reference'] ?? null,
                     'objet' => $data['objet'] ?? null,
                     'type_ao' => $data['type_ao'] ?? null,
                     'estimation' => $data['estimation'] ?? null,
                     'decision' => $data['decision'] ?? null,
+                    'date_decision' => $data['date_decision'] ?? null,
+                    'date_limite' => $data['date_limite'] ?? null,
+                    'service_origine' => $data['service_origine'] ?? null,
+                    'date' => $data['date'] ?? null,
+                    
+                    // Tâches
+                    'taches' => $data['taches'] ?? null,
+                    'nombre_taches' => $data['nombre_taches'] ?? null,
+                    'projet' => $data['projet'] ?? null,
+                    'date_echeance' => $data['date_echeance'] ?? null,
+                    'days_until_deadline' => $data['days_until_deadline'] ?? null,
+                    
+                    // Salariés
+                    'salarie_id' => $data['salarie_id'] ?? null,
+                    'salarie_nom' => $data['salarie_nom'] ?? null,
+                    'salarie_prenom' => $data['salarie_prenom'] ?? null,
+                    'salarie_matricule' => $data['salarie_matricule'] ?? null,
                 ];
             });
 
@@ -77,9 +109,11 @@ class NotificationController extends Controller
             ->get()
             ->map(function ($notification) {
                 $data = $notification->data;
+                $type = $data['type'] ?? $this->getNotificationType($notification->type);
                 
                 return [
                     'id' => $notification->id,
+                    'type' => $type,
                     'titre' => $data['titre'] ?? 'Notification',
                     'commentaire' => $data['commentaire'] ?? null,
                     'created_at' => $notification->created_at->toISOString(),
@@ -95,45 +129,16 @@ class NotificationController extends Controller
                     'type_ao' => $data['type_ao'] ?? null,
                     'estimation' => $data['estimation'] ?? null,
                     'decision' => $data['decision'] ?? null,
-                    'type' => $data['type'] ?? 'general',
-                    'icon' => $data['icon'] ?? '📄',
+                    'document_id' => $data['document_id'] ?? null,
+                    'salarie_id' => $data['salarie_id'] ?? null,
+                    'salarie_nom' => $data['salarie_nom'] ?? null,
+                    'salarie_prenom' => $data['salarie_prenom'] ?? null,
                 ];
             });
 
         return response()->json([
             'notifications' => $notifications,
             'unread_count' => $notifications->count()
-        ]);
-    }
-
-    /**
-     * Créer une notification manuelle (pour les tests)
-     */
-    public function store(Request $request)
-    {
-        $data = $request->validate([
-            'user_id' => 'required|exists:users,id',
-            'titre' => 'required|string|max:255',
-            'commentaire' => 'nullable|string',
-            'priority' => 'nullable|string|in:critique,urgent,normal,info',
-            'type' => 'nullable|string',
-            'action_required' => 'nullable|boolean',
-        ]);
-
-        $user = \App\Models\User::find($data['user_id']);
-        
-        // Utiliser le système de notifications Laravel
-        $user->notify(new \App\Notifications\ManualNotification(
-            $data['titre'],
-            $data['commentaire'] ?? '',
-            $data['priority'] ?? 'info',
-            $data['type'] ?? 'general',
-            $data['action_required'] ?? false
-        ));
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Notification créée avec succès'
         ]);
     }
 
@@ -200,9 +205,7 @@ class NotificationController extends Controller
         }
         
         try {
-            // Utiliser findOrFail pour les UUIDs
             $notification = $user->notifications()->findOrFail($id);
-            
             $notification->delete();
 
             return response()->json([
@@ -264,6 +267,7 @@ class NotificationController extends Controller
                 'notification' => [
                     'id' => $notification->id,
                     'type' => $notification->type,
+                    'type_mapped' => $this->getNotificationType($notification->type),
                     'data' => $notification->data,
                     'notifiable_type' => $notification->notifiable_type,
                     'notifiable_id' => $notification->notifiable_id,

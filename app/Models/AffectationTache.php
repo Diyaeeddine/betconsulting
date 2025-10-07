@@ -15,6 +15,7 @@ class AffectationTache extends Model
         'salarie_id',
         'role_affectation',
         'date_affectation',
+        'date_terminee',
         'date_limite_assignee',
         'statut_affectation',
         'notes_affectation'

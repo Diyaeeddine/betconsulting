@@ -189,8 +189,8 @@ export default function AosSelectionne({ marcheS }: AosSelectionneProps) {
             (file) =>
                 file.type === 'application/pdf' ||
                 file.name.toLowerCase().endsWith('.pdf') ||
-                file.name.toLowerCase().endsWith('.zip') ||
-                file.name.toLowerCase().endsWith('.rar'),
+                file.name.toLowerCase().endsWith('.zip'),
+                // file.name.toLowerCase().endsWith('.rar'),
         );
 
         setUploadedFiles((prev) => [...prev, ...validFiles]);
@@ -465,7 +465,7 @@ export default function AosSelectionne({ marcheS }: AosSelectionneProps) {
                                         <div className="mb-6">
                                             <h4 className="text-md mb-2 font-medium text-gray-900">Ajouter l'offre financière</h4>
                                             <p className="mb-4 text-sm text-gray-600">
-                                                Glissez-déposez vos fichiers ici ou cliquez pour les sélectionner. Formats acceptés: PDF, ZIP, RAR
+                                                Glissez-déposez vos fichiers ici ou cliquez pour les sélectionner. Formats acceptés: PDF, ZIP,
                                             </p>
 
                                             {/* Zone de drag & drop */}
@@ -1110,71 +1110,75 @@ export default function AosSelectionne({ marcheS }: AosSelectionneProps) {
                     ) : (
                         <>
                             {viewMode === 'grid' ? (
-                                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
-                                    {filteredMarches.map((marche: MarchePublic) => (
-                                        <div
-                                            key={marche.id}
-                                            className="relative cursor-pointer rounded-lg border-l-4 border-orange-500 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
-                                            onClick={() => showDetails(marche)}
-                                        >
-                                            {isUrgent(marche.date_limite_soumission) && (
-                                                <div className="absolute -top-2 -right-2 rounded-full bg-red-500 px-2 py-1 text-xs font-bold text-white">
-                                                    Urgent
-                                                </div>
-                                            )}
+  <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+    {filteredMarches.map((marche: MarchePublic) => (
+      <div
+        key={marche.id}
+        className="relative cursor-pointer rounded-lg bg-white p-6 shadow-sm transition-shadow hover:shadow-md border border-gray-200"
+        onClick={() => showDetails(marche)}
+      >
+        {isUrgent(marche.date_limite_soumission) && (
+          <div className="absolute -top-2 -right-2 rounded-full bg-red-500 px-2 py-1 text-xs font-bold text-white">
+            Urgent
+          </div>
+        )}
 
-                                            <div className="mb-2 flex items-center justify-between">
-                                                <span className="text-sm font-semibold text-[#155DFC]">{marche.reference || 'N/A'}</span>
-                                                <span className="inline-flex items-center rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-800">
-                                                    Sélectionné
-                                                </span>
-                                            </div>
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-sm font-semibold text-[#155DFC]">{marche.reference || 'N/A'}</span>
+          <span className="inline-flex items-center rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-800">
+            Sélectionné
+          </span>
+        </div>
 
-                                            <h3 className="mb-3 line-clamp-2 text-sm font-medium text-gray-900">
-                                                {marche.objet || 'Objet non spécifié'}
-                                            </h3>
+        <h3 className="mb-3 line-clamp-2 text-sm font-medium text-gray-900">
+          {marche.objet || 'Objet non spécifié'}
+        </h3>
 
-                                            <div className="space-y-2 text-xs text-gray-600">
-                                                <div className="flex justify-between">
-                                                    <span>M.O:</span>
-                                                    <span className="font-medium">{marche.maitre_ouvrage || '-'}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Type:</span>
-                                                    <span className="font-medium">
-                                                        {marche.type_marche ? TYPE_MARCHE_LABELS[marche.type_marche] : '-'}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Budget:</span>
-                                                    <span className="font-medium text-green-600">
-                                                        {formatCurrency(marche.budget || marche.montant)}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Date limite:</span>
-                                                    <span className={`font-medium ${isUrgent(marche.date_limite_soumission) ? 'text-red-600' : ''}`}>
-                                                        {formatDate(marche.date_limite_soumission)}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Ville:</span>
-                                                    <span className="font-medium">{marche.ville || '-'}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Étape:</span>
-                                                    <span className="inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800">
-                                                        {marche.etape || 'Sélectionné'}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="rounded-lg bg-white shadow-sm">
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full divide-y divide-gray-200">
+        <div className="space-y-2 text-xs text-gray-600">
+          <div className="flex justify-between">
+            <span>M.O:</span>
+            <span className="font-medium">{marche.maitre_ouvrage || '-'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Type:</span>
+            <span className="font-medium">
+              {marche.type_marche ? TYPE_MARCHE_LABELS[marche.type_marche] : '-'}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Budget:</span>
+            <span className="font-medium text-green-600">
+              {formatCurrency(marche.budget || marche.montant)}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Date limite:</span>
+            <span
+              className={`font-medium ${
+                isUrgent(marche.date_limite_soumission) ? 'text-red-600' : ''
+              }`}
+            >
+              {formatDate(marche.date_limite_soumission)}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Ville:</span>
+            <span className="font-medium">{marche.ville || '-'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Étape:</span>
+            <span className="inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800">
+              {marche.etape || 'Sélectionné'}
+            </span>
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+) : (
+  <div className="rounded-lg bg-white shadow-sm">
+    <div className="overflow-x-auto">
+       <table className="min-w-full divide-y divide-gray-200">
                                             <thead className="bg-gray-50">
                                                 <tr>
                                                     <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">

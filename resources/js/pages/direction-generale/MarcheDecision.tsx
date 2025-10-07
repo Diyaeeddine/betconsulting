@@ -117,8 +117,9 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
     const [selectedMarche, setSelectedMarche] = useState<MarchePublic | null>(null);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [showDecisionModal, setShowDecisionModal] = useState(false);
-    const [decisionType, setDecisionType] = useState<'accept' | 'refuse'>('accept');
+    const [decisionType, setDecisionType] = useState<'accept' | 'refuse' | 'modification'>('accept');
     const [motifRefus, setMotifRefus] = useState('');
+    const [commentaire, setCommentaire] = useState('');
     const [showFilesModal, setShowFilesModal] = useState(false);
     const [selectedFiles, setSelectedFiles] = useState<DossierFinancier['fichiers_joints']>([]);
 
@@ -182,10 +183,11 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
         setShowDetailsModal(true);
     };
 
-    const showDecision = (marche: MarchePublic, type: 'accept' | 'refuse') => {
+    const showDecision = (marche: MarchePublic, type: 'accept' | 'refuse' | 'modification') => {
         setSelectedMarche(marche);
         setDecisionType(type);
         setMotifRefus('');
+        setCommentaire('');
         setShowDecisionModal(true);
     };
 
@@ -202,12 +204,24 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
             return;
         }
 
-        const endpoint =
-            decisionType === 'accept'
-                ? `/direction-generale/marche/${selectedMarche.id}/accepter`
-                : `/direction-generale/marche/${selectedMarche.id}/refuser`;
+        if ((decisionType === 'accept' || decisionType === 'modification') && !commentaire.trim()) {
+            alert('Veuillez saisir un commentaire');
+            return;
+        }
 
-        const data = decisionType === 'refuse' ? { motif_refus: motifRefus } : {};
+        let endpoint = '';
+        let data: any = {};
+
+        if (decisionType === 'accept') {
+            endpoint = `/direction-generale/marche/${selectedMarche.id}/approuver-final`;
+            data = { commentaire };
+        } else if (decisionType === 'refuse') {
+            endpoint = `/direction-generale/marche/${selectedMarche.id}/refuser`;
+            data = { motif_refus: motifRefus };
+        } else if (decisionType === 'modification') {
+            endpoint = `/direction-generale/marche/${selectedMarche.id}/demander-modification`;
+            data = { commentaire };
+        }
 
         router.post(endpoint, data, {
             preserveState: false,
@@ -217,6 +231,7 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
                 setShowDetailsModal(false);
                 setSelectedMarche(null);
                 setMotifRefus('');
+                setCommentaire('');
             },
             onError: (errors) => {
                 console.error('Erreurs:', errors);
@@ -229,7 +244,7 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
         });
     };
 
-    const downloadFile = (fichier: DossierFinancier['fichiers_joints'][0]) => {
+    const viewFile = (fichier: DossierFinancier['fichiers_joints'][0]) => {
         window.open(`/storage/${fichier.chemin}`, '_blank');
     };
 
@@ -248,7 +263,6 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <div className="min-h-screen bg-gray-50">
-                {/* Messages Flash */}
                 {(successMessage || errorMessage) && (
                     <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
                         {successMessage && (
@@ -274,7 +288,6 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
                     </div>
                 )}
 
-                {/* Header */}
                 <div className="border-b bg-white shadow-sm">
                     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
                         <div className="flex items-center justify-between">
@@ -291,7 +304,6 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
                     </div>
                 </div>
 
-                {/* Filters */}
                 <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
                     <div className="mb-6 rounded-lg bg-white p-4 shadow-sm">
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -327,7 +339,6 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
                         </div>
                     </div>
 
-                    {/* Liste des marchés */}
                     {filteredMarches.length === 0 ? (
                         <div className="rounded-lg bg-white p-12 text-center shadow-sm">
                             <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -349,7 +360,6 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
 
                                 return (
                                     <div key={marche.id} className="rounded-lg border bg-white shadow-sm transition-shadow hover:shadow-md">
-                                        {/* Header de la carte */}
                                         <div className="border-b bg-gray-50 px-6 py-4">
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center space-x-4">
@@ -413,7 +423,21 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
                                                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                                         </svg>
-                                                        Approuver
+                                                        Approbation Finale
+                                                    </button>
+                                                    <button
+                                                        onClick={() => showDecision(marche, 'modification')}
+                                                        className="inline-flex items-center gap-2 rounded-md bg-orange-600 px-3 py-2 text-sm font-medium text-white hover:bg-orange-700 focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                                                    >
+                                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                                            />
+                                                        </svg>
+                                                        Demander Modification
                                                     </button>
                                                     <button
                                                         onClick={() => showDecision(marche, 'refuse')}
@@ -433,10 +457,8 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
                                             </div>
                                         </div>
 
-                                        {/* Contenu de la carte */}
                                         <div className="p-6">
                                             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                                                {/* Informations générales */}
                                                 <div className="lg:col-span-2">
                                                     <h4 className="mb-3 text-sm font-medium text-gray-900">Informations du Marché</h4>
                                                     <div className="space-y-3">
@@ -485,7 +507,6 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
                                                     </div>
                                                 </div>
 
-                                                {/* Dossier financier */}
                                                 <div className="rounded-lg border bg-blue-50 p-4">
                                                     <h4 className="mb-3 flex items-center text-sm font-medium text-blue-900">
                                                         <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -677,7 +698,6 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
                                     </div>
                                 </div>
 
-                                {/* Dossier Financier détaillé */}
                                 {selectedMarche.dossiers && selectedMarche.dossiers.length > 0 && (
                                     <div className="mt-6 border-t pt-6">
                                         <h4 className="mb-4 text-lg font-medium text-gray-900">Dossiers Associés</h4>
@@ -725,7 +745,13 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
                                                                         strokeLinecap="round"
                                                                         strokeLinejoin="round"
                                                                         strokeWidth={2}
-                                                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                                                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                                                    />
+                                                                    <path
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                        strokeWidth={2}
+                                                                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
                                                                     />
                                                                 </svg>
                                                                 {dossier.fichiers_joints.length} fichier(s)
@@ -754,10 +780,16 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
                                         Refuser
                                     </button>
                                     <button
+                                        onClick={() => showDecision(selectedMarche, 'modification')}
+                                        className="rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                                    >
+                                        Demander Modification
+                                    </button>
+                                    <button
                                         onClick={() => showDecision(selectedMarche, 'accept')}
                                         className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:outline-none"
                                     >
-                                        Approuver
+                                        Approbation Finale
                                     </button>
                                 </div>
                             </div>
@@ -781,6 +813,15 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
                                                 d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                                             />
                                         </svg>
+                                    ) : decisionType === 'modification' ? (
+                                        <svg className="h-6 w-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                            />
+                                        </svg>
                                     ) : (
                                         <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path
@@ -794,15 +835,42 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
                                 </div>
                                 <div className="ml-4 flex-1">
                                     <h3 className="mb-2 text-lg font-medium text-gray-900">
-                                        {decisionType === 'accept' ? 'Approuver le marché' : 'Refuser le marché'}
+                                        {decisionType === 'accept'
+                                            ? 'Approbation finale du marché'
+                                            : decisionType === 'modification'
+                                              ? 'Demander des modifications'
+                                              : 'Refuser le marché'}
                                     </h3>
                                     <p className="mb-4 text-sm text-gray-600">Marché "{selectedMarche.reference}"</p>
 
                                     {decisionType === 'accept' ? (
-                                        <p className="mb-4 text-sm text-gray-700">
-                                            En approuvant ce marché, il passera à l'étape suivante de préparation des dossiers techniques et
-                                            administratifs.
-                                        </p>
+                                        <div className="mb-4">
+                                            <label className="mb-2 block text-sm font-medium text-gray-700">
+                                                Commentaire <span className="text-red-500">*</span>
+                                            </label>
+                                            <textarea
+                                                value={commentaire}
+                                                onChange={(e) => setCommentaire(e.target.value)}
+                                                placeholder="Ajoutez un commentaire pour l'approbation finale..."
+                                                rows={4}
+                                                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500 focus:outline-none"
+                                            />
+                                            <p className="mt-1 text-xs text-gray-500">Ce commentaire sera communiqué au service marché marketing</p>
+                                        </div>
+                                    ) : decisionType === 'modification' ? (
+                                        <div className="mb-4">
+                                            <label className="mb-2 block text-sm font-medium text-gray-700">
+                                                Description des modifications requises <span className="text-red-500">*</span>
+                                            </label>
+                                            <textarea
+                                                value={commentaire}
+                                                onChange={(e) => setCommentaire(e.target.value)}
+                                                placeholder="Décrivez les modifications à apporter au dossier financier..."
+                                                rows={4}
+                                                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500 focus:outline-none"
+                                            />
+                                           
+                                        </div>
                                     ) : (
                                         <div className="mb-4">
                                             <label className="mb-2 block text-sm font-medium text-gray-700">
@@ -831,10 +899,16 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
                                             className={`rounded-md px-4 py-2 text-sm font-medium text-white focus:ring-2 focus:outline-none ${
                                                 decisionType === 'accept'
                                                     ? 'bg-green-600 hover:bg-green-700 focus:ring-green-500'
-                                                    : 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
+                                                    : decisionType === 'modification'
+                                                      ? 'bg-orange-600 hover:bg-orange-700 focus:ring-orange-500'
+                                                      : 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
                                             }`}
                                         >
-                                            {decisionType === 'accept' ? "Confirmer l'approbation" : 'Confirmer le refus'}
+                                            {decisionType === 'accept'
+                                                ? "Confirmer l'approbation"
+                                                : decisionType === 'modification'
+                                                  ? 'Demander les modifications'
+                                                  : 'Confirmer le refus'}
                                         </button>
                                     </div>
                                 </div>
@@ -843,7 +917,7 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
                     </div>
                 )}
 
-                {/* Modal Fichiers */}
+                {/* Modal Fichiers - Visualisation uniquement */}
                 {showFilesModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto">
                         <div className="bg-opacity-50 fixed inset-0 bg-black transition-opacity" onClick={() => setShowFilesModal(false)}></div>
@@ -900,22 +974,26 @@ export default function MarcheDecision({ marches }: MarcheDecisionProps) {
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center space-x-2">
-                                                    <button
-                                                        onClick={() => downloadFile(fichier)}
-                                                        className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                                    >
-                                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path
-                                                                strokeLinecap="round"
-                                                                strokeLinejoin="round"
-                                                                strokeWidth={2}
-                                                                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                                            />
-                                                        </svg>
-                                                        Télécharger
-                                                    </button>
-                                                </div>
+                                                <button
+                                                    onClick={() => viewFile(fichier)}
+                                                    className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                >
+                                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                                        />
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                                                        />
+                                                    </svg>
+                                                    Voir
+                                                </button>
                                             </div>
                                         ))}
                                     </div>

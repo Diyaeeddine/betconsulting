@@ -13,7 +13,6 @@ class HandleInertiaRequests extends Middleware
 
     public function version(Request $request): ?string
     {
-        // CRITIQUE: Changer la version force Inertia à recharger les données
         return parent::version($request) . '-' . (Auth::guard('salarie')->id() ?? Auth::guard('web')->id() ?? 'guest');
     }
 
@@ -24,11 +23,9 @@ class HandleInertiaRequests extends Middleware
         $authData = null;
         $authType = null;
         
-        // CRITIQUE: Vérifier l'ordre et s'assurer qu'un seul guard est actif
         if (Auth::guard('salarie')->check()) {
             $salarie = Auth::guard('salarie')->user();
             
-            // Double vérification - si le guard web est aussi actif, le déconnecter
             if (Auth::guard('web')->check()) {
                 Auth::guard('web')->logout();
             }
@@ -46,7 +43,6 @@ class HandleInertiaRequests extends Middleware
         } elseif (Auth::guard('web')->check()) {
             $user = Auth::guard('web')->user();
             
-            // Double vérification - si le guard salarie est aussi actif, le déconnecter
             if (Auth::guard('salarie')->check()) {
                 Auth::guard('salarie')->logout();
             }

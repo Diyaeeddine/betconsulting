@@ -6,6 +6,9 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\DossierMarche;
+use App\Models\DocumentDossier;
+use App\Models\ParticipationMarche;
+use App\Models\HistoriqueMarche;
 class MarchePublic extends Model
 {
     use HasFactory;
@@ -59,4 +62,33 @@ class MarchePublic extends Model
     {
         return $this->hasMany(DossierMarche::class, 'marche_id');
     }
+
+    public function fichiers()
+{
+    return $this->hasManyThrough(
+        DocumentDossier::class,
+        DossierMarche::class,
+        'marche_id',
+        'dossier_marche_id'
+    );
+}
+
+public function participants()
+{
+    return $this->hasMany(ParticipationMarche::class, 'marche_id');
+}
+
+public function historiques()
+{
+    return $this->hasMany(HistoriqueMarche::class, 'marche_id');
+}
+
+
+public function participations()
+{
+    return $this->hasMany(ParticipationMarche::class, 'marche_public_id');
+}
+
+
+
 }

@@ -60,7 +60,7 @@ class SalarieAuthController extends Controller
 
         if (Auth::guard('salarie')->attempt($credentials, $request->boolean('remember'))) {
     $request->session()->regenerate();
-    return redirect()->route('salarie.dashboard');
+    return redirect()->route('salarie.profile');
 }
 
         throw ValidationException::withMessages([

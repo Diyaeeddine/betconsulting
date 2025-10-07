@@ -1,6 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import { router } from '@inertiajs/react';
-import { ChevronDown, Clock, Download, FileText, FolderPlus, Plus, Trash2, User, X } from 'lucide-react';
+import { AlertCircle, ChevronDown, Clock, Download, FileText, FolderPlus, Plus, Trash2, User, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 interface Salarie {
@@ -41,6 +41,7 @@ interface Dossier {
     pourcentage_avancement: number;
     date_limite?: string;
     taches: Tache[];
+    commentaires?: string;
 }
 
 interface Marche {
@@ -49,12 +50,31 @@ interface Marche {
     objet: string;
     maitre_ouvrage: string;
     date_limite_soumission: string;
+    etape: string;
     dossiers: Dossier[];
 }
 
-export default function GestionDossiers({ marche, salaries }: { marche: Marche; salaries: Salarie[] }) {
+interface ModificationRequise {
+    dossier_id: number;
+    type_dossier: string;
+    nom_dossier: string;
+    commentaires: string;
+    statut: string;
+}
+
+export default function GestionDossiers({
+    marche,
+    salaries,
+    modificationRequise,
+}: {
+    marche: Marche;
+    salaries: Salarie[];
+    modificationRequise?: ModificationRequise | null;
+}) {
     const [expandedDossier, setExpandedDossier] = useState<number | null>(null);
     const [showNewTaskForm, setShowNewTaskForm] = useState<number | null>(null);
+    const [showReplaceFileForm, setShowReplaceFileForm] = useState<number | null>(null);
+    const [filesForReplace, setFilesForReplace] = useState<FileList | null>(null);
     const [showNewDossierForm, setShowNewDossierForm] = useState(false);
     const [openDropdown, setOpenDropdown] = useState<number | null>(null);
     const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -187,6 +207,29 @@ export default function GestionDossiers({ marche, salaries }: { marche: Marche; 
         );
     };
 
+    const handleReplaceFiles = (tacheId: number) => {
+        if (!filesForReplace || filesForReplace.length === 0) {
+            showNotification('error', 'Veuillez sélectionner au moins un fichier');
+            return;
+        }
+
+        const formData = new FormData();
+        Array.from(filesForReplace).forEach((file, index) => {
+            formData.append(`fichiers[${index}]`, file);
+        });
+
+        router.post(`/marches-marketing/taches/${tacheId}/remplacer-fichiers`, formData, {
+            preserveScroll: true,
+            forceFormData: true,
+            onSuccess: () => {
+                showNotification('success', 'Fichier(s) remplacé(s) avec succès');
+                setShowReplaceFileForm(null);
+                setFilesForReplace(null);
+            },
+            onError: () => showNotification('error', 'Erreur lors du remplacement'),
+        });
+    };
+
     const handleDeleteAffectation = (affectationId: number) => {
         router.delete(`/marches-marketing/affectations/${affectationId}`, {
             preserveScroll: true,
@@ -216,6 +259,7 @@ export default function GestionDossiers({ marche, salaries }: { marche: Marche; 
             termine: 'bg-green-100 text-green-700',
             validee: 'bg-green-100 text-green-700',
             valide: 'bg-green-100 text-green-700',
+            modification_requis: 'bg-orange-100 text-orange-700',
         };
         return styles[statut as keyof typeof styles] || 'bg-gray-100 text-gray-700';
     };
@@ -287,6 +331,25 @@ export default function GestionDossiers({ marche, salaries }: { marche: Marche; 
                 </div>
 
                 <div className="mx-auto max-w-7xl px-6 py-6">
+                    {/* ✅ ALERTE MODIFICATION REQUISE */}
+                    {modificationRequise && (
+                        <div className="mb-6 rounded-lg border-2 border-orange-400 bg-orange-50 p-4 shadow-md">
+                            <div className="flex items-start gap-3">
+                                <AlertCircle className="h-6 w-6 flex-shrink-0 text-orange-600" />
+                                <div className="flex-1">
+                                    <h3 className="font-semibold text-orange-900">Modifications requises - {modificationRequise.nom_dossier}</h3>
+                                    <p className="mt-2 text-sm text-orange-800">
+                                        <span className="font-medium">Commentaires de la Direction Générale :</span>
+                                    </p>
+                                    <div className="mt-1 rounded-md bg-white p-3 text-sm text-gray-700">{modificationRequise.commentaires}</div>
+                                    <p className="mt-3 text-xs text-orange-700">
+                                        Le dossier financier doit être modifié selon les indications ci-dessus avant de pouvoir continuer.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="mb-4 flex justify-end">
                         <button
                             onClick={() => setShowNewDossierForm(!showNewDossierForm)}
@@ -348,7 +411,12 @@ export default function GestionDossiers({ marche, salaries }: { marche: Marche; 
 
                     <div className="space-y-4">
                         {marche.dossiers.map((dossier) => (
-                            <div key={dossier.id} className="rounded-lg border bg-white">
+                            <div
+                                key={dossier.id}
+                                className={`rounded-lg border bg-white ${
+                                    modificationRequise && dossier.id === modificationRequise.dossier_id ? '' : ''
+                                }`}
+                            >
                                 <div
                                     className="cursor-pointer px-5 py-4 hover:bg-gray-50"
                                     onClick={() => setExpandedDossier(expandedDossier === dossier.id ? null : dossier.id)}
@@ -360,6 +428,12 @@ export default function GestionDossiers({ marche, salaries }: { marche: Marche; 
                                                 <span className={`rounded-full px-2 py-0.5 text-xs ${getStatutBadge(dossier.statut)}`}>
                                                     {dossier.statut.replace('_', ' ')}
                                                 </span>
+                                                {modificationRequise && dossier.id === modificationRequise.dossier_id && (
+                                                    <span className="flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-xs text-orange-700">
+                                                        <AlertCircle className="h-3 w-3" />
+                                                        Action requise
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="mt-2 flex items-center gap-6 text-sm text-gray-600">
                                                 <span>{dossier.taches?.length || 0} tâches</span>
@@ -614,22 +688,35 @@ export default function GestionDossiers({ marche, salaries }: { marche: Marche; 
                                                                                         />
                                                                                     </div>
                                                                                 </div>
-                                                                                <div className="max-h-60 overflow-y-auto p-1">
-                                                                                    {salaries.map((salarie) => (
-                                                                                        <button
-                                                                                            key={salarie.id}
-                                                                                            onClick={() => handleAffectTask(tache.id, salarie.id)}
-                                                                                            className="w-full rounded px-3 py-2 text-left text-sm hover:bg-blue-50"
-                                                                                        >
-                                                                                            <div className="font-medium">
-                                                                                                {salarie.prenom} {salarie.nom}
-                                                                                            </div>
-                                                                                            <div className="text-xs text-gray-600">
-                                                                                                {salarie.poste || salarie.email}
-                                                                                            </div>
-                                                                                        </button>
-                                                                                    ))}
-                                                                                </div>
+                                                                                {salaries.length === 0 ? (
+                                                                                    <div className="p-6 text-center">
+                                                                                        <User className="mx-auto h-12 w-12 text-gray-400" />
+                                                                                        <p className="mt-2 text-sm font-medium text-gray-900">
+                                                                                            Aucun salarié disponible
+                                                                                        </p>
+                                                                                        <p className="mt-1 text-xs text-gray-500">
+                                                                                            Il n'y a pas de salariés dans ce service pour affecter
+                                                                                            cette tâche
+                                                                                        </p>
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <div className="max-h-60 overflow-y-auto p-1">
+                                                                                        {salaries.map((salarie) => (
+                                                                                            <button
+                                                                                                key={salarie.id}
+                                                                                                onClick={() => handleAffectTask(tache.id, salarie.id)}
+                                                                                                className="w-full rounded px-3 py-2 text-left text-sm hover:bg-blue-50"
+                                                                                            >
+                                                                                                <div className="font-medium">
+                                                                                                    {salarie.prenom} {salarie.nom}
+                                                                                                </div>
+                                                                                                <div className="text-xs text-gray-600">
+                                                                                                    {salarie.poste || salarie.email}
+                                                                                                </div>
+                                                                                            </button>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         )}
                                                                     </div>
@@ -643,35 +730,103 @@ export default function GestionDossiers({ marche, salaries }: { marche: Marche; 
                                                                         {formatDate(tache.date_limite)}
                                                                     </div>
                                                                 )}
+                                                                {/* Affichage des fichiers avec option de remplacement */}
+                                                                <div className="flex flex-col gap-2">
+                                                                    {tache.fichiers_produits && tache.fichiers_produits.length > 0 ? (
+                                                                        <>
+                                                                            <div className="flex flex-col gap-1">
+                                                                                {tache.fichiers_produits.map((fichier, index) => {
+                                                                                    const nomFichier = fichier.split('/').pop() || fichier;
+                                                                                    return (
+                                                                                        <button
+                                                                                            key={index}
+                                                                                            onClick={() => handleDownloadFile(fichier)}
+                                                                                            className="flex items-center gap-1.5 rounded-md bg-green-50 px-2.5 py-1 text-xs text-green-700 transition-colors hover:bg-green-100"
+                                                                                            title="Cliquer pour télécharger"
+                                                                                        >
+                                                                                            <Download className="h-3.5 w-3.5" />
+                                                                                            <span
+                                                                                                className="max-w-xs truncate font-medium"
+                                                                                                title={nomFichier}
+                                                                                            >
+                                                                                                {nomFichier}
+                                                                                            </span>
+                                                                                        </button>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
 
-                                                                {tache.fichiers_produits && tache.fichiers_produits.length > 0 ? (
-                                                                    <div className="flex flex-col gap-1">
-                                                                        {tache.fichiers_produits.map((fichier, index) => {
-                                                                            const nomFichier = fichier.split('/').pop() || fichier;
-                                                                            return (
-                                                                                <button
-                                                                                    key={index}
-                                                                                    onClick={() => handleDownloadFile(fichier)}
-                                                                                    className="flex items-center gap-1.5 rounded-md bg-green-50 px-2.5 py-1 text-xs text-green-700 transition-colors hover:bg-green-100"
-                                                                                    title="Cliquer pour télécharger"
-                                                                                >
-                                                                                    <Download className="h-3.5 w-3.5" />
-                                                                                    <span
-                                                                                        className="max-w-xs truncate font-medium"
-                                                                                        title={nomFichier}
+                                                                            {/* Bouton Remplacer si dossier en modification_requis */}
+                                                                            {modificationRequise &&
+                                                                                dossier.id === modificationRequise.dossier_id &&
+                                                                                showReplaceFileForm !== tache.id && (
+                                                                                    <button
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            setShowReplaceFileForm(tache.id);
+                                                                                        }}
+                                                                                        className="flex items-center gap-1.5 rounded-md bg-orange-100 px-2.5 py-1 text-xs font-medium text-orange-700 transition-colors hover:bg-orange-200"
                                                                                     >
-                                                                                        {nomFichier}
-                                                                                    </span>
-                                                                                </button>
-                                                                            );
-                                                                        })}
-                                                                    </div>
-                                                                ) : (
-                                                                    <div className="flex items-center gap-1.5 rounded-md bg-gray-100 px-2.5 py-1 text-xs text-gray-600">
-                                                                        <FileText className="h-3.5 w-3.5" />
-                                                                        <span>Aucun fichier</span>
-                                                                    </div>
-                                                                )}
+                                                                                        <svg
+                                                                                            className="h-3.5 w-3.5"
+                                                                                            fill="none"
+                                                                                            stroke="currentColor"
+                                                                                            viewBox="0 0 24 24"
+                                                                                        >
+                                                                                            <path
+                                                                                                strokeLinecap="round"
+                                                                                                strokeLinejoin="round"
+                                                                                                strokeWidth={2}
+                                                                                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                                                                                            />
+                                                                                        </svg>
+                                                                                        Remplacer fichier
+                                                                                    </button>
+                                                                                )}
+
+                                                                            {/* Formulaire de remplacement */}
+                                                                            {showReplaceFileForm === tache.id && (
+                                                                                <div
+                                                                                    className="mt-2 rounded-md border-2 border-orange-300 bg-orange-50 p-3"
+                                                                                    onClick={(e) => e.stopPropagation()}
+                                                                                >
+                                                                                    <p className="mb-2 text-xs font-medium text-orange-900">
+                                                                                        Sélectionner le(s) nouveau(x) fichier(s)
+                                                                                    </p>
+                                                                                    <input
+                                                                                        type="file"
+                                                                                        multiple
+                                                                                        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip,.rar"
+                                                                                        onChange={(e) => setFilesForReplace(e.target.files)}
+                                                                                        className="mb-2 w-full text-xs"
+                                                                                    />
+                                                                                    <div className="flex gap-2">
+                                                                                        <button
+                                                                                            onClick={() => handleReplaceFiles(tache.id)}
+                                                                                            className="rounded-md bg-orange-600 px-3 py-1 text-xs text-white hover:bg-orange-700"
+                                                                                        >
+                                                                                            Confirmer
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => {
+                                                                                                setShowReplaceFileForm(null);
+                                                                                                setFilesForReplace(null);
+                                                                                            }}
+                                                                                            className="rounded-md border border-gray-300 px-3 py-1 text-xs hover:bg-gray-100"
+                                                                                        >
+                                                                                            Annuler
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
+                                                                        </>
+                                                                    ) : (
+                                                                        <div className="flex items-center gap-1.5 rounded-md bg-gray-100 px-2.5 py-1 text-xs text-gray-600">
+                                                                            <FileText className="h-3.5 w-3.5" />
+                                                                            <span>Aucun fichier</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
 
                                                                 <button
                                                                     onClick={() => handleDeleteTask(tache.id)}

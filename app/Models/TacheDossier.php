@@ -5,6 +5,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\DossierMarche;
+use App\Models\AffectationTache;
+use App\Models\SuiviTache;
+use App\Models\DocumentDossier;
 
 class TacheDossier extends Model
 {
@@ -49,10 +53,10 @@ class TacheDossier extends Model
         return $this->hasMany(AffectationTache::class, 'tache_dossier_id');
     }
 
-    public function suivis(): HasMany
-    {
-        return $this->hasMany(SuiviTache::class, 'tache_dossier_id');
-    }
+    // public function suivis(): HasMany
+    // {
+    //     return $this->hasMany(SuiviTache::class, 'tache_dossier_id');
+    // }
 
     // Scopes
     public function scopeParPriorite($query, $priorite)
@@ -114,4 +118,15 @@ class TacheDossier extends Model
         // Recalculer l'avancement du dossier
         $this->dossier->calculerAvancement();
     }
+
+    public function fichiers()
+{
+    return $this->hasMany(DocumentDossier::class, 'tache_dossier_id');
+}
+
+public function documents()
+{
+    return $this->hasMany(DocumentDossier::class, 'tache_dossier_id');
+}
+
 }

@@ -74,9 +74,9 @@ public function getNameAttribute(): string
         return $this->hasMany(AffectationTache::class, 'salarie_id');
     }
 
-    public function suivis(): HasMany {
-        return $this->hasMany(SuiviTache::class, 'salarie_id');
-    }
+    // public function suivis(): HasMany {
+    //     return $this->hasMany(SuiviTache::class, 'salarie_id');
+    // }
 
     // Scopes
     public function scopeActif($query) {
@@ -96,4 +96,14 @@ public function getNameAttribute(): string
         return strtoupper(substr($this->prenom, 0, 1) . substr($this->nom, 0, 1));
     }
 
+    public function conges()
+        
+        {
+            return $this->hasMany(Conge::class);
+        }
+
+        public function certificatsMedicaux()
+        {
+            return $this->hasMany(CertificatMedical::class);
+        }
 }

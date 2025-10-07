@@ -1,6 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import { router } from '@inertiajs/react';
-import { ArrowLeft, Calendar, CheckCircle, Clock, FileText, Upload } from 'lucide-react';
+import { ArrowLeft, Calendar, CheckCircle, Clock, FileText, Upload, X } from 'lucide-react';
 import { useState } from 'react';
 
 interface Marche {
@@ -21,6 +21,16 @@ interface Dossier {
     marche_public: Marche;
 }
 
+interface Document {
+    id: number;
+    nom_original: string;
+    nom_fichier: string;
+    chemin_fichier: string;
+    type_mime: string;
+    taille_fichier: number;
+    date_upload: string;
+}
+
 interface Tache {
     id: number;
     nom_tache: string;
@@ -30,6 +40,7 @@ interface Tache {
     date_limite?: string;
     duree_estimee?: number;
     fichiers_produits?: string[];
+    documents?: Document[];
     dossier: Dossier;
 }
 
@@ -49,8 +60,8 @@ interface MesTachesMarchesProps {
 
 export default function MesTachesMarches({ affectations, auth }: MesTachesMarchesProps) {
     const [selectedDossier, setSelectedDossier] = useState<number | null>(null);
-    const [uploadingTask, setUploadingTask] = useState<number | null>(null);
     const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+    const [deletingFile, setDeletingFile] = useState<number | null>(null);
 
     const showNotification = (type: 'success' | 'error', message: string) => {
         setNotification({ type, message });
@@ -69,10 +80,25 @@ export default function MesTachesMarches({ affectations, auth }: MesTachesMarche
         router.post(`/salarie/marches/taches/${tacheId}/upload`, formData, {
             onSuccess: () => {
                 showNotification('success', 'Fichier(s) téléchargé(s) avec succès');
-                setUploadingTask(null);
             },
             onError: () => {
                 showNotification('error', 'Erreur lors du téléchargement');
+            },
+        });
+    };
+
+    const handleDeleteFile = (documentId: number) => {
+        if (!confirm('Êtes-vous sûr de vouloir supprimer ce fichier ?')) return;
+
+        setDeletingFile(documentId);
+        router.delete(`/salarie/marches/documents/${documentId}`, {
+            onSuccess: () => {
+                showNotification('success', 'Fichier supprimé avec succès');
+                setDeletingFile(null);
+            },
+            onError: () => {
+                showNotification('error', 'Erreur lors de la suppression');
+                setDeletingFile(null);
             },
         });
     };
@@ -95,6 +121,12 @@ export default function MesTachesMarches({ affectations, auth }: MesTachesMarche
         return new Date(date).toLocaleDateString('fr-FR');
     };
 
+    const formatFileSize = (bytes: number): string => {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    };
+
     const getStatutBadge = (statut: string) => {
         const styles = {
             en_attente: 'bg-gray-100 text-gray-700',
@@ -114,7 +146,20 @@ export default function MesTachesMarches({ affectations, auth }: MesTachesMarche
         return styles[priorite as keyof typeof styles] || 'bg-gray-100 text-gray-700';
     };
 
-    // Grouper les affectations par dossier
+    const getFichiers = (tache: Tache) => {
+        if (tache.documents && tache.documents.length > 0) {
+            return tache.documents;
+        }
+        if (tache.fichiers_produits && tache.fichiers_produits.length > 0) {
+            return tache.fichiers_produits.map((path, idx) => ({
+                id: idx,
+                nom_original: path.split('/').pop() || path,
+                chemin_fichier: path,
+            }));
+        }
+        return [];
+    };
+
     const affectationsParDossier = affectations.reduce(
         (acc, aff) => {
             const dossierId = aff.tache.dossier.id;
@@ -132,7 +177,6 @@ export default function MesTachesMarches({ affectations, auth }: MesTachesMarche
 
     const dossiers = Object.values(affectationsParDossier);
 
-    // Vue liste des dossiers
     if (!selectedDossier) {
         return (
             <AppLayout>
@@ -224,7 +268,6 @@ export default function MesTachesMarches({ affectations, auth }: MesTachesMarche
         );
     }
 
-    // Vue détaillée d'un dossier
     const dossierActuel = affectationsParDossier[selectedDossier];
     if (!dossierActuel) return null;
 
@@ -282,93 +325,118 @@ export default function MesTachesMarches({ affectations, auth }: MesTachesMarche
                         {dossierActuel.taches.map((affectation) => {
                             const tache = affectation.tache;
                             const isTerminee = ['terminee', 'validee'].includes(tache.statut);
+                            const fichiers = getFichiers(tache);
 
                             return (
-                                <div key={affectation.id} className="rounded-lg border bg-white p-5">
-                                    <div className="flex items-start justify-between">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2">
-                                                <h3 className="text-lg font-medium text-gray-900">{tache.nom_tache}</h3>
-                                                <span className={`rounded-full px-2.5 py-0.5 text-xs ${getPrioriteBadge(tache.priorite)}`}>
-                                                    {tache.priorite}
-                                                </span>
-                                                <span className={`rounded-full px-2.5 py-0.5 text-xs ${getStatutBadge(tache.statut)}`}>
-                                                    {tache.statut.replace('_', ' ')}
-                                                </span>
-                                            </div>
-
-                                            {tache.description && <p className="mt-2 text-sm text-gray-600">{tache.description}</p>}
-
-                                            <div className="mt-3 flex items-center gap-6 text-sm text-gray-600">
-                                                {tache.date_limite && (
-                                                    <div className="flex items-center gap-1.5">
-                                                        <Calendar className="h-4 w-4" />
-                                                        <span>Échéance: {formatDate(tache.date_limite)}</span>
-                                                    </div>
-                                                )}
-                                                {tache.duree_estimee && (
-                                                    <div className="flex items-center gap-1.5">
-                                                        <Clock className="h-4 w-4" />
-                                                        <span>Durée estimée: {tache.duree_estimee}h</span>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {tache.fichiers_produits && tache.fichiers_produits.length > 0 && (
-                                                <div className="mt-3">
-                                                    <p className="mb-2 text-xs font-medium text-gray-500">Fichiers déposés:</p>
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {tache.fichiers_produits.map((fichier, idx) => (
-                                                            <div key={idx} className="flex items-center gap-2 rounded-md bg-green-50 px-3 py-1.5">
-                                                                <FileText className="h-4 w-4 text-green-600" />
-                                                                <span className="text-sm text-green-700">{fichier.split('/').pop()}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
+                                
+                                    <div key={affectation.id} className="rounded-lg border bg-white p-5">
+                                        <div className="flex items-start justify-between">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="text-lg font-medium text-gray-900">{tache.nom_tache}</h3>
+                                                    <span className={`rounded-full px-2.5 py-0.5 text-xs ${getPrioriteBadge(tache.priorite)}`}>
+                                                        {tache.priorite}
+                                                    </span>
+                                                    <span className={`rounded-full px-2.5 py-0.5 text-xs ${getStatutBadge(tache.statut)}`}>
+                                                        {tache.statut.replace('_', ' ')}
+                                                    </span>
                                                 </div>
-                                            )}
-                                        </div>
 
-                                        <div className="ml-4 flex flex-col gap-2">
-                                            {!isTerminee && (
-                                                <>
-                                                    <label
-                                                        htmlFor={`upload-${tache.id}`}
-                                                        className="flex cursor-pointer items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
-                                                    >
-                                                        <Upload className="h-4 w-4" />
-                                                        Déposer fichier(s)
-                                                    </label>
-                                                    <input
-                                                        id={`upload-${tache.id}`}
-                                                        type="file"
-                                                        multiple
-                                                        className="hidden"
-                                                        onChange={(e) => handleFileUpload(tache.id, e)}
-                                                        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                                                    />
+                                                {tache.description && <p className="mt-2 text-sm text-gray-600">{tache.description}</p>}
 
-                                                    {tache.fichiers_produits && tache.fichiers_produits.length > 0 && (
-                                                        <button
-                                                            onClick={() => handleMarquerTerminee(tache.id)}
-                                                            className="flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700"
-                                                        >
-                                                            <CheckCircle className="h-4 w-4" />
-                                                            Marquer terminée
-                                                        </button>
+                                                <div className="mt-3 flex items-center gap-6 text-sm text-gray-600">
+                                                    {tache.date_limite && (
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Calendar className="h-4 w-4" />
+                                                            <span>Échéance: {formatDate(tache.date_limite)}</span>
+                                                        </div>
                                                     )}
-                                                </>
-                                            )}
-
-                                            {isTerminee && (
-                                                <div className="flex items-center gap-2 rounded-md bg-green-100 px-4 py-2 text-sm text-green-700">
-                                                    <CheckCircle className="h-4 w-4" />
-                                                    Tâche terminée
+                                                    {tache.duree_estimee && (
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Clock className="h-4 w-4" />
+                                                            <span>Durée estimée: {tache.duree_estimee}h</span>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            )}
+
+                                                {fichiers.length > 0 && (
+                                                    <div className="mt-3">
+                                                        <p className="mb-2 text-xs font-medium text-gray-500">
+                                                            Fichiers déposés ({fichiers.length}):
+                                                        </p>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {fichiers.map((fichier: any, idx: number) => (
+                                                                <div
+                                                                    key={idx}
+                                                                    className="group relative flex items-center gap-2 rounded-md bg-green-50 px-3 py-1.5 pr-8"
+                                                                >
+                                                                    <FileText className="h-4 w-4 text-green-600" />
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-sm text-green-700">{fichier.nom_original}</span>
+                                                                        {fichier.taille_fichier && (
+                                                                            <span className="text-xs text-green-600">
+                                                                                {formatFileSize(fichier.taille_fichier)}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    {!isTerminee && fichier.id && (
+                                                                        <button
+                                                                            onClick={() => handleDeleteFile(fichier.id)}
+                                                                            disabled={deletingFile === fichier.id}
+                                                                            className="absolute top-1/2 right-1 -translate-y-1/2 rounded-full bg-red-100 p-1 text-red-600 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-200 disabled:opacity-50"
+                                                                            title="Supprimer le fichier"
+                                                                        >
+                                                                            <X className="h-3 w-3" />
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="ml-4 flex flex-col gap-2">
+                                                {!isTerminee && (
+                                                    <>
+                                                        <label
+                                                            htmlFor={`upload-${tache.id}`}
+                                                            className="flex cursor-pointer items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+                                                        >
+                                                            <Upload className="h-4 w-4" />
+                                                            Déposer fichier(s)
+                                                        </label>
+                                                        <input
+                                                            id={`upload-${tache.id}`}
+                                                            type="file"
+                                                            multiple
+                                                            className="hidden"
+                                                            onChange={(e) => handleFileUpload(tache.id, e)}
+                                                            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip"
+                                                        />
+
+                                                        {fichiers.length > 0 && (
+                                                            <button
+                                                                onClick={() => handleMarquerTerminee(tache.id)}
+                                                                className="flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700"
+                                                            >
+                                                                <CheckCircle className="h-4 w-4" />
+                                                                Marquer terminée
+                                                            </button>
+                                                        )}
+                                                    </>
+                                                )}
+
+                                                {isTerminee && (
+                                                    <div className="flex items-center gap-2 rounded-md bg-green-100 px-4 py-2 text-sm text-green-700">
+                                                        <CheckCircle className="h-4 w-4" />
+                                                        Tâche terminée
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                
                             );
                         })}
                     </div>

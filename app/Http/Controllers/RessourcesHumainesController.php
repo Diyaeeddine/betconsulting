@@ -731,8 +731,8 @@ public function storeUsers(Request $request)
             'projet_ids'      => json_encode([]),
         ]);
 
-        // Assigner automatiquement le rôle 'salarie'
-        $salarie->assignRole('salarie');
+        $salarie->assignRole('salarie', 'salarie');
+
 
         $adminRole = Role::where('name', 'admin')->first();
         if ($adminRole) {
@@ -744,7 +744,7 @@ public function storeUsers(Request $request)
         }
 
         return redirect()->back()->with([
-            'success' => 'Employé créé avec succès, notification envoyée aux admins.',
+            'success' => 'Employé créé avec succès, notification envoyée aux admin.',
             'created' => [
                 'salarie' => $salarie->only(['id', 'nom', 'prenom', 'email', 'telephone', 'statut']),
             ],

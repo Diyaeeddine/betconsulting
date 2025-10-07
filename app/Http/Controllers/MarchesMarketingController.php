@@ -7,7 +7,17 @@ use App\Models\Document;
 use App\Models\MarchePublic;
 use App\Models\Salarie;
 use Inertia\Response;
+// use App\Models\MarchePublic;
+use App\Models\DossierMarche;
+use App\Models\TacheDossier;
+use App\Models\ParticipationMarche;
+use App\Models\HistoriqueMarche;
+use App\Models\DocumentDossier;
+use App\Models\AffectationTache;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+// use Inertia\Inertia;
+// use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class MarchesMarketingController extends Controller
@@ -32,7 +42,7 @@ public function users()
         'id', 'reference', 'objet', 'maitre_ouvrage', 
         'statut', 'type_marche', 'urgence', 
         'date_limite_soumission', 'montant', 'ville'
-    ])
+    ])  
     ->where('is_accepted',true)
     ->where('etape','preparation')
     ->orderBy('date_limite_soumission', 'asc')

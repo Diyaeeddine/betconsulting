@@ -99,7 +99,7 @@ const generateFakeFiles = (marcheId: number): string[] => {
         'Bordereau_prix.pdf',
         'Acte_engagement.pdf',
         'Certificats_requis.pdf',
-    ];
+    ]
     const numFiles = 3 + (marcheId % 4);
     return fileTypes.slice(0, numFiles);
 };

@@ -17,6 +17,7 @@ return new class extends Migration
             $table->foreignId('salarie_id')->constrained('salaries')->onDelete('cascade');
             $table->enum('role_affectation', ['responsable', 'collaborateur', 'support'])->default('collaborateur');
             $table->timestamp('date_affectation');
+            $table->timestamp('date_terminee');
             $table->date('date_limite_assignee')->nullable();
             $table->enum('statut_affectation', ['active', 'suspendue', 'terminee'])->default('active');
             $table->text('notes_affectation')->nullable();
@@ -30,7 +31,13 @@ return new class extends Migration
      * Reverse the migrations.
      */
     public function down(): void
-    {
-        Schema::dropIfExists('affectations_taches');
-    }
+{
+    Schema::table('affectations_taches', function (Blueprint $table) {
+        $table->dropForeign(['tache_dossier_id']);
+        $table->dropForeign(['salarie_id']);
+    });
+
+    Schema::dropIfExists('affectations_taches');
+}
+
 };

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Bell, Clock, FileText, Calendar, DollarSign, Building, CheckCircle, XCircle, AlertTriangle, Trash2, Users, CheckSquare } from "lucide-react";
+import { Bell, Clock, FileText, Calendar, CheckCircle, XCircle, AlertTriangle, Trash2, Users, Briefcase } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -9,49 +9,50 @@ import {
 } from "@/components/ui/dropdown-menu";
 import axios from "axios"; 
 import Pusher from "pusher-js";
-import { usePage } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 
-type Notification = {
+type NotificationSalarie = {
     id: string;
     titre: string;
     commentaire: string | null;
     created_at: string;
     read_at?: string | null;
     priority?: 'critique' | 'urgent' | 'normal' | 'info';
+    type?: string;
+    action_required?: boolean;
+    
+    // Documents
+    document_id?: string;
     document_type?: string;
     days_until_expiration?: number;
     date_expiration?: string;
-    action_required?: boolean;
-    type?: string;
-    document_id?: string;
-    periodicite?: string;
-    marche_id?: string;
-    reference?: string;
-    objet?: string;
-    type_ao?: string;
-    estimation?: number;
-    decision?: 'accepte' | 'refuse';
-    date_decision?: string;
-    date_limite?: string;
-    service_origine?: string;
-    date?: string;
-    taches?: string[];
-    nombre_taches?: number;
+    
+    // Tâches
+    tache_id?: string;
+    tache_titre?: string;
     projet?: string;
     date_echeance?: string;
     days_until_deadline?: number;
-    salarie_id?: string;
-    salarie_nom?: string;
-    salarie_prenom?: string;
-    salarie_matricule?: string;
+    
+    // Congés
+    conge_id?: string;
+    type_conge?: string;
+    date_debut?: string;
+    date_fin?: string;
+    decision?: 'accepte' | 'refuse';
+    motif_refus?: string;
+    
+    // Profil
+    validation_status?: string;
+    validation_message?: string;
 };
 
-export function Notifications() {
-    const [notifications, setNotifications] = useState<Notification[]>([]);
+export function NotificationsSalaries() {
+    const [notifications, setNotifications] = useState<NotificationSalarie[]>([]);
     const [chargement, setChargement] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const boutonRef = useRef<HTMLButtonElement>(null);
-    const { auth } = usePage().props as any; 
+    const { auth } = usePage().props as any;
 
     const formatExpirationDate = (dateStr?: string) => {
         if (!dateStr) return '';
@@ -67,25 +68,17 @@ export function Notifications() {
         }
     };
 
-    const formatCurrency = (amount?: number) => {
-        if (!amount) return '';
-        return new Intl.NumberFormat('fr-FR', {
-            style: 'currency',
-            currency: 'MAD'
-        }).format(amount);
-    };
-
-    const getNotificationIcon = (notification: Notification) => {
+    const getNotificationIcon = (notification: NotificationSalarie) => {
         switch (notification.type) {
             case 'document_expiration':
                 return <FileText className="h-4 w-4 text-blue-600" />;
-            case 'marche_decision':
+            case 'tache_assignee':
+                return <Briefcase className="h-4 w-4 text-purple-600" />;
+            case 'conge_decision':
                 return notification.decision === 'accepte' 
                     ? <CheckCircle className="h-4 w-4 text-green-600" />
                     : <XCircle className="h-4 w-4 text-red-600" />;
-            case 'marche_validation_admin':
-                return <Building className="h-4 w-4 text-purple-600" />;
-            case 'validation_profile_salarie':
+            case 'validation_profile':
                 return <Users className="h-4 w-4 text-indigo-600" />;
             default:
                 switch (notification.priority) {
@@ -114,12 +107,12 @@ export function Notifications() {
         }
     };
 
-    const getBackgroundColor = (notification: Notification) => {
+    const getBackgroundColor = (notification: NotificationSalarie) => {
         if (!notification.read_at) return 'bg-blue-25 border-l-4 border-l-blue-500';
         return 'hover:bg-gray-25';
     };
 
-    const renderNotificationDetails = (n: Notification) => {
+    const renderNotificationDetails = (n: NotificationSalarie) => {
         switch (n.type) {
             case 'document_expiration':
                 return (
@@ -151,102 +144,80 @@ export function Notifications() {
                     </div>
                 );
 
-            case 'marche_decision':
+            case 'tache_assignee':
                 return (
-                    <div className="bg-blue-50 rounded-lg p-3 space-y-2">
-                        {n.reference && (
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-2">
-                                    <FileText className="h-4 w-4 text-blue-600" />
-                                    <span className="text-sm font-medium text-gray-900">Ref: {n.reference}</span>
-                                </div>
-                                {n.decision && (
-                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                        n.decision === 'accepte' 
-                                            ? 'bg-green-100 text-green-800 border border-green-200' 
-                                            : 'bg-red-100 text-red-800 border border-red-200'
-                                    }`}>
-                                        {n.decision === 'accepte' ? 'Accepté' : 'Refusé'}
-                                    </span>
-                                )}
+                    <div className="bg-purple-50 rounded-lg p-3 space-y-2">
+                        {n.tache_titre && (
+                            <div className="flex items-center space-x-2">
+                                <Briefcase className="h-4 w-4 text-purple-600" />
+                                <span className="text-sm font-medium text-gray-900">{n.tache_titre}</span>
                             </div>
                         )}
-                        {n.objet && <div className="text-sm text-gray-700"><span className="font-medium">Objet:</span> {n.objet}</div>}
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                            {n.type_ao && (
+                        {n.projet && (
+                            <div className="text-sm text-gray-700">
+                                <span className="font-medium">Projet:</span> {n.projet}
+                            </div>
+                        )}
+                        {n.date_echeance && (
+                            <div className="flex items-center space-x-2 text-sm">
+                                <Calendar className="h-4 w-4 text-purple-600" />
+                                <span className="text-gray-700">Échéance: {formatExpirationDate(n.date_echeance)}</span>
+                            </div>
+                        )}
+                        <div className="pt-2">
+                            <span className="text-xs text-purple-600 font-medium">
+                                Cliquez pour voir les détails →
+                            </span>
+                        </div>
+                    </div>
+                );
+            case 'conge_decision':
+                return (
+                    <div className="bg-blue-50 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                            {n.type_conge && (
                                 <div className="flex items-center space-x-2">
-                                    <Building className="h-4 w-4 text-blue-600" />
-                                    <span className="text-gray-700">{n.type_ao}</span>
+                                    <Calendar className="h-4 w-4 text-blue-600" />
+                                    <span className="text-sm font-medium text-gray-900">{n.type_conge}</span>
                                 </div>
                             )}
-                            {n.estimation && (
-                                <div className="flex items-center space-x-2">
-                                    <DollarSign className="h-4 w-4 text-blue-600" />
-                                    <span className="font-medium text-gray-900">{formatCurrency(n.estimation)}</span>
-                                </div>
+                            {n.decision && (
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                    n.decision === 'accepte' 
+                                        ? 'bg-green-100 text-green-800 border border-green-200' 
+                                        : 'bg-red-100 text-red-800 border border-red-200'
+                                }`}>
+                                    {n.decision === 'accepte' ? 'Accepté' : 'Refusé'}
+                                </span>
                             )}
                         </div>
-                        {n.date_limite && (
-                            <div className="flex items-center space-x-2 text-sm">
-                                <Calendar className="h-4 w-4 text-blue-600" />
-                                <span className="text-gray-700">Date limite: {formatExpirationDate(n.date_limite)}</span>
+                        {n.date_debut && n.date_fin && (
+                            <div className="text-sm text-gray-700">
+                                Du {formatExpirationDate(n.date_debut)} au {formatExpirationDate(n.date_fin)}
+                            </div>
+                        )}
+                        {n.motif_refus && (
+                            <div className="text-sm text-red-700 bg-red-50 p-2 rounded">
+                                <span className="font-medium">Motif:</span> {n.motif_refus}
                             </div>
                         )}
                     </div>
                 );
 
-            case 'marche_validation_admin':
+            case 'validation_profile':
                 return (
-                    <div className="bg-purple-50 rounded-lg p-3 space-y-2">
-                        {n.reference && (
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-2">
-                                    <FileText className="h-4 w-4 text-purple-600" />
-                                    <span className="text-sm font-medium text-gray-900">Ref: {n.reference}</span>
-                                </div>
-                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
-                                    En attente
+                    <div className="bg-indigo-50 rounded-lg p-3 space-y-2">
+                        {n.validation_status && (
+                            <div className="flex items-center space-x-2">
+                                <Users className="h-4 w-4 text-indigo-600" />
+                                <span className="text-sm font-medium text-gray-900">
+                                    Statut: {n.validation_status}
                                 </span>
                             </div>
                         )}
-                        {n.objet && <div className="text-sm text-gray-700"><span className="font-medium">Objet:</span> {n.objet}</div>}
-                        {n.service_origine && (
-                            <div className="flex items-center space-x-2 text-sm">
-                                <Building className="h-4 w-4 text-purple-600" />
-                                <span className="text-gray-700">Source: {n.service_origine}</span>
-                            </div>
+                        {n.validation_message && (
+                            <div className="text-sm text-gray-700">{n.validation_message}</div>
                         )}
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                            {n.type_ao && <div className="flex items-center space-x-2"><span className="text-gray-700">{n.type_ao}</span></div>}
-                            {n.estimation && (
-                                <div className="flex items-center space-x-2">
-                                    <DollarSign className="h-4 w-4 text-purple-600" />
-                                    <span className="font-medium text-gray-900">{formatCurrency(n.estimation)}</span>
-                                </div>
-                            )}
-                        </div>
-                        {n.date && (
-                            <div className="flex items-center space-x-2 text-sm">
-                                <Calendar className="h-4 w-4 text-purple-600" />
-                                <span className="text-gray-700">Date: {formatExpirationDate(n.date)}</span>
-                            </div>
-                        )}
-                    </div>
-                );
-
-            
-
-            case 'validation_profile_salarie':
-                return (
-                    <div className="bg-indigo-50 rounded-lg p-3 space-y-2">
-                        {(n.salarie_nom || n.salarie_prenom) && (
-                            <div className="flex items-center space-x-2">
-                                <Users className="h-4 w-4 text-indigo-600" />
-                                <span className="text-sm font-medium text-gray-900">{n.salarie_nom} {n.salarie_prenom}</span>
-                            </div>
-                        )}
-                        {n.salarie_matricule && <div className="text-sm text-gray-700"><span className="font-medium">Matricule:</span> {n.salarie_matricule}</div>}
-                        {n.salarie_id && <div className="text-xs text-gray-500">ID: {n.salarie_id}</div>}
                     </div>
                 );
 
@@ -259,7 +230,7 @@ export function Notifications() {
         try {
             setChargement(true);
             setError(null);
-            const response = await axios.get("/api/notifications");
+            const response = await axios.get("/api/notifications-salarie");
             setNotifications(response.data);
         } catch (err: any) {
             console.error("Erreur lors du chargement des notifications:", err);
@@ -271,7 +242,7 @@ export function Notifications() {
 
     const marquerCommeLue = useCallback(async (notificationId: string) => {
         try {
-            await axios.post(`/api/notifications/${notificationId}/read`);
+            await axios.post(`/api/notifications-salarie/${notificationId}/read`);
             setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read_at: new Date().toISOString() } : n));
         } catch (err: any) {
             console.error("Erreur lors du marquage:", err);
@@ -280,7 +251,7 @@ export function Notifications() {
 
     const marquerToutesCommeLues = useCallback(async () => {
         try {
-            await axios.post('/api/notifications/mark-all-read');
+            await axios.post('/api/notifications-salarie/mark-all-read');
             setNotifications(prev => prev.map(n => ({ ...n, read_at: new Date().toISOString() })));
         } catch (err: any) {
             console.error("Erreur lors du marquage de toutes:", err);
@@ -289,7 +260,7 @@ export function Notifications() {
 
     const supprimerNotification = useCallback(async (notificationId: string) => {
         try {
-            const response = await axios.delete(`/api/notifications/${notificationId}`);
+            const response = await axios.delete(`/api/notifications-salarie/${notificationId}`);
             if (response.data.success) {
                 setNotifications(prev => prev.filter(n => n.id !== notificationId));
             }
@@ -299,26 +270,28 @@ export function Notifications() {
         }
     }, []);
 
-    const handleNotificationClick = useCallback((notification: Notification) => {
-        if (!notification.read_at) {
-            marquerCommeLue(notification.id);
-        }
+    const handleNotificationClick = useCallback((notification: NotificationSalarie) => {
+    if (!notification.read_at) {
+        marquerCommeLue(notification.id);
+    }
 
-        switch (notification.type) {
-            case 'document_expiration':
-                window.location.href = notification.document_id ? `/documents/` : '/documents/expiration';
-                break;
-            // case 'marche_decision':
-            //     if (notification.marche_id) window.location.href = `/etudes-techniques/marches/${notification.marche_id}`;
-            //     break;
-            case 'marche_validation_admin':
-                window.location.href = `/direction-generale/boite-decision-marche`;
-                break;
-            case 'validation_profile_salarie':
-                window.location.href = `/direction-generale/boite-decision-profile`;
-                break;
-        }
-    }, [marquerCommeLue]);
+    switch (notification.type) {
+        case 'document_expiration':
+            router.visit('/salarie/documents');
+            break;
+        case 'tache_assignee':
+            if (notification.tache_id) {
+                router.visit(`/salarie/marches/taches/${notification.tache_id}`);
+            }
+            break;
+        case 'conge_decision':
+            router.visit('/salarie/conges');
+            break;
+        case 'validation_profile':
+            router.visit('/salarie/profil');
+            break;
+    }
+}, [marquerCommeLue]);
 
     const handleActionClick = useCallback((e: React.MouseEvent, action: () => void) => {
         e.stopPropagation();
@@ -338,43 +311,36 @@ export function Notifications() {
             }
         });
 
-        const canal = pusher.subscribe(`private-user.${auth.user.id}`);
+        const canal = pusher.subscribe(`private-salarie.${auth.user.id}`);
 
         canal.bind("notification.created", (data: any) => {
             const nd = data.notification || data;
-            const notification: Notification = {
+            const notification: NotificationSalarie = {
                 id: nd.id || Math.random().toString(),
                 titre: nd.titre || "Notification",
                 commentaire: nd.commentaire || null,
                 created_at: nd.created_at || new Date().toISOString(),
                 read_at: nd.read_at || null,
                 priority: nd.priority || 'info',
+                type: nd.type || 'general',
+                action_required: nd.action_required || false,
+                document_id: nd.document_id,
                 document_type: nd.document_type,
                 days_until_expiration: nd.days_until_expiration,
                 date_expiration: nd.date_expiration,
-                action_required: nd.action_required || false,
-                type: nd.type || 'general',
-                document_id: nd.document_id,
-                periodicite: nd.periodicite,
-                marche_id: nd.marche_id,
-                reference: nd.reference,
-                objet: nd.objet,
-                type_ao: nd.type_ao,
-                estimation: nd.estimation,
-                decision: nd.decision,
-                date_decision: nd.date_decision,
-                date_limite: nd.date_limite,
-                service_origine: nd.service_origine,
-                date: nd.date,
-                taches: nd.taches,
-                nombre_taches: nd.nombre_taches,
+                tache_id: nd.tache_id,
+                tache_titre: nd.tache_titre,
                 projet: nd.projet,
                 date_echeance: nd.date_echeance,
                 days_until_deadline: nd.days_until_deadline,
-                salarie_id: nd.salarie_id,
-                salarie_nom: nd.salarie_nom,
-                salarie_prenom: nd.salarie_prenom,
-                salarie_matricule: nd.salarie_matricule,
+                conge_id: nd.conge_id,
+                type_conge: nd.type_conge,
+                date_debut: nd.date_debut,
+                date_fin: nd.date_fin,
+                decision: nd.decision,
+                motif_refus: nd.motif_refus,
+                validation_status: nd.validation_status,
+                validation_message: nd.validation_message,
             };
 
             setNotifications(prev => [notification, ...prev]);
