@@ -19,15 +19,15 @@ export default function Dashboard() {
                     <div className="d-flex relative aspect-video justify-between overflow-hidden rounded-xl border border-sidebar-border/70 p-5 dark:border-sidebar-border">
                         {/* <Switch /> Airplane mode */}
                     </div>
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70">
+                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20" />
                     </div>
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70">
+                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20" />
                     </div>
                 </div>
-                <div className="relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border border-sidebar-border/70 md:min-h-min dark:border-sidebar-border">
-                    <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+                <div className="relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border border-sidebar-border/70 md:min-h-min">
+                    <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20" />
                 </div>
             </div>
         </AppLayout>

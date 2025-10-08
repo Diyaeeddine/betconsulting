@@ -22,6 +22,10 @@ return new class extends Migration {
             $table->decimal('latitude', 10, 7)->nullable();
             $table->decimal('longitude', 10, 7)->nullable();
             $table->decimal('radius', 8, 2)->nullable();
+            $table->json('rh_needs');
+            $table->json('docs_needs')->nullable();
+            $table->json('terrain_ids');
+            $table->json('salarie_ids'); // Stores related salaries
             $table->timestamps();
         });
     }

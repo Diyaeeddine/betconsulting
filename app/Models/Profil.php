@@ -1,39 +1,63 @@
 <?php
+// ============================================================
+// FILE: app/Models/Profil.php
+// ============================================================
 
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Profil extends Model
 {
     use HasFactory;
 
-    protected $table = 'profils';
-
     protected $fillable = [
-        'user_id',
-        'nom_profil',
+        'salarie_id', // Fixed: should be salarie_id, not user_id
+        'categorie_profil',
         'poste_profil',
+        'missions',
+        'niveau_experience',
+        'competences_techniques',
+        'certifications',
+        'actif',
     ];
 
     protected $casts = [
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
+        'competences_techniques' => 'array',
+        'certifications' => 'array',
+        'actif' => 'boolean',
     ];
 
-    public function salarie()
+    protected $attributes = [
+        'actif' => true,
+        'niveau_experience' => 'junior',
+    ];
+
+    public function salarie(): BelongsTo
     {
-        return $this->belongsTo(Salarie::class, 'user_id');
+        return $this->belongsTo(Salarie::class, 'salarie_id', 'id');
+    }
+    
+    // Scopes
+    public function scopeActif($query)
+    {
+        return $query->where('actif', true);
     }
 
-    public static function getProfileTypes()
+    public function scopeParCategorie($query, $categorie)
     {
-        return [
-            'bureau_etudes' => 'Bureau d\'Études Techniques (BET)',
-            'construction' => 'Construction',
-            'suivi_controle' => 'Suivi et Contrôle',
-            'support_gestion' => 'Support et Gestion',
-        ];
+        return $query->where('categorie_profil', $categorie);
+    }
+
+    public function scopeParPoste($query, $poste)
+    {
+        return $query->where('poste_profil', $poste);
+    }
+
+    public function scopeParNiveauExperience($query, $niveau)
+    {
+        return $query->where('niveau_experience', $niveau);
     }
 }

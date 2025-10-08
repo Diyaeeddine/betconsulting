@@ -13,7 +13,7 @@ return new class extends Migration {
             $table->string('marque');
             $table->enum('type', ['camion', 'voiture', 'engine', 'autre']);
             $table->enum('etat', ['disponible', 'en_panne', 'en_mission'])->default('disponible');
-            
+            $table->decimal('carburant', 5, 2)->nullable();
             // Location
             $table->decimal('cout_location_jour', 10, 2)->nullable();
             $table->date('date_debut_location')->nullable();

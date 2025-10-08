@@ -23,19 +23,50 @@ class Projet extends Model
         'type_projet',
         'latitude',
         'longitude',
-        'radius'
+        'radius',
+        'terrain_ids',
+        'rh_needs',
+        'docs_needs'
     ];
 
-
-    public function responsable() {
+    protected $casts = [
+        'salarie_ids' => 'array',
+        'terrain_ids' => 'array',
+        'rh_needs' => 'array',
+        'docs_needs' => 'array',
+        
+    ];
+    protected $attributes = [
+        'salarie_ids' => '[]',
+        'terrain_ids' => '[]',
+        'rh_needs' => '[]',
+        'docs_needs' => '[]',
+    ];
+    public function responsable()
+    {
         return $this->belongsTo(User::class, 'responsable_id');
     }
 
-    public function depenses() {
+    public function depenses()
+    {
         return $this->hasMany(Depense::class);
     }
 
-    public function salaries() {
+    public function salaries()
+    {
         return $this->belongsToMany(Salarie::class, 'projet_salarie');
+    }
+    public function progressions()
+    {
+        return $this->hasMany(Progression::class);
+    }
+
+    public function terrains()
+    {
+        return $this->hasMany(Terrain::class);
+    }
+    public function plans()
+    {
+        return $this->hasMany(Plan::class, 'projet_id');
     }
 }

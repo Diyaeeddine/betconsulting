@@ -16,10 +16,11 @@ export interface NavGroup {
 }
 
 export interface NavItem {
-    title: string;
-    href: string;
-    icon?: LucideIcon | null;
-    isActive?: boolean;
+  title: string;
+  href?: string; // Make href optional since parent items with subitems don't need href
+  icon?: LucideIcon | null;
+  isActive?: boolean;
+  items?: NavItem[];
 }
 
 export interface SharedData {

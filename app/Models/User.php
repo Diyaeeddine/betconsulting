@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -13,7 +14,7 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
     /**
-     * The attributes that are mass assignable.
+     * Champs autorisés en écriture
      *
      * @var list<string>
      */
@@ -24,7 +25,7 @@ class User extends Authenticatable
     ];
 
     /**
-     * The attributes that should be hidden for serialization.
+     * Champs cachés lors de la sérialisation (API, JSON, etc.)
      *
      * @var list<string>
      */
@@ -34,7 +35,14 @@ class User extends Authenticatable
     ];
 
     /**
-     * Get the attributes that should be cast.
+     * Attributs ajoutés automatiquement dans les réponses JSON
+     *
+     * @var list<string>
+     */
+    protected $appends = ['role'];
+
+    /**
+     * Casting des colonnes
      *
      * @return array<string, string>
      */
@@ -47,23 +55,60 @@ class User extends Authenticatable
     }
 
     /**
-     * Get user's primary role name
+     * Retourne le rôle principal de l'utilisateur
      */
-    public function getRoleAttribute()
+    public function getRoleAttribute(): ?string
     {
         return $this->getRoleNames()->first();
     }
 
     /**
-     * Add role to JSON serialization
+     * Relation Many-to-Many avec les projets
      */
-    protected $appends = ['role'];
+    public function projets()
+    {
+        return $this->belongsToMany(Projet::class, 'projet_user')
+                    ->withPivot(['date_affectation', 'statut', 'notes'])
+                    ->withTimestamps();
+    }
 
     /**
-     * Check if user has specific role (helper method)
+     * Projets actifs uniquement
      */
-    public function hasRole($role): bool
+    public function activeProjets()
     {
-        return $this->roles()->where('name', $role)->exists();
+        return $this->belongsToMany(Projet::class, 'projet_user')
+                    ->wherePivot('statut', 'actif')
+                    ->withPivot(['date_affectation', 'statut', 'notes'])
+                    ->withTimestamps();
+    }
+
+    /**
+     * Relation One-to-One avec salarié
+     */
+    public function salarie()
+    {
+        return $this->hasOne(Salarie::class);
+    }
+
+    /**
+     * Relation One-to-Many avec vos notifications personnalisées
+     */
+    public function myNotifications()
+    {
+        return $this->hasMany(\App\Models\Notification::class, 'user_id');
+    }
+
+    /**
+     * Relation One-to-Many pour les notifications envoyées par l'utilisateur
+     */
+    public function sentNotifications()
+    {
+        return $this->hasMany(\App\Models\Notification::class, 'source_user_id');
+    }
+
+    public function references()
+    {
+        return $this->hasMany(Reference::class);
     }
 }

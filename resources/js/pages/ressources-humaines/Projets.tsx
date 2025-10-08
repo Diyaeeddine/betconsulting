@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Head, useForm, router } from '@inertiajs/react';
-import { Plus, Edit, Trash2, Eye, MapPin, Calendar, DollarSign } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, MapPin, Calendar, DollarSign, Users, Minus } from 'lucide-react';
 
 const breadcrumbs = [
     {
@@ -14,9 +14,78 @@ const breadcrumbs = [
     },
 ];
 
+const profilsPostes = [
+    {
+        value: "bureau_etudes",
+        label: "Bureau d'Études Techniques (BET)",
+        postes: [
+            "Ingénieur structure (béton, acier, bois)",
+            "Ingénieur génie civil",
+            "Ingénieur électricité / électricité industrielle",
+            "Ingénieur thermique / énergétique",
+            "Ingénieur fluides (HVAC, plomberie, CVC)",
+            "Ingénieur géotechnique",
+            "Dessinateur projeteur / DAO (Autocad, Revit, Tekla)",
+            "Technicien bureau d'études",
+            "Chargé d'études techniques",
+            "Ingénieur environnement / développement durable",
+            "Ingénieur calcul de structures",
+            "Architecte"
+        ],
+    },
+    {
+        value: "construction",
+        label: "Construction",
+        postes: [
+            "Chef de chantier",
+            "Conducteur de travaux",
+            "Ingénieur travaux / Ingénieur chantier",
+            "Conducteur d'engins",
+            "Chef d'équipe",
+            "Technicien travaux",
+            "Manœuvre / Ouvrier spécialisé",
+            "Coordinateur sécurité chantier (SST, prévention)",
+            "Métreur / Économiste de la construction"
+        ],
+    },
+    {
+        value: "suivi_controle",
+        label: "Suivi et Contrôle",
+        postes: [
+            "Contrôleur technique",
+            "Chargé de suivi qualité",
+            "Chargé de suivi sécurité",
+            "Inspecteur de chantier",
+            "Responsable HSE (Hygiène, Sécurité, Environnement)",
+            "Technicien contrôle qualité",
+            "Planificateur / Chargé de planning",
+            "Responsable logistique chantier"
+        ],
+    },
+    {
+        value: "support_gestion",
+        label: "Support et Gestion",
+        postes: [
+            "Responsable administratif chantier",
+            "Assistant de projet",
+            "Responsable achats / approvisionnement",
+            "Responsable qualité",
+            "Gestionnaire de contrats",
+            "Chargé de communication",
+            "Responsable financier / comptable chantier"
+        ],
+    },
+];
+
 interface User {
     id: number;
     name: string;
+}
+
+interface RHNeed {
+    profilename: string;
+    profileposte: string;
+    number: number;
 }
 
 interface Projet {
@@ -36,6 +105,7 @@ interface Projet {
     responsable_id: number;
     type_projet: 'suivi' | 'etude' | 'controle';
     responsable: User;
+    rh_needs?: RHNeed[];
     created_at: string;
     updated_at: string;
 }
@@ -50,6 +120,7 @@ export default function Projets({ projets, users }: Props) {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [editingProjet, setEditingProjet] = useState<Projet | null>(null);
     const [deletingProjet, setDeletingProjet] = useState<Projet | null>(null);
+    const [rhNeeds, setRhNeeds] = useState<RHNeed[]>([]);
     const mapRef = useRef<HTMLDivElement>(null);
     const mapInstanceRef = useRef<any>(null);
     const markerRef = useRef<any>(null);
@@ -69,6 +140,7 @@ export default function Projets({ projets, users }: Props) {
         radius: string;
         responsable_id: string;
         type_projet: 'suivi' | 'etude' | 'controle';
+        rh_needs?: RHNeed[];
     };
 
     const { data, setData, post, put, processing, errors, reset } = useForm<FormData>({
@@ -78,14 +150,14 @@ export default function Projets({ projets, users }: Props) {
         budget_utilise: '',
         date_debut: '',
         date_fin: '',
-        statut: 'en_attente', 
+        statut: 'en_attente',
         client: '',
         lieu_realisation: '',
         latitude: '',
         longitude: '',
         radius: '',
         responsable_id: '',
-        type_projet: 'suivi', 
+        type_projet: 'suivi',
     });
 
     // Initialize map when modal opens
@@ -94,7 +166,7 @@ export default function Projets({ projets, users }: Props) {
             // Load Leaflet dynamically
             const loadLeaflet = async () => {
                 const L = await import('leaflet');
-                
+
                 // Fix for default markers
                 delete (L.Icon.Default.prototype as any)._getIconUrl;
                 L.Icon.Default.mergeOptions({
@@ -124,7 +196,7 @@ export default function Projets({ projets, users }: Props) {
                 // Handle map clicks
                 mapInstanceRef.current.on('click', (e: any) => {
                     const { lat, lng } = e.latlng;
-                    
+
                     // Update form data
                     setData('latitude', lat.toString());
                     setData('longitude', lng.toString());
@@ -178,6 +250,7 @@ export default function Projets({ projets, users }: Props) {
     const openCreateModal = () => {
         reset();
         setEditingProjet(null);
+        setRhNeeds([]);
         setShowModal(true);
     };
 
@@ -198,6 +271,7 @@ export default function Projets({ projets, users }: Props) {
             responsable_id: projet.responsable_id.toString(),
             type_projet: projet.type_projet,
         });
+        setRhNeeds(projet.rh_needs || []);
         setEditingProjet(projet);
         setShowModal(true);
     };
@@ -207,22 +281,79 @@ export default function Projets({ projets, users }: Props) {
         setShowDeleteModal(true);
     };
 
+    const addRhNeed = (profilename: string, profileposte: string) => {
+        const existing = rhNeeds.find(need => need.profilename === profilename && need.profileposte === profileposte);
+        if (existing) {
+            setRhNeeds(rhNeeds.map(need =>
+                need.profilename === profilename && need.profileposte === profileposte
+                    ? { ...need, number: need.number + 1 }
+                    : need
+            ));
+        } else {
+            setRhNeeds([...rhNeeds, { profilename, profileposte, number: 1 }]);
+        }
+    };
+
+    const removeRhNeed = (profilename: string, profileposte: string) => {
+        const existing = rhNeeds.find(need => need.profilename === profilename && need.profileposte === profileposte);
+        if (existing && existing.number > 1) {
+            setRhNeeds(rhNeeds.map(need =>
+                need.profilename === profilename && need.profileposte === profileposte
+                    ? { ...need, number: need.number - 1 }
+                    : need
+            ));
+        } else {
+            setRhNeeds(rhNeeds.filter(need => !(need.profilename === profilename && need.profileposte === profileposte)));
+        }
+    };
+
+    const getRhNeedCount = (profilename: string, profileposte: string) => {
+        const need = rhNeeds.find(need => need.profilename === profilename && need.profileposte === profileposte);
+        return need ? need.number : 0;
+    };
+
+    const getTotalRhNeeds = () => {
+        return rhNeeds.reduce((total, need) => total + need.number, 0);
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        
+
+        // Filter out RH needs with 0 quantity and ensure we have the right structure
+        const rhNeedsData = rhNeeds.filter(need => need.number > 0);
+
         if (editingProjet) {
-            put(`/ressources-humaines/projets/${editingProjet.id}`, {
+            const updateData = { ...data };
+            delete updateData.rh_needs;
+
+            router.put(`/ressources-humaines/projets/${editingProjet.id}`, updateData, {
                 onSuccess: () => {
                     setShowModal(false);
                     setEditingProjet(null);
+                    setRhNeeds([]);
                     reset();
+                    // window.location.reload();
                 }
             });
         } else {
-            post('/ressources-humaines/projets', {
+            const createData = {
+                ...data,
+                rh_needs: rhNeedsData
+            };
+
+            // Debug log to see what we're sending
+            console.log('Sending data:', createData);
+            console.log('RH Needs:', rhNeedsData);
+
+            router.post('/ressources-humaines/projets', createData, {
                 onSuccess: () => {
                     setShowModal(false);
+                    setRhNeeds([]);
                     reset();
+                    // window.location.reload();
+                },
+                onError: (errors) => {
+                    console.error('Error creating project:', errors);
                 }
             });
         }
@@ -234,6 +365,7 @@ export default function Projets({ projets, users }: Props) {
                 onSuccess: () => {
                     setShowDeleteModal(false);
                     setDeletingProjet(null);
+                    window.location.reload();
                 }
             });
         }
@@ -245,7 +377,7 @@ export default function Projets({ projets, users }: Props) {
             termine: 'bg-green-100 text-green-800 border-green-200',
             en_attente: 'bg-yellow-100 text-yellow-800 border-yellow-200'
         };
-        
+
         const statusLabels = {
             en_cours: 'En Cours',
             termine: 'Terminé',
@@ -282,7 +414,7 @@ export default function Projets({ projets, users }: Props) {
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('fr-FR', {
             style: 'currency',
-            currency: 'MAD'
+            currency: 'EUR'
         }).format(amount);
     };
 
@@ -299,7 +431,7 @@ export default function Projets({ projets, users }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Gestion des Projets - Ressources Humaines" />
-            
+
             {/* Load Leaflet CSS */}
             <link
                 rel="stylesheet"
@@ -307,7 +439,7 @@ export default function Projets({ projets, users }: Props) {
                 integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
                 crossOrigin=""
             />
-            
+
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-6">
                 {/* Header */}
                 <div className="flex justify-between items-center">
@@ -317,7 +449,7 @@ export default function Projets({ projets, users }: Props) {
                     </div>
                     <button
                         onClick={openCreateModal}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md"
                     >
                         <Plus className="w-4 h-4" />
                         Nouveau Projet
@@ -358,7 +490,7 @@ export default function Projets({ projets, users }: Props) {
                             <div>
                                 <p className="text-sm font-medium text-gray-600">Budget Total</p>
                                 <p className="text-2xl font-bold text-gray-900">
-                                    {formatCurrency(projets.reduce((sum, p) => sum + p.budget_total, 0))}
+                                    {formatCurrency(projets.reduce((sum, p) => sum + (Number(p.budget_total) || 0), 0))}
                                 </p>
                             </div>
                         </div>
@@ -509,171 +641,151 @@ export default function Projets({ projets, users }: Props) {
                 {/* Modal */}
                 {showModal && (
                     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4">
+                        <div className="bg-white rounded-lg p-6 w-full max-w-6xl max-h-[90vh] overflow-y-auto m-4">
                             <h3 className="text-lg font-medium text-gray-900 mb-4">
                                 {editingProjet ? 'Modifier le projet' : 'Nouveau projet'}
                             </h3>
-                            
+
                             <form onSubmit={handleSubmit} className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div>
-                                        <label htmlFor="nom" className="block text-sm font-medium text-gray-700">
+                                        <label className="block text-sm font-medium text-gray-700">
                                             Nom du projet *
                                         </label>
                                         <input
-                                            id="nom"
                                             type="text"
                                             value={data.nom}
                                             onChange={(e) => setData('nom', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                                             required
-                                            aria-describedby={errors.nom ? "nom-error" : undefined}
                                         />
-                                        {errors.nom && <div id="nom-error" className="text-red-500 text-sm mt-1">{errors.nom}</div>}
+                                        {errors.nom && <div className="text-red-500 text-sm mt-1">{errors.nom}</div>}
                                     </div>
 
                                     <div>
-                                        <label htmlFor="client" className="block text-sm font-medium text-gray-700">
+                                        <label className="block text-sm font-medium text-gray-700">
                                             Client
                                         </label>
                                         <input
-                                            id="client"
                                             type="text"
                                             value={data.client}
                                             onChange={(e) => setData('client', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                            aria-describedby={errors.client ? "client-error" : undefined}
                                         />
-                                        {errors.client && <div id="client-error" className="text-red-500 text-sm mt-1">{errors.client}</div>}
+                                        {errors.client && <div className="text-red-500 text-sm mt-1">{errors.client}</div>}
                                     </div>
 
                                     <div className="md:col-span-2">
-                                        <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                                        <label className="block text-sm font-medium text-gray-700">
                                             Description
                                         </label>
                                         <textarea
-                                            id="description"
                                             value={data.description}
                                             onChange={(e) => setData('description', e.target.value)}
                                             rows={3}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                            aria-describedby={errors.description ? "description-error" : undefined}
                                         />
-                                        {errors.description && <div id="description-error" className="text-red-500 text-sm mt-1">{errors.description}</div>}
+                                        {errors.description && <div className="text-red-500 text-sm mt-1">{errors.description}</div>}
                                     </div>
 
                                     <div>
-                                        <label htmlFor="budget_total" className="block text-sm font-medium text-gray-700">
+                                        <label className="block text-sm font-medium text-gray-700">
                                             Budget total *
                                         </label>
                                         <input
-                                            id="budget_total"
                                             type="number"
                                             step="0.01"
                                             value={data.budget_total}
                                             onChange={(e) => setData('budget_total', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                                             required
-                                            aria-describedby={errors.budget_total ? "budget-total-error" : undefined}
                                         />
-                                        {errors.budget_total && <div id="budget-total-error" className="text-red-500 text-sm mt-1">{errors.budget_total}</div>}
+                                        {errors.budget_total && <div className="text-red-500 text-sm mt-1">{errors.budget_total}</div>}
                                     </div>
 
                                     <div>
-                                        <label htmlFor="budget_utilise" className="block text-sm font-medium text-gray-700">
+                                        <label className="block text-sm font-medium text-gray-700">
                                             Budget utilisé
                                         </label>
                                         <input
-                                            id="budget_utilise"
                                             type="number"
                                             step="0.01"
                                             value={data.budget_utilise}
                                             onChange={(e) => setData('budget_utilise', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                            aria-describedby={errors.budget_utilise ? "budget-utilise-error" : undefined}
                                         />
-                                        {errors.budget_utilise && <div id="budget-utilise-error" className="text-red-500 text-sm mt-1">{errors.budget_utilise}</div>}
+                                        {errors.budget_utilise && <div className="text-red-500 text-sm mt-1">{errors.budget_utilise}</div>}
                                     </div>
 
                                     <div>
-                                        <label htmlFor="date_debut" className="block text-sm font-medium text-gray-700">
+                                        <label className="block text-sm font-medium text-gray-700">
                                             Date de début
                                         </label>
                                         <input
-                                            id="date_debut"
                                             type="date"
                                             value={data.date_debut}
                                             onChange={(e) => setData('date_debut', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                            aria-describedby={errors.date_debut ? "date-debut-error" : undefined}
                                         />
-                                        {errors.date_debut && <div id="date-debut-error" className="text-red-500 text-sm mt-1">{errors.date_debut}</div>}
+                                        {errors.date_debut && <div className="text-red-500 text-sm mt-1">{errors.date_debut}</div>}
                                     </div>
 
                                     <div>
-                                        <label htmlFor="date_fin" className="block text-sm font-medium text-gray-700">
+                                        <label className="block text-sm font-medium text-gray-700">
                                             Date de fin
                                         </label>
                                         <input
-                                            id="date_fin"
                                             type="date"
                                             value={data.date_fin}
                                             onChange={(e) => setData('date_fin', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                            aria-describedby={errors.date_fin ? "date-fin-error" : undefined}
                                         />
-                                        {errors.date_fin && <div id="date-fin-error" className="text-red-500 text-sm mt-1">{errors.date_fin}</div>}
+                                        {errors.date_fin && <div className="text-red-500 text-sm mt-1">{errors.date_fin}</div>}
                                     </div>
 
                                     <div>
-                                        <label htmlFor="statut" className="block text-sm font-medium text-gray-700">
+                                        <label className="block text-sm font-medium text-gray-700">
                                             Statut *
                                         </label>
                                         <select
-                                            id="statut"
                                             value={data.statut}
                                             onChange={(e) => setData('statut', e.target.value as any)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                                             required
-                                            aria-describedby={errors.statut ? "statut-error" : undefined}
                                         >
                                             <option value="en_attente">En Attente</option>
                                             <option value="en_cours">En Cours</option>
                                             <option value="termine">Terminé</option>
                                         </select>
-                                        {errors.statut && <div id="statut-error" className="text-red-500 text-sm mt-1">{errors.statut}</div>}
+                                        {errors.statut && <div className="text-red-500 text-sm mt-1">{errors.statut}</div>}
                                     </div>
 
                                     <div>
-                                        <label htmlFor="type_projet" className="block text-sm font-medium text-gray-700">
+                                        <label className="block text-sm font-medium text-gray-700">
                                             Type de projet *
                                         </label>
                                         <select
-                                            id="type_projet"
                                             value={data.type_projet}
                                             onChange={(e) => setData('type_projet', e.target.value as any)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                                             required
-                                            aria-describedby={errors.type_projet ? "type-projet-error" : undefined}
                                         >
                                             <option value="suivi">Suivi</option>
                                             <option value="etude">Étude</option>
                                             <option value="controle">Contrôle</option>
                                         </select>
-                                        {errors.type_projet && <div id="type-projet-error" className="text-red-500 text-sm mt-1">{errors.type_projet}</div>}
+                                        {errors.type_projet && <div className="text-red-500 text-sm mt-1">{errors.type_projet}</div>}
                                     </div>
 
                                     <div>
-                                        <label htmlFor="responsable_id" className="block text-sm font-medium text-gray-700">
+                                        <label className="block text-sm font-medium text-gray-700">
                                             Responsable *
                                         </label>
                                         <select
-                                            id="responsable_id"
                                             value={data.responsable_id}
                                             onChange={(e) => setData('responsable_id', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                                             required
-                                            aria-describedby={errors.responsable_id ? "responsable-error" : undefined}
                                         >
                                             <option value="">Sélectionner un responsable</option>
                                             {users.map((user) => (
@@ -682,22 +794,20 @@ export default function Projets({ projets, users }: Props) {
                                                 </option>
                                             ))}
                                         </select>
-                                        {errors.responsable_id && <div id="responsable-error" className="text-red-500 text-sm mt-1">{errors.responsable_id}</div>}
+                                        {errors.responsable_id && <div className="text-red-500 text-sm mt-1">{errors.responsable_id}</div>}
                                     </div>
 
                                     <div>
-                                        <label htmlFor="lieu_realisation" className="block text-sm font-medium text-gray-700">
+                                        <label className="block text-sm font-medium text-gray-700">
                                             Lieu de réalisation
                                         </label>
                                         <input
-                                            id="lieu_realisation"
                                             type="text"
                                             value={data.lieu_realisation}
                                             onChange={(e) => setData('lieu_realisation', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                            aria-describedby={errors.lieu_realisation ? "lieu-error" : undefined}
                                         />
-                                        {errors.lieu_realisation && <div id="lieu-error" className="text-red-500 text-sm mt-1">{errors.lieu_realisation}</div>}
+                                        {errors.lieu_realisation && <div className="text-red-500 text-sm mt-1">{errors.lieu_realisation}</div>}
                                     </div>
 
                                     {/* Localisation par carte */}
@@ -709,49 +819,135 @@ export default function Projets({ projets, users }: Props) {
                                             ref={mapRef}
                                             className="w-full h-64 border-2 border-gray-300 rounded-md"
                                             style={{ minHeight: '300px' }}
-                                            role="application"
-                                            aria-label="Carte interactive pour sélectionner la localisation du projet"
                                         />
                                         <div className="mt-2 grid grid-cols-2 gap-4">
                                             <div>
-                                                <label htmlFor="latitude" className="block text-xs text-gray-500">Latitude</label>
+                                                <label className="block text-xs text-gray-500">Latitude</label>
                                                 <input
-                                                    id="latitude"
                                                     type="text"
                                                     value={data.latitude}
                                                     readOnly
                                                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm"
-                                                    aria-label="Latitude sélectionnée"
                                                 />
                                             </div>
                                             <div>
-                                                <label htmlFor="longitude" className="block text-xs text-gray-500">Longitude</label>
+                                                <label className="block text-xs text-gray-500">Longitude</label>
                                                 <input
-                                                    id="longitude"
                                                     type="text"
                                                     value={data.longitude}
                                                     readOnly
                                                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm"
-                                                    aria-label="Longitude sélectionnée"
                                                 />
                                             </div>
                                         </div>
                                     </div>
 
                                     <div>
-                                        <label htmlFor="radius" className="block text-sm font-medium text-gray-700">
+                                        <label className="block text-sm font-medium text-gray-700">
                                             Rayon (km)
                                         </label>
                                         <input
-                                            id="radius"
                                             type="number"
                                             step="0.1"
                                             value={data.radius}
                                             onChange={(e) => setData('radius', e.target.value)}
                                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                            aria-describedby={errors.radius ? "radius-error" : undefined}
                                         />
-                                        {errors.radius && <div id="radius-error" className="text-red-500 text-sm mt-1">{errors.radius}</div>}
+                                        {errors.radius && <div className="text-red-500 text-sm mt-1">{errors.radius}</div>}
+                                    </div>
+                                </div>
+
+                                {/* HR Needs Section */}
+                                <div className="border-t pt-6">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <Users className="w-5 h-5 text-blue-600" />
+                                        <h4 className="text-lg font-medium text-gray-900">
+                                             Besoins en Ressources Humaines
+                                        </h4>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {profilsPostes.map((profil) => (
+                                            <div key={profil.value} className="border border-gray-200 rounded-lg p-4">
+                                                <h5 className="text-md font-medium text-gray-800 mb-3">{profil.label}</h5>
+                                                <div className="overflow-x-auto">
+                                                    <table className="min-w-full text-sm">
+                                                        <thead>
+                                                            <tr className="border-b border-gray-200">
+                                                                <th className="text-left py-2 text-xs font-medium text-gray-500">N°</th>
+                                                                <th className="text-left py-2 text-xs font-medium text-gray-500">Poste</th>
+                                                                <th className="text-left py-2 text-xs font-medium text-gray-500">Nombre</th>
+                                                                {!editingProjet && (
+                                                                    <th className="text-left py-2 text-xs font-medium text-gray-500">Actions</th>
+                                                                )}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {profil.postes.map((poste, index) => {
+                                                                const count = getRhNeedCount(profil.value, poste);
+                                                                const hasCount = count > 0;
+
+                                                                // For editing mode, only show positions with saved data
+                                                                if (editingProjet && !hasCount) return null;
+
+                                                                return (
+                                                                    <tr key={index} className="border-b border-gray-100">
+                                                                        <td className="py-2 text-gray-700">{index + 1}</td>
+                                                                        <td className="py-2 text-gray-700">{poste}</td>
+                                                                        <td className="py-2">
+                                                                            <span className={`px-2 py-1 rounded text-sm font-medium ${hasCount ? 'bg-blue-100 text-blue-800' : 'text-gray-400'
+                                                                                }`}>
+                                                                                {count}
+                                                                            </span>
+                                                                        </td>
+                                                                        {!editingProjet && (
+                                                                            <td className="py-2">
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => removeRhNeed(profil.value, poste)}
+                                                                                        disabled={count === 0}
+                                                                                        className="p-1 text-red-600 hover:bg-red-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                                    >
+                                                                                        <Minus className="w-3 h-3" />
+                                                                                    </button>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => addRhNeed(profil.value, poste)}
+                                                                                        className="p-1 text-green-600 hover:bg-green-100 rounded"
+                                                                                    >
+                                                                                        <Plus className="w-3 h-3" />
+                                                                                    </button>
+                                                                                </div>
+                                                                            </td>
+                                                                        )}
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                            {editingProjet && profil.postes.filter(poste => getRhNeedCount(profil.value, poste) > 0).length === 0 && (
+                                                                <tr>
+                                                                    <td colSpan={4} className="py-4 text-center text-gray-500 italic">
+                                                                        Aucun besoin RH enregistré pour ce profil
+                                                                    </td>
+                                                                </tr>
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Total */}
+                                    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-lg font-medium text-gray-900">
+                                                Total des besoins RH:
+                                            </span>
+                                            <span className="text-xl font-bold text-blue-600">
+                                                {getTotalRhNeeds()} personne{getTotalRhNeeds() !== 1 ? 's' : ''}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -761,6 +957,7 @@ export default function Projets({ projets, users }: Props) {
                                         onClick={() => {
                                             setShowModal(false);
                                             setEditingProjet(null);
+                                            setRhNeeds([]);
                                             reset();
                                         }}
                                         className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
@@ -771,11 +968,9 @@ export default function Projets({ projets, users }: Props) {
                                         type="submit"
                                         disabled={processing}
                                         className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-                                        aria-describedby={processing ? "submit-status" : undefined}
                                     >
                                         {processing ? 'En cours...' : editingProjet ? 'Mettre à jour' : 'Créer'}
                                     </button>
-                                    {processing && <span id="submit-status" className="sr-only">Traitement en cours</span>}
                                 </div>
                             </form>
                         </div>
@@ -784,14 +979,14 @@ export default function Projets({ projets, users }: Props) {
 
                 {/* Delete Modal */}
                 {showDeleteModal && deletingProjet && (
-                    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+                    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
                         <div className="bg-white rounded-lg p-6 w-full max-w-md m-4">
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                                    <Trash2 className="w-5 h-5 text-red-600" aria-hidden="true" />
+                                    <Trash2 className="w-5 h-5 text-red-600" />
                                 </div>
                                 <div>
-                                    <h3 id="delete-title" className="text-lg font-medium text-gray-900">
+                                    <h3 className="text-lg font-medium text-gray-900">
                                         Supprimer le projet
                                     </h3>
                                     <p className="text-sm text-gray-500">
@@ -799,7 +994,7 @@ export default function Projets({ projets, users }: Props) {
                                     </p>
                                 </div>
                             </div>
-                            
+
                             <p className="text-gray-700 mb-6">
                                 Êtes-vous sûr de vouloir supprimer le projet <strong>"{deletingProjet.nom}"</strong> ?
                             </p>

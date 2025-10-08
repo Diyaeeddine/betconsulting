@@ -23,8 +23,8 @@ class AuthController extends Controller
                 'password' => 'required|string',
             ]);
 
-            // Find user
-            $user = User::where('email', $request->email)->first();
+            // Find user with roles relationship (Spatie)
+            $user = User::with('roles')->where('email', $request->email)->first();
 
             // Check credentials
             if (!$user || !Hash::check($request->password, $user->password)) {
@@ -51,6 +51,9 @@ class AuthController extends Controller
                         'name' => $user->name,
                         'email' => $user->email,
                         'email_verified_at' => $user->email_verified_at,
+                        'role_id' => $user->roles->first()?->id ?? null, // Get first role ID from Spatie
+                        'role_name' => $user->role ?: 'No role assigned', // Using Spatie accessor
+                        'permissions' => $user->getAllPermissions()->pluck('name'), // All permissions
                         'created_at' => $user->created_at,
                     ],
                     'token' => $token,
@@ -82,7 +85,8 @@ class AuthController extends Controller
     public function me(Request $request)
     {
         try {
-            $user = $request->user();
+            // Load user with roles relationship (Spatie)
+            $user = $request->user()->load('roles');
             
             return response()->json([
                 'success' => true,
@@ -92,6 +96,9 @@ class AuthController extends Controller
                         'name' => $user->name,
                         'email' => $user->email,
                         'email_verified_at' => $user->email_verified_at,
+                        'role_id' => $user->roles->first()?->id ?? null, // Get first role ID from Spatie
+                        'role_name' => $user->role ?: 'No role assigned', // Using Spatie accessor
+                        'permissions' => $user->getAllPermissions()->pluck('name'), // All permissions
                         'created_at' => $user->created_at,
                     ]
                 ]

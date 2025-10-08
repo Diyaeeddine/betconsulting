@@ -2,23 +2,64 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+// App Models
+use App\Notifications\ReferenceRejectedNotification;
+
+
+use App\Models\AppelOffer;
+use App\Models\BonCommande;
+use App\Models\Formation;
+use App\Models\Materiel;
+use App\Models\Profil;
+use App\Models\Progression;
 use App\Models\Projet;
+use App\Models\ProjetMp;
+use App\Models\Notification;
+use App\Models\ProjetNv;
+use App\Models\ResultatBonCommande;
+use App\Models\Salarie;
+use App\Models\Reference;
+use App\Models\Entretien;
+use App\Models\DemandeProfil;
+
+
+use App\Models\SousTrait;
 use App\Models\User;
 use App\Models\Vehicule;
-use App\Models\Materiel;
-use App\Models\Salarie;
-use App\Models\Progression;
-use App\Models\Profil;
-use App\Mail\WelcomeEmployeeMail;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Log;
+use App\Models\DocsRequis;
+ // Laravel Facades & Illuminate
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\hash;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Str;
 
+use App\Models\MethodologyDocument;
+ // Third-Party & PHP Core
+use Carbon\Carbon;
+use League\Csv\Reader;
+use Symfony\Component\Process\Exception\ProcessFailedException;
+use Symfony\Component\Process\Process;
+use ZipArchive;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 use Inertia\Inertia;
+
+use App\Notifications\MethodologyDocumentNotification;
+use App\Events\NewNotification;
+use Illuminate\Notifications\DatabaseNotification;
+use App\Notifications\ReferenceValidatedNotification;
+
+
+
+
+
 
 class RessourcesHumainesController extends Controller
 {
@@ -215,48 +256,6 @@ class RessourcesHumainesController extends Controller
     }
 
 
-public function affecterProjets(Request $request, Salarie $salarie)
-{
-    try {
-        $validated = $request->validate([
-            'projet_ids' => 'required|array|min:1',
-            'projet_ids.*' => 'exists:projets,id'
-        ]);
-
-        $salarie->projets()->sync($validated['projet_ids']);
-
-        \Log::info('Projects assigned successfully', [
-            'salarie_id' => $salarie->id,
-            'salarie_name' => $salarie->user->name ?? 'Unknown',
-            'projet_ids' => $validated['projet_ids'],
-            'project_count' => count($validated['projet_ids'])
-        ]);
-
-        return redirect()->back()->with('success', 'Projets affectés avec succès');
-        
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        \Log::error('Validation error in affecterProjets', [
-            'errors' => $e->errors(),
-            'salarie_id' => $salarie->id,
-            'input' => $request->all()
-        ]);
-        
-        return redirect()->back()
-            ->withErrors($e->errors())
-            ->withInput();
-            
-    } catch (\Exception $e) {
-        \Log::error('Error assigning projects', [
-            'message' => $e->getMessage(),
-            'salarie_id' => $salarie->id,
-            'trace' => $e->getTraceAsString(),
-            'input' => $request->all()
-        ]);
-        
-        return redirect()->back()
-            ->with('error', 'Erreur lors de l\'affectation des projets: ' . $e->getMessage());
-    }
-}
 
 
 
@@ -598,6 +597,7 @@ public function affecterProjets(Request $request, Salarie $salarie)
 
     public function store(Request $request)
     {
+        // 1. Validate incoming request
         $validated = $request->validate([
             'nom' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -613,10 +613,36 @@ public function affecterProjets(Request $request, Salarie $salarie)
             'radius' => 'nullable|numeric',
             'responsable_id' => 'required|exists:users,id',
             'type_projet' => 'required|in:suivi,etude,controle',
+            'rh_needs' => 'required|array',
         ]);
 
+        // 2. Get all doc requis IDs and format them
+        $docsNeeds = DocsRequis::all()->map(function ($doc) {
+            return [
+                'doc_req_id' => $doc->id,
+                'file_id' => ''
+            ];
+        })->toArray();
+
+        // 3. Add docs_needs to validated data
+        $validated['docs_needs'] = $docsNeeds;
+
+        // 4. Create the projet
         $projet = Projet::create($validated);
 
+        // 5. Calculate total profiles
+        $totalProfiles = collect($validated['rh_needs'])->sum('number');
+
+        // 6. Create notification
+        Notification::create([
+            'sender' => 'ressources-humaines',
+            'receiver' => 'suivi-controle',
+            'message' => "Nouveau Projet - {$validated['nom']}, Veuillez Commencer L'affectaion de {$totalProfiles} Profils!",
+            'statut' => 'actif',
+            'recorded_at' => Carbon::now(),
+        ]);
+
+        // 7. Redirect with success
         return redirect()->back()->with('success', 'Projet ajouté avec succès.');
     }
 
@@ -775,81 +801,92 @@ public function affecterProjets(Request $request, Salarie $salarie)
     }
 
 
-public function access() 
-{
-    $users = User::role('salarie')
-        ->with('roles')
-        ->orderBy('created_at', 'desc')
-        ->get();
+    // ========================================
+    // ACCESS MANAGEMENT
+    // ========================================
+    
+    public function access() 
+    {
+        $users = User::role('salarie')
+            ->with('roles')
+            ->orderBy('created_at', 'desc')
+            ->get();
 
-    // Load salaries with their many-to-many projects relationship
-    $salaries = Salarie::with(['user', 'projets'])
-        ->orderBy('created_at', 'desc')
-        ->get();
+        // Load salaries with their profil (singular) and projects
+        $salaries = Salarie::with(['user', 'projets', 'profil']) // Changed from 'profils' to 'profil'
+            ->orderBy('created_at', 'desc')
+            ->get();
 
-    // Get all projects for the assignment dialog
-    $projets = Projet::orderBy('nom', 'asc')->get();
-
-    return Inertia::render('ressources-humaines/Access', [
-        'users' => $users,
-        'salaries' => $salaries,
-        'projets' => $projets, // This was missing in your original method
-    ]);
-}
-
-public function storeAccess(Request $request)
-{
-    try {
-        $validated = $request->validate([
-            'nom' => 'required|string|max:255',
-            'prenom' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
-            'telephone' => 'required|string|max:255',
-            'password' => 'required|string|min:6',
-            'poste' => 'nullable|string|max:255',
-            'salaire_mensuel' => 'nullable|numeric|min:0',
-            'date_embauche' => 'nullable|date',
-            'statut' => 'nullable|in:actif,inactif,conge,demission',
-        ]);
-
-        // Store the plain password before hashing
-        $plainPassword = $validated['password'];
-
-        $user = User::create([
-            'name' => $validated['prenom'] . ' ' . $validated['nom'],
-            'email' => $validated['email'],
-            'password' => bcrypt($validated['password']),
-        ]);
-
-        $user->assignRole('salarie');
-
-        $salarie = Salarie::create([
-            'nom' => $validated['nom'],
-            'prenom' => $validated['prenom'],
-            'email' => $validated['email'],
-            'telephone' => $validated['telephone'],
-            'poste' => $validated['poste'] ?? null,
-            'salaire_mensuel' => $validated['salaire_mensuel'] ?? null,
-            'date_embauche' => $validated['date_embauche'] ?? null,
-            'statut' => $validated['statut'] ?? 'actif',
-            'user_id' => $user->id,
-        ]);
-
-        return redirect()->back()->with('success', 'Accès créé avec succès.');
-
-    } catch (\Exception $e) {
-        \Log::error('Error storing access', [
-            'message' => $e->getMessage(),
-            'trace' => $e->getTraceAsString(),
-            'input' => $request->all()
-        ]);
+        // Get all projects for the assignment dialog
+        $projets = Projet::orderBy('nom', 'asc')->get();
         
-        return redirect()->back()
-            ->with('error', 'Erreur lors de la création de l\'accès: ' . $e->getMessage());
-    }
-}
+        // Get all active profils
+        $profils = Profil::where('actif', true)
+            ->orderBy('categorie_profil', 'asc')
+            ->get();
 
-public function updateAccess(Request $request, User $user)
+        return Inertia::render('ressources-humaines/Access', [
+            'users' => $users,
+            'salaries' => $salaries,
+            'projets' => $projets,
+            'profils' => $profils, // Add profils to the page props
+        ]);
+    }
+
+    public function storeAccess(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'nom' => 'required|string|max:255',
+                'prenom' => 'required|string|max:255',
+                'email' => 'required|email|unique:users,email',
+                'telephone' => 'required|string|max:255',
+                'password' => 'required|string|min:6',
+                'poste' => 'nullable|string|max:255',
+                'salaire_mensuel' => 'nullable|numeric|min:0',
+                'date_embauche' => 'nullable|date',
+                'statut' => 'nullable|in:actif,inactif,conge,demission',
+            ]);
+
+            DB::beginTransaction();
+
+            $user = User::create([
+                'name' => $validated['prenom'] . ' ' . $validated['nom'],
+                'email' => $validated['email'],
+                'password' => bcrypt($validated['password']),
+            ]);
+
+            $user->assignRole('salarie');
+
+            $salarie = Salarie::create([
+                'nom' => $validated['nom'],
+                'prenom' => $validated['prenom'],
+                'email' => $validated['email'],
+                'telephone' => $validated['telephone'],
+                'poste' => $validated['poste'] ?? null,
+                'salaire_mensuel' => $validated['salaire_mensuel'] ?? null,
+                'date_embauche' => $validated['date_embauche'] ?? null,
+                'statut' => $validated['statut'] ?? 'actif',
+                'user_id' => $user->id,
+            ]);
+
+            DB::commit();
+
+            return redirect()->back()->with('success', 'Accès créé avec succès.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error storing access', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return redirect()->back()
+                ->with('error', 'Erreur lors de la création de l\'accès: ' . $e->getMessage());
+        }
+    }
+
+    public function updateAccess(Request $request, User $user)
 {
     try {
         $validated = $request->validate([
@@ -862,7 +899,10 @@ public function updateAccess(Request $request, User $user)
             'salaire_mensuel' => 'nullable|numeric|min:0',
             'date_embauche' => 'nullable|date',
             'statut' => 'nullable|in:actif,inactif,conge,demission',
+            'profil_id' => 'nullable|exists:profils,id', // Add profil_id validation
         ]);
+
+        DB::beginTransaction();
 
         $userData = [
             'name' => $validated['prenom'] . ' ' . $validated['nom'],
@@ -891,17 +931,37 @@ public function updateAccess(Request $request, User $user)
 
         if ($salarie) {
             $salarie->update($salarieData);
+            
+            // Update profil assignment
+            if (isset($validated['profil_id'])) {
+                // Remove old profil assignment
+                Profil::where('salarie_id', $salarie->id)->update(['salarie_id' => null]);
+                
+                // Assign new profil
+                $profil = Profil::find($validated['profil_id']);
+                if ($profil) {
+                    $profil->update(['salarie_id' => $salarie->id]);
+                }
+            }
         } else {
-            Salarie::create($salarieData);
+            $salarie = Salarie::create($salarieData);
+            
+            if (isset($validated['profil_id'])) {
+                $profil = Profil::find($validated['profil_id']);
+                if ($profil) {
+                    $profil->update(['salarie_id' => $salarie->id]);
+                }
+            }
         }
+
+        DB::commit();
 
         return redirect()->back()->with('success', 'Accès mis à jour avec succès.');
 
     } catch (\Exception $e) {
-        \Log::error('Error updating access', [
-            'message' => $e->getMessage(),
-            'trace' => $e->getTraceAsString(),
-            'input' => $request->all()
+        DB::rollBack();
+        Log::error('Error updating access', [
+            'message' => $e->getMessage()
         ]);
         
         return redirect()->back()
@@ -909,26 +969,34 @@ public function updateAccess(Request $request, User $user)
     }
 }
 
+    public function destroyAccess(User $user)
+    {
+        try {
+            DB::beginTransaction();
 
-public function destroyAccess(User $user)
-{
-    try {
-        Salarie::where('user_id', $user->id)->delete();
-        
-        $user->delete();
-        
-        return redirect()->back()->with('success', 'Accès supprimé avec succès.');
-    } catch (\Exception $e) {
-        Log::error('Erreur suppression accès:', [
-            'message' => $e->getMessage(),
-            'user_id' => $user->id
-        ]);
-        return redirect()->back()->with('error', 'Erreur lors de la suppression de l\'accès.');
+            $salarie = Salarie::where('user_id', $user->id)->first();
+            
+            if ($salarie) {
+                // Delete profil if exists
+                Profil::where('salarie_id', $salarie->id)->delete();
+                // Delete salarie
+                $salarie->delete();
+            }
+            
+            $user->delete();
+            
+            DB::commit();
+
+            return redirect()->back()->with('success', 'Accès supprimé avec succès.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur suppression accès:', [
+                'message' => $e->getMessage(),
+                'user_id' => $user->id
+            ]);
+            return redirect()->back()->with('error', 'Erreur lors de la suppression de l\'accès.');
+        }
     }
-}
-
-
-    
 
     public function updateUserPass(Request $request, Salarie $salarie)
     {
@@ -946,4 +1014,2405 @@ public function destroyAccess(User $user)
             return back()->with('error', 'Erreur lors de la mise à jour du password.');
         }
     }
+
+    public function affecterProjets(Request $request, Salarie $salarie)
+    {
+        $validated = $request->validate([
+            'projet_ids' => 'required|array',
+            'projet_ids.*' => 'exists:projets,id',
+        ]);
+
+        try {
+            // Sync projects to salarie
+            $salarie->projets()->sync($validated['projet_ids']);
+
+            return redirect()->back()->with('success', 'Projets affectés avec succès.');
+        } catch (\Exception $e) {
+            Log::error('Error assigning projects', [
+                'message' => $e->getMessage()
+            ]);
+            return redirect()->back()->with('error', 'Erreur lors de l\'affectation des projets.');
+        }
+    }
+
+    public function affecterProfil(Request $request, Salarie $salarie)
+{
+    $validated = $request->validate(['profil_id' => 'required|exists:profils,id']);
+
+    try {
+        DB::beginTransaction();
+
+        \Log::debug('Assigning profil', [
+            'salarie_id' => $salarie->id,
+            'profil_id' => $validated['profil_id'],
+            'current_profil_id' => $salarie->profil_id,
+        ]);
+
+        $profilId = $validated['profil_id'];
+
+        // Remove previous assignment
+        Salarie::where('profil_id', $profilId)->update(['profil_id' => null]);
+
+        // Assign new profil
+        $salarie->update(['profil_id' => $profilId]);
+
+        DB::commit();
+
+        return redirect()->back()->with('success', 'Profil assigné avec succès.');
+    } catch (\Exception $e) {
+        DB::rollBack();
+        \Log::error('Error assigning profil', ['message' => $e->getMessage()]);
+        return redirect()->back()->with('error', 'Erreur lors de l\'assignation du profil.');
+    }
+}
+
+
+
+public function storeProfil(Request $request)
+{
+    try {
+        $validated = $request->validate([
+            'categorie_profil' => 'required|string|max:255',
+            'poste_profil' => 'required|string|max:255',
+            'niveau_experience' => 'required|in:junior,intermediaire,senior,expert',
+            'competences_techniques' => 'nullable|array',
+            'certifications' => 'nullable|array',
+            'missions' => 'nullable|string',
+            'actif' => 'boolean',
+        ]);
+
+        $profil = Profil::create([
+            'categorie_profil' => $validated['categorie_profil'],
+            'poste_profil' => $validated['poste_profil'],
+            'niveau_experience' => $validated['niveau_experience'],
+            'competences_techniques' => $validated['competences_techniques'] ?? null,
+            'certifications' => $validated['certifications'] ?? null,
+            'missions' => $validated['missions'] ?? null,
+            'actif' => $validated['actif'] ?? true,
+        ]);
+
+        return redirect()->back()->with('success', 'Profil créé avec succès.');
+
+    } catch (\Exception $e) {
+        Log::error('Error creating profil', [
+            'message' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return redirect()->back()
+            ->with('error', 'Erreur lors de la création du profil: ' . $e->getMessage());
+    }
+}
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    public function SousTrais()
+    {
+        $projets = Projet::with('responsable')->get();
+
+        return Inertia::render('ressources-humaines/SousTraitants', [
+            'projets' => $projets,
+        ]);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+public function fetchMarchePublic()
+    {
+        set_time_limit(0); // Désactive la limite de temps d'exécution
+        ini_set('memory_limit', '512M'); // Augmente la limite mémoire
+
+        $pythonScript = base_path('selenium_scripts/marches_public.py');
+
+        // Vérifier que le script existe
+        if (!file_exists($pythonScript)) {
+            return redirect()->back()
+                ->with('error', 'Script Python introuvable : ' . $pythonScript);
+        }
+
+        $lock = Cache::lock('selenium_marche_public_lock', 400); // 30 minutes
+        if (!$lock->get()) {
+            return redirect()->back()
+                ->with('error', 'Une exécution Selenium est déjà en cours, réessayez dans quelques minutes.');
+        }
+
+        try {
+            Log::info("=== DÉMARRAGE DU PROCESSUS MARCHÉ PUBLIC ===");
+
+            // 🔑 RÉCUPÉRER LES RÉFÉRENCES EXISTANTES AVANT TOUT
+            $existingReferences = ProjetMp::pluck('reference')->filter()->unique()->toArray();
+            Log::info("Références existantes en BD : " . count($existingReferences));
+            
+            // 🔑🔑 NOUVEAU : SAUVEGARDER LES RÉFÉRENCES POUR PYTHON 🔑🔑
+            $existingReferencesFile = storage_path('app/public/marche_public/existing_references.json');
+            // S'assurer que le dossier existe
+            $marchePublicDir = dirname($existingReferencesFile);
+            if (!is_dir($marchePublicDir)) {
+                mkdir($marchePublicDir, 0755, true);
+            }
+            
+            file_put_contents($existingReferencesFile, json_encode($existingReferences, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            Log::info("Fichier des références existantes créé pour Python : " . count($existingReferences) . " références");
+            
+            // Sauvegarder les références existantes dans le cache pour éviter les re-requêtes
+            Cache::put('existing_references_marche_public', $existingReferences, 3600); // 1 heure
+
+            $csvPath = storage_path('app/public/marche_public/marches_publics_data.csv');
+            $jsonPath = storage_path('app/public/marche_public/marches_publics_data.json');
+
+            // Supprimer les anciens fichiers pour éviter la confusion
+            if (file_exists($csvPath)) {
+                unlink($csvPath);
+                Log::info("Ancien fichier CSV supprimé");
+            }
+            if (file_exists($jsonPath)) {
+                unlink($jsonPath);
+                Log::info("Ancien fichier JSON supprimé");
+            }
+
+            // Lancement du script Python
+            Log::info("Lancement du script Python avec filtrage des doublons...");
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                pclose(popen("start /B python \"$pythonScript\"", "r"));
+            } else {
+                exec("nohup python3 \"$pythonScript\" > /dev/null 2>&1 &");
+            }
+
+            Log::info("Script Python lancé, attente de la génération des fichiers...");
+
+            // === ATTENTE INTELLIGENTE DES FICHIERS ===
+            $maxWaitTime = 3600; // 1 heure maximum
+            $checkInterval = 10; // Vérifier toutes les 10 secondes
+            $waited = 0;
+            $lastLogTime = 0;
+
+            while ($waited < $maxWaitTime) {
+                $csvExists = file_exists($csvPath);
+                $jsonExists = file_exists($jsonPath);
+                
+                // Log périodique pour éviter le spam
+                if ($waited - $lastLogTime >= 60) { // Log toutes les minutes
+                    Log::info("Attente des fichiers... {$waited}s écoulées (CSV: " . ($csvExists ? 'OK' : 'NON') . ", JSON: " . ($jsonExists ? 'OK' : 'NON') . ")");
+                    $lastLogTime = $waited;
+                }
+                
+                if ($csvExists && $jsonExists) {
+                    Log::info("✅ Fichiers CSV et JSON détectés après {$waited} secondes");
+                    
+                    // Vérifier que les fichiers ne sont pas vides et sont valides
+                    if ($this->validateFiles($csvPath, $jsonPath)) {
+                        Log::info("✅ Fichiers validés, début de l'import");
+                        break;
+                    } else {
+                        Log::info("⚠️ Fichiers détectés mais non valides, attente...");
+                    }
+                }
+                
+                sleep($checkInterval);
+                $waited += $checkInterval;
+            }
+
+            if ($waited >= $maxWaitTime) {
+                Log::error("❌ Timeout après {$maxWaitTime}s d'attente");
+                return redirect()->back()
+                    ->with('error', "Le script a pris trop de temps à générer les fichiers (timeout après {$maxWaitTime}s). Vérifiez les logs du script Python.");
+            }
+
+            // === ATTENTE SUPPLÉMENTAIRE POUR LES TÉLÉCHARGEMENTS ===
+            Log::info("Attente supplémentaire pour finaliser les téléchargements et extractions...");
+            $additionalWait = 60; // 1 minute supplémentaire
+            sleep($additionalWait);
+
+            // === IMPORT DES DONNÉES AVEC FILTRAGE DES DOUBLONS ===
+            return $this->importDataFromFiles($csvPath, $jsonPath, $existingReferences);
+            
+        } catch (\Exception $e) {
+            Log::error("❌ Erreur lors de l'exécution du script: " . $e->getMessage());
+            Log::error("Stack trace: " . $e->getTraceAsString());
+            return redirect()->back()->with('error', 'Erreur lors de l\'exécution du script : ' . $e->getMessage());
+        } finally {
+            // Nettoyer le cache et les fichiers temporaires
+            Cache::forget('existing_references_marche_public');
+            
+            // 🔑🔑 SUPPRIMER LE FICHIER DES RÉFÉRENCES EXISTANTES APRÈS USAGE 🔑🔑
+            $existingReferencesFile = storage_path('app/public/marche_public/existing_references.json');
+            if (file_exists($existingReferencesFile)) {
+                unlink($existingReferencesFile);
+                Log::info("Fichier temporaire des références existantes supprimé");
+            }
+            
+            $lock->release();
+        }
+    }
+
+    /**
+     * Valide que les fichiers CSV et JSON sont correctement formés
+     */
+    private function validateFiles($csvPath, $jsonPath)
+    {
+        try {
+            // Vérifier que les fichiers ne sont pas vides
+            if (filesize($csvPath) < 100 || filesize($jsonPath) < 100) {
+                return false;
+            }
+            
+            // Vérifier que le JSON est valide
+            $jsonContent = file_get_contents($jsonPath);
+            $jsonData = json_decode($jsonContent, true);
+            if (json_last_error() !== JSON_ERROR_NONE || empty($jsonData)) {
+                return false;
+            }
+            
+            // Vérifier que le CSV est lisible
+            $csv = Reader::createFromPath($csvPath, 'r');
+            $csv->setHeaderOffset(0);
+            $headers = $csv->getHeader();
+            if (empty($headers) || !in_array('reference', $headers)) {
+                return false;
+            }
+            
+            return true;
+            
+        } catch (\Exception $e) {
+            Log::warning("Erreur lors de la validation des fichiers: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Import les données depuis les fichiers CSV et JSON avec filtrage des doublons
+     */
+    private function importDataFromFiles($csvPath, $jsonPath, $existingReferences = [])
+    {
+        try {
+            Log::info("=== DÉBUT DE L'IMPORT DES DONNÉES AVEC FILTRAGE DOUBLONS ===");
+            Log::info("Références existantes à ignorer : " . count($existingReferences));
+            
+            // Charger le JSON en mémoire pour les références croisées
+            $jsonData = json_decode(file_get_contents($jsonPath), true) ?? [];
+            $jsonIndex = [];
+            foreach ($jsonData as $marche) {
+                $referenceKey = trim($marche['reference'] ?? '');
+                if ($referenceKey) {
+                    $jsonIndex[$referenceKey] = $marche;
+                }
+            }
+            Log::info("JSON chargé avec " . count($jsonData) . " entrées indexées");
+
+            // === FONCTIONS UTILITAIRES ===
+            $findZipFile = function ($reference, $basePath) {
+                if (empty($reference)) return null;
+                
+                $exactPath = $basePath . DIRECTORY_SEPARATOR . $reference . '.zip';
+                if (file_exists($exactPath)) return $exactPath;
+                
+                $pattern = $basePath . DIRECTORY_SEPARATOR . '*' . $reference . '*.zip';
+                $files = glob($pattern);
+                return !empty($files) ? $files[0] : null;
+            };
+
+            $findExtractedDir = function ($reference, $basePath) {
+                if (empty($reference)) return null;
+                
+                $exactDir = $basePath . DIRECTORY_SEPARATOR . $reference . '_extrait';
+                if (is_dir($exactDir)) return $exactDir;
+                
+                $pattern = $basePath . DIRECTORY_SEPARATOR . '*' . $reference . '*_extrait';
+                $dirs = glob($pattern, GLOB_ONLYDIR);
+                return !empty($dirs) ? $dirs[0] : null;
+            };
+
+            $parseDateMarche = function ($dateString) {
+                if (empty($dateString) || in_array($dateString, ['---', 'N/A', ''])) {
+                    return null;
+                }
+                try {
+                    if (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/', $dateString)) {
+                        return Carbon::createFromFormat('d/m/Y', $dateString)->format('Y-m-d');
+                    }
+                    return Carbon::parse($dateString)->format('Y-m-d');
+                } catch (\Exception $e) {
+                    Log::warning("Impossible de parser la date: {$dateString}");
+                    return null;
+                }
+            };
+
+            $parseDateLimiteMarche = function ($dateString) {
+                if (empty($dateString) || in_array($dateString, ['---', 'N/A', ''])) {
+                    return null;
+                }
+                try {
+                    // Format français : "15 janvier 2024 à 10h30"
+                    if (preg_match('/(\d{1,2})\s+(\w+)\s+(\d{4}).*?(\d{1,2})h(\d{2})/', $dateString, $matches)) {
+                        $mois = [
+                            'janvier' => '01', 'février' => '02', 'mars' => '03', 'avril' => '04',
+                            'mai' => '05', 'juin' => '06', 'juillet' => '07', 'août' => '08',
+                            'septembre' => '09', 'octobre' => '10', 'novembre' => '11', 'décembre' => '12'
+                        ];
+                        $jour = str_pad($matches[1], 2, '0', STR_PAD_LEFT);
+                        $moisNum = $mois[strtolower($matches[2])] ?? '01';
+                        $annee = $matches[3];
+                        $heure = str_pad($matches[4], 2, '0', STR_PAD_LEFT);
+                        $minute = $matches[5];
+                        return "{$annee}-{$moisNum}-{$jour} {$heure}:{$minute}:00";
+                    }
+                    
+                    if (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{1,2}):(\d{2})/', $dateString)) {
+                        return Carbon::createFromFormat('d/m/Y H:i', $dateString)->format('Y-m-d H:i:s');
+                    }
+                    
+                    if (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/', $dateString)) {
+                        return Carbon::createFromFormat('d/m/Y', $dateString)->format('Y-m-d H:i:s');
+                    }
+                    
+                    return Carbon::parse($dateString)->format('Y-m-d H:i:s');
+                } catch (\Exception $e) {
+                    Log::warning("Impossible de parser la date limite: {$dateString}");
+                    return null;
+                }
+            };
+
+            // === TRAITEMENT DU CSV AVEC FILTRAGE ===
+            $csv = Reader::createFromPath($csvPath, 'r');
+            $csv->setHeaderOffset(0);
+            $records = iterator_to_array($csv->getRecords());
+            
+            Log::info("CSV chargé avec " . count($records) . " enregistrements");
+
+            // 🔑 FILTRER LES DOUBLONS AVANT TRAITEMENT
+            $filteredRecords = [];
+            $duplicateCount = 0;
+            
+            foreach ($records as $record) {
+                $reference = trim($record['reference'] ?? '');
+                
+                if (empty($reference)) {
+                    Log::warning("Référence vide ignorée");
+                    continue;
+                }
+                
+                // 🔑 VÉRIFIER SI LA RÉFÉRENCE EXISTE DÉJÀ
+                if (in_array($reference, $existingReferences)) {
+                    $duplicateCount++;
+                    Log::info("🔄 DOUBLON IGNORÉ : {$reference} (Python a déjà fait le tri côté téléchargement)");
+                    continue;
+                }
+                
+                $filteredRecords[] = $record;
+            }
+            
+            Log::info("=== FILTRAGE TERMINÉ ===");
+            Log::info("Enregistrements total : " . count($records));
+            Log::info("Doublons ignorés côté Laravel : {$duplicateCount}");
+            Log::info("Nouveaux enregistrements à traiter : " . count($filteredRecords));
+
+            // === TRAITEMENT DES NOUVEAUX ENREGISTREMENTS ===
+            $insertedCount = 0;
+            $updatedCount = 0;
+            $errorCount = 0;
+            $zipFoundCount = 0;
+            $extractedFoundCount = 0;
+            $marchePublicPath = storage_path('app/public/marche_public');
+
+            // Traitement par batch pour optimiser les performances
+            $batchSize = 50;
+            $batches = array_chunk($filteredRecords, $batchSize);
+            
+            foreach ($batches as $batchIndex => $batch) {
+                Log::info("Traitement du batch " . ($batchIndex + 1) . "/" . count($batches) . " (" . count($batch) . " enregistrements)");
+                
+                foreach ($batch as $index => $row) {
+                    try {
+                        $cleanRow = array_map('trim', $row);
+                        $reference = $cleanRow['reference'] ?? '';
+                        
+                        if (empty($reference)) {
+                            Log::warning("Référence vide à la ligne " . ($index + 1));
+                            continue;
+                        }
+
+                        // 🔑 DOUBLE VÉRIFICATION (sécurité)
+                        if (in_array($reference, $existingReferences)) {
+                            Log::info("🔄 DOUBLON DÉTECTÉ LORS DU TRAITEMENT, IGNORÉ : {$reference}");
+                            continue;
+                        }
+
+                        // Récupérer les données JSON correspondantes
+                        $marcheJson = $jsonIndex[$reference] ?? [];
+
+                        // 🔑 RECHERCHE DU FICHIER ZIP (SEULEMENT POUR NOUVEAUX)
+                        $cheminZip = null;
+                        $foundZipPath = $findZipFile($reference, $marchePublicPath);
+                        if ($foundZipPath && file_exists($foundZipPath)) {
+                            $cheminZip = "storage/marche_public/" . basename($foundZipPath);
+                            $zipFoundCount++;
+                            Log::info("📁 ZIP trouvé pour nouveau marché : {$reference}");
+                        } else {
+                            Log::info("📁 Aucun ZIP trouvé pour : {$reference}");
+                        }
+
+                        // 🔑 RECHERCHE DES FICHIERS EXTRAITS (SEULEMENT POUR NOUVEAUX)
+                        $extractedFiles = [];
+                        $foundExtractDir = $findExtractedDir($reference, $marchePublicPath);
+                        if ($foundExtractDir && is_dir($foundExtractDir)) {
+                            $iterator = new \RecursiveIteratorIterator(
+                                new \RecursiveDirectoryIterator($foundExtractDir, \RecursiveDirectoryIterator::SKIP_DOTS)
+                            );
+                            foreach ($iterator as $file) {
+                                if ($file->isFile()) {
+                                    $relativePath = str_replace(storage_path('app/public/'), '', $file->getPathname());
+                                    $relativePath = str_replace('\\', '/', $relativePath);
+                                    $extractedFiles[] = "/storage/{$relativePath}";
+                                }
+                            }
+                            if (!empty($extractedFiles)) {
+                                $extractedFoundCount++;
+                                Log::info("📂 Dossier extrait trouvé pour nouveau marché : {$reference} (" . count($extractedFiles) . " fichiers)");
+                            }
+                        } else {
+                            Log::info("📂 Aucun dossier extrait trouvé pour : {$reference}");
+                        }
+
+                        // Préparation des données
+                        $datePublication = $parseDateMarche($cleanRow['date_publication'] ?? '');
+                        $dateLimite = $parseDateLimiteMarche($cleanRow['date_limite'] ?? '');
+                        $extractedAt = !empty($cleanRow['extracted_at']) ? Carbon::parse($cleanRow['extracted_at']) : now();
+
+                        $marcheData = [
+                            'type_procedure' => $this->cleanValue($cleanRow['type_procedure'] ?? null),
+                            'detail_procedure' => $this->cleanValue($cleanRow['detail_procedure'] ?? null),
+                            'categorie' => $this->cleanValue($cleanRow['categorie'] ?? null),
+                            'date_publication' => $datePublication,
+                            'reference' => $reference,
+                            'objet' => $this->cleanValue($cleanRow['objet'] ?? null),
+                            'objet_complet' => $this->cleanValue($cleanRow['objet_complet'] ?? $cleanRow['objet'] ?? null),
+                            'acheteur_public' => $this->cleanValue($cleanRow['acheteur_public'] ?? null),
+                            'lieu_execution' => $this->cleanValue($cleanRow['lieu_execution'] ?? null),
+                            'lieu_execution_complet' => $this->cleanValue($cleanRow['lieu_execution_complet'] ?? $cleanRow['lieu_execution'] ?? null),
+                            'lien_detail_lots' => $this->cleanValue($cleanRow['lien_detail_lots'] ?? null),
+                            'date_limite' => $dateLimite,
+                            'type_reponse_electronique' => $this->cleanValue($cleanRow['type_reponse_electronique'] ?? null),
+                            'lien_consultation' => $this->cleanValue($cleanRow['lien_consultation'] ?? null),
+                            'ref_consultation_id' => $this->cleanValue($cleanRow['ref_consultation_id'] ?? null),
+                            'extracted_at' => $extractedAt,
+                            'row_index' => (int)($cleanRow['row_index'] ?? ($index + 1)),
+                            'storage_link_csv' => 'storage/marche_public/marches_publics_data.csv',
+                            'storage_link_json' => 'storage/marche_public/marches_publics_data.json',
+                            'EXTRACTED_FILES' => json_encode($extractedFiles),
+                            'chemin_zip' => $cheminZip,
+                            'updated_at' => now(),
+                        ];
+
+                        // 🔑 INSERTION UNIQUEMENT (PAS DE MISE À JOUR CAR PAS DE DOUBLONS)
+                        $projetMp = ProjetMp::create($marcheData);
+                        $insertedCount++;
+                        Log::info("✅ NOUVEAU MARCHÉ AJOUTÉ : {$reference}");
+
+                    } catch (\Exception $e) {
+                        $errorCount++;
+                        Log::error("❌ Erreur insertion ligne " . ($index + 1) . " (ref: {$reference}): " . $e->getMessage());
+                    }
+                }
+                
+                // Petit délai entre les batches pour éviter la surcharge
+                if ($batchIndex < count($batches) - 1) {
+                    usleep(100000); // 0.1 seconde
+                }
+            }
+
+            // === RÉSUMÉ FINAL ===
+            $totalProcessed = $insertedCount + $updatedCount + $errorCount;
+            
+            Log::info("=== RÉSUMÉ DE L'IMPORT AVEC FILTRAGE DOUBLONS OPTIMISÉ ===");
+            Log::info("Total enregistrements dans CSV: " . count($records));
+            Log::info("🔄 Doublons ignorés côté Laravel: {$duplicateCount}");
+            Log::info("Total lignes traitées: {$totalProcessed}");
+            Log::info("✅ Nouvelles insertions: {$insertedCount}");
+            Log::info("🔄 Mises à jour: {$updatedCount}");
+            Log::info("❌ Erreurs: {$errorCount}");
+            Log::info("📁 ZIP trouvés (nouveaux): {$zipFoundCount}");
+            Log::info("📂 Dossiers extraits trouvés (nouveaux): {$extractedFoundCount}");
+            Log::info("🚀 OPTIMISATION: Doublons évités côté Python (pas de téléchargement/extraction inutile)");
+
+            $message = "Import marchés publics terminé avec filtrage optimisé des doublons !";
+            $message .= " {$insertedCount} nouveaux marchés ajoutés";
+            if ($duplicateCount > 0) $message .= ", {$duplicateCount} doublons ignorés côté Laravel";
+            if ($updatedCount > 0) $message .= ", {$updatedCount} mis à jour";
+            if ($errorCount > 0) $message .= ", {$errorCount} erreurs (voir logs)";
+            if ($zipFoundCount > 0) $message .= ". {$zipFoundCount} fichiers ZIP traités";
+            if ($extractedFoundCount > 0) $message .= ", {$extractedFoundCount} dossiers extraits traités";
+            $message .= ". 🚀 Temps et bande passante économisés !";
+
+            return redirect()->back()->with('success', $message);
+
+        } catch (\Exception $e) {
+            Log::error("❌ Erreur générale lors de l'importation: " . $e->getMessage());
+            Log::error("Stack trace: " . $e->getTraceAsString());
+            return redirect()->back()->with('error', 'Erreur lors de l\'importation des marchés publics : ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Supprime récursivement un répertoire
+     */
+    private function deleteDirectory($dir)
+    {
+        if (!is_dir($dir)) {
+            return false;
+        }
+        
+        $files = array_diff(scandir($dir), array('.', '..'));
+        foreach ($files as $file) {
+            $path = $dir . DIRECTORY_SEPARATOR . $file;
+            is_dir($path) ? $this->deleteDirectory($path) : unlink($path);
+        }
+        
+        return rmdir($dir);
+    }
+
+    /**
+     * Nettoie une valeur en supprimant les valeurs vides ou non significatives
+     */
+    private function cleanValue($value)
+    {
+        if (is_string($value)) {
+            $value = trim($value);
+            if (in_array($value, ['', '---', 'N/A', 'null', 'NULL'])) {
+                return null;
+            }
+        }
+        return $value;
+    }
+        
+    
+    public function getMarchePublicData()
+    {
+        $jsonPath = storage_path('app/public/marche_public/marches_publics_data.json');
+
+        if (!file_exists($jsonPath)) {
+            return response()->json([
+                'error' => 'Fichier JSON non trouvé. Lancez d\'abord le script Selenium.'
+            ], 404);
+        }
+
+        $jsonData = json_decode(file_get_contents($jsonPath), true) ?? [];
+
+        return response()->json($jsonData);
+    }
+
+    public function marchePublicPage()
+    {
+        return Inertia::render('ressources-humaines/MarchePublic');
+    }
+
+    public function getMarchesPublicsData()
+{
+    $marchesPublics = ProjetMp::orderBy('date_publication', 'desc')->get();
+    return response()->json($marchesPublics);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+######################################################################################################################
+######################################################################################################################
+######################################################################################################################
+######################################################################################################################
+######################################################################################################################
+######################################################################################################################
+
+
+
+
+
+
+
+
+
+
+
+
+public function fetchBonsCommande()
+    {
+        $pythonScript = base_path('selenium_scripts/bons_commande.py');
+        
+        $lock = Cache::lock('selenium_lock', 300); // 5 min lock
+        if (!$lock->get()) {
+            return redirect()->route('ressources-humaines.bons-commandes')
+                ->with('error', 'Une exécution Selenium est déjà en cours, réessayez dans quelques minutes.');
+        }
+
+        try {
+            // Clear any existing status
+            Cache::forget('scraping_status');
+            Cache::put('scraping_status', 'running', 300);
+
+            // Execute Python script in background
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                pclose(popen("start /B python $pythonScript", "r"));
+            } else {
+                exec("nohup python3 $pythonScript > /dev/null 2>&1 &");
+            }
+
+            return redirect()->route('ressources-humaines.bons-commandes')
+                ->with('info', 'Récupération des données en cours... Veuillez patienter quelques instants puis actualiser la page.');
+
+        } catch (\Exception $e) {
+            Cache::forget('scraping_status');
+            Log::error('Erreur lors du lancement du script Selenium:', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return redirect()->route('ressources-humaines.bons-commandes')
+                ->with('error', 'Erreur lors du lancement du script : ' . $e->getMessage());
+        } finally {
+            $lock->release();
+        }
+    }
+
+    public function importBonsFromJson()
+    {
+        $jsonPath = storage_path('app/public/bons_commande/bons_commande.json');
+        
+        if (!file_exists($jsonPath)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Fichier JSON introuvable. Lancez d\'abord la récupération des données.'
+            ]);
+        }
+
+        try {
+            $jsonData = json_decode(file_get_contents($jsonPath), true);
+            if (!is_array($jsonData)) {
+                throw new \Exception('Format JSON invalide');
+            }
+
+            $insertedCount = 0;
+            $duplicateCount = 0;
+            $errorCount = 0;
+
+            foreach ($jsonData as $index => $bonData) {
+                try {
+                    // Clean and prepare data
+                    $cleanData = $this->cleanBonData($bonData);
+                    
+                    if (!$cleanData['n_ordre'] && !$cleanData['reference']) {
+                        Log::warning("Données manquantes pour l'enregistrement $index", $cleanData);
+                        $errorCount++;
+                        continue;
+                    }
+
+                    // Check for duplicates and insert
+                    $bonCommande = BonCommande::firstOrCreate(
+                        [
+                            'n_ordre' => $cleanData['n_ordre'],
+                            'reference' => $cleanData['reference']
+                        ],
+                        $cleanData
+                    );
+
+                    if ($bonCommande->wasRecentlyCreated) {
+                        $insertedCount++;
+                        Log::info("Bon de commande inséré (ID: {$bonCommande->id})", [
+                            'n_ordre' => $cleanData['n_ordre'],
+                            'reference' => $cleanData['reference']
+                        ]);
+                    } else {
+                        $duplicateCount++;
+                        Log::info("Doublon ignoré", [
+                            'n_ordre' => $cleanData['n_ordre'],
+                            'reference' => $cleanData['reference']
+                        ]);
+                    }
+
+                } catch (\Exception $e) {
+                    $errorCount++;
+                    Log::error("Erreur insertion enregistrement $index", [
+                        'error' => $e->getMessage(),
+                        'line' => $e->getLine(),
+                        'data' => $bonData
+                    ]);
+                }
+            }
+
+            // Update cache status
+            Cache::put('scraping_status', 'completed', 60);
+
+            $message = "Import terminé : $insertedCount nouveaux enregistrements ajoutés, $duplicateCount doublons ignorés.";
+            if ($errorCount > 0) {
+                $message .= " $errorCount erreurs détectées (voir logs).";
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'stats' => [
+                    'inserted' => $insertedCount,
+                    'duplicates' => $duplicateCount,
+                    'errors' => $errorCount,
+                    'total_processed' => count($jsonData)
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Cache::put('scraping_status', 'error', 60);
+            Log::error('Erreur lors de l\'importation depuis JSON:', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de l\'importation : ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    private function cleanBonData($bonData)
+    {
+        // Parse date
+        $dateLimit = $this->parseDate($bonData['Date/Heure limite'] ?? '');
+        
+        // Get extracted files
+        $extractedFiles = $bonData['EXTRACTED_FILES'] ?? [];
+
+        $cleanData = [
+            'n_ordre' => $this->cleanString($bonData["N d'ordre"] ?? ''),
+            'reference' => $this->cleanString($bonData['Référence'] ?? ''),
+            'date_heure_limite' => $dateLimit,
+            'objet' => $this->cleanString($bonData['Objet'] ?? $bonData['Objet '] ?? ''),
+            'organisme' => $this->cleanString($bonData['Organisme'] ?? $bonData['Organisme '] ?? ''),
+            'ville_execution' => $this->cleanString($bonData['Ville d\'exécution'] ?? $bonData['Ville d\'exécution '] ?? ''),
+            'type' => $this->cleanString($bonData['Type'] ?? $bonData['Type '] ?? ''),
+            'observation' => $this->cleanString($bonData['Obsérvation'] ?? $bonData['Observation'] ?? ''),
+            'visite_lieux' => $this->cleanString($bonData['Visite des lieux'] ?? $bonData['Visite des lieux '] ?? ''),
+            'telechargement_dao' => $this->cleanString($bonData['Téléchargement_DAO'] ?? ''),
+            'lien_cliquer_ici' => $this->cleanString($bonData['Lien_Cliquer_Ici'] ?? ''),
+            'soumission_electronique' => $this->cleanString($bonData['Soumission électronique'] ?? $bonData['Soumission électronique '] ?? ''),
+            'chemin_fichiers' => !empty($extractedFiles) ? $extractedFiles : null,
+        ];
+
+        return $cleanData;
+    }
+
+    private function cleanString($value)
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+        
+        $cleaned = trim($value);
+        return ($cleaned === '' || $cleaned === '---' || $cleaned === 'N/A') ? null : $cleaned;
+    }
+
+    
+
+    public function getBonsCommandeData()
+    {
+        $bons = BonCommande::orderBy('created_at', 'desc')->get();
+        $scrapingStatus = Cache::get('scraping_status', 'idle');
+        
+        return Inertia::render('ressources-humaines/BonCommande', [
+            'bonsCommande' => $bons,
+            'scrapingStatus' => $scrapingStatus
+        ]);
+    }
+
+    public function getScrapingStatus()
+    {
+        $status = Cache::get('scraping_status', 'idle');
+        
+        // If status is running, check if files exist to determine if we should import
+        if ($status === 'running') {
+            $jsonPath = storage_path('app/public/bons_commande/bons_commande.json');
+            if (file_exists($jsonPath)) {
+                // Files are ready, let's import
+                $this->importBonsFromJson();
+                $status = Cache::get('scraping_status', 'completed');
+            }
+        }
+
+        return response()->json(['status' => $status]);
+    }
+
+    // List files in DAO archive
+    public function listDaoFiles(Request $request)
+    {
+        $zipUrl = $request->get('zipPath');
+        
+        if (!$zipUrl) {
+            return response()->json([]);
+        }
+
+        try {
+            // Extract archive name from URL
+            $urlParts = parse_url($zipUrl);
+            $pathParts = explode('/', $urlParts['path']);
+            $zipFileName = end($pathParts);
+            
+            // Find the corresponding extracted directory
+            $baseDir = storage_path('app/public/bons_commande');
+            $extractDir = null;
+            
+            // Look for directories that might contain this ZIP's files
+            foreach (glob($baseDir . '/bon_*', GLOB_ONLYDIR) as $dir) {
+                if (is_dir($dir)) {
+                    $extractDir = $dir;
+                    break; // For now, just get the first match
+                }
+            }
+            
+            if (!$extractDir || !is_dir($extractDir)) {
+                return response()->json([]);
+            }
+
+            $files = [];
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($extractDir, \RecursiveDirectoryIterator::SKIP_DOTS)
+            );
+
+            foreach ($iterator as $file) {
+                if ($file->isFile()) {
+                    $relativePath = str_replace($extractDir . DIRECTORY_SEPARATOR, '', $file->getPathname());
+                    $files[] = [
+                        'name' => $file->getFilename(),
+                        'path' => $relativePath,
+                        'full_path' => $file->getPathname()
+                    ];
+                }
+            }
+
+            return response()->json($files);
+
+        } catch (\Exception $e) {
+            Log::error('Error listing DAO files:', [
+                'error' => $e->getMessage(),
+                'zipUrl' => $zipUrl
+            ]);
+            return response()->json([]);
+        }
+    }
+
+    public function downloadDaoFile(Request $request)
+    {
+        $zipUrl = $request->get('zipPath');
+        $filePath = $request->get('filePath');
+
+        if (!$zipUrl || !$filePath) {
+            return response()->json(['error' => 'Paramètres manquants'], 400);
+        }
+
+        try {
+            // Find the extracted directory
+            $baseDir = storage_path('app/public/bons_commande');
+            $extractDir = null;
+            
+            foreach (glob($baseDir . '/bon_*', GLOB_ONLYDIR) as $dir) {
+                $fullFilePath = $dir . DIRECTORY_SEPARATOR . $filePath;
+                if (file_exists($fullFilePath)) {
+                    $extractDir = $dir;
+                    break;
+                }
+            }
+
+            if (!$extractDir) {
+                return response()->json(['error' => 'Fichier non trouvé'], 404);
+            }
+
+            $fullFilePath = $extractDir . DIRECTORY_SEPARATOR . $filePath;
+            
+            if (!file_exists($fullFilePath)) {
+                return response()->json(['error' => 'Fichier non trouvé'], 404);
+            }
+
+            // Security check - make sure file is within the extract directory
+            $realFilePath = realpath($fullFilePath);
+            $realExtractDir = realpath($extractDir);
+            
+            if (strpos($realFilePath, $realExtractDir) !== 0) {
+                return response()->json(['error' => 'Accès non autorisé'], 403);
+            }
+
+            return response()->download($fullFilePath, basename($filePath));
+
+        } catch (\Exception $e) {
+            Log::error('Error downloading DAO file:', [
+                'error' => $e->getMessage(),
+                'zipUrl' => $zipUrl,
+                'filePath' => $filePath
+            ]);
+            return response()->json(['error' => 'Erreur lors du téléchargement'], 500);
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    public function getSousTrais()
+    {
+        $sousTrais = SousTrait::all();
+
+        return response()->json($sousTrais, 200);
+    }
+
+    public function storeSousTrais(Request $request)
+    {
+        $validated = $request->validate([
+            'nom'         => 'required|string|max:255',
+            'poste'       => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'formation'   => 'nullable|array',
+            'experience'  => 'nullable|array',
+            'competences' => 'nullable|array',
+            'autre'       => 'nullable|string|max:255',
+        ]);
+
+        $sousTrait = SousTrait::create([
+            'nom'         => $validated['nom'],
+            'poste'       => $validated['poste'],
+            'description' => $validated['description'] ?? null,
+            'formation'   => $validated['formation'] ?? [],
+            'experience'  => $validated['experience'] ?? [],
+            'competences' => $validated['competences'] ?? [],
+            'autre'       => $validated['autre'] ?? null,
+        ]);
+
+        return redirect()->back()->with('success', 'Sous Traitant ajouté avec succès.');
+    }
+
+    
+
+   
+
+    public function importProjetsFromCsv()
+    {
+        $csvPath = storage_path('app/public/projets.csv');
+
+        if (!file_exists($csvPath)) {
+            return redirect()->back()->with('error', 'Fichier CSV introuvable.');
+        }
+
+        $csv = Reader::createFromPath($csvPath, 'r');
+        $csv->setHeaderOffset(0); // première ligne = noms des colonnes
+        $records = $csv->getRecords();
+
+        foreach ($records as $row) {
+            ProjetNv::updateOrCreate(
+                ['objet' => $row['Objet '] ?? null], // clé unique pour éviter doublons
+                [
+                    'organisme' => $row['Organisme '] ?? null,
+                    'objet' => $row['Objet '] ?? null,
+                    'ville_execution' => $row["Ville d'exécution "] ?? null,
+                    'allotissement' => $row['Allotissement '] ?? null,
+                    'adresse_retrait' => $row['Adresse retrait '] ?? null,
+                    'contact' => $row['Contact '] ?? null,
+                    'montant_retrait' => $row['Montant retrait '] ?? null,
+                    'mode_paiement' => $row['Mode paiement '] ?? null,
+                    'mt_caution' => $row['Montant caution '] ?? null,
+                    'budget' => $row['Budget '] ?? null,
+                    'visite_lieux' => $row['Visite des lieux '] ?? null,
+                    'type' => $row['Type '] ?? null,
+                    'observation' => $row['Obsérvation '] ?? null,
+                    'soumission_electronique' => $row['Soumission électronique '] ?? null,
+                    'support' => $row['Support'] ?? null,
+                    'secteur' => $row['Secteur '] ?? null,
+                    'telechargement' => $row['Téléchargement'] ?? null,
+                    'chemin_fichiers' => [], // vide au départ
+                ]
+            );
+        }
+
+        return redirect()->back()->with('success', 'CSV importé avec succès.');
+    }
+
+
+    public function fetchResultatsBonCommande()
+{
+    $pythonScript = base_path('selenium_scripts/resultats_bon_commande.py');
+
+    $lock = Cache::lock('selenium_resultat_bon_commande_lock', 300);
+    if (!$lock->get()) {
+        return redirect()->back()
+            ->with('error', 'Une exécution Selenium est déjà en cours, réessayez dans quelques minutes.');
+    }
+
+    try {
+        // Lancer le script Python en arrière-plan
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            pclose(popen("start /B python $pythonScript", "r"));
+        } else {
+            exec("nohup python3 $pythonScript > /dev/null 2>&1 &");
+        }
+
+        // Chemins des fichiers générés
+        $csvPath = storage_path('app/public/resultats_bon_commande/resultats_bon_commande.csv');
+        $jsonPath = storage_path('app/public/resultats_bon_commande/resultats_bon_commande.json');
+
+        if (!file_exists($csvPath) || !file_exists($jsonPath)) {
+            return redirect()->back()
+                ->with('error', 'Fichiers CSV/JSON introuvables après exécution du script.');
+        }
+
+        // Lire le JSON pour récupérer les chemins des fichiers
+        $jsonData = json_decode(file_get_contents($jsonPath), true) ?? [];
+        $jsonIndex = [];
+        foreach ($jsonData as $bon) {
+            $objetKey = trim($bon['Objet'] ?? '');
+            if ($objetKey) {
+                $jsonIndex[$objetKey] = $bon;
+            }
+        }
+
+        // Lire le CSV et insérer en base
+        $csv = Reader::createFromPath($csvPath, 'r');
+        $csv->setHeaderOffset(0);
+        $records = $csv->getRecords();
+
+        foreach ($records as $row) {
+            $reference = $row['Référence'] ?? null;
+            $maitre_ouvrage = $row["Maitre d'ouvrage"] ?? null;
+            $objet = $row['Objet'] ?? null;
+            $adjudicataire = $row['Adjudicataire'] ?? null;
+            $ville = $row['Ville'] ?? null;
+            $budget = $row['Budget(DHs)'] ?? null;
+            $montant = $row['Montant(DHs)'] ?? null;
+            $date_adjudications = $row['Date des adjudications'] ?? null;
+            $date_ouverture = $row["Date d'ouverture"] ?? null;
+            $date_affichage = $row["Date d'affichage"] ?? null;
+            $lien_dao = $row['Lien_DAO'] ?? null;
+            $dao = $row['D.A.O'] ?? null;
+
+            $bonJson = $jsonIndex[$objet] ?? [];
+            $chemin_fichiers = $bonJson['EXTRACTED_FILES'] ?? [];
+
+            // Convertir les dates
+            $date_ouverture = $date_ouverture ? Carbon::createFromFormat('d/m/Y', $date_ouverture) : null;
+            $date_adjudications = $date_adjudications ? Carbon::createFromFormat('d/m/Y', $date_adjudications) : null;
+            $date_affichage = $date_affichage ? Carbon::createFromFormat('d/m/Y', $date_affichage) : null;
+
+            ResultatBonCommande::updateOrCreate(
+                [
+                    'reference' => $reference,
+                    'objet' => $objet,
+                    'maitre_ouvrage' => $maitre_ouvrage,
+                ],
+                [
+                    'date_ouverture' => $date_ouverture,
+                    'budget' => $budget,
+                    'lien_dao' => $lien_dao,
+                    'dao' => $dao,
+                    'date_adjudications' => $date_adjudications,
+                    'ville' => $ville,
+                    'montant' => $montant,
+                    'adjudicataire' => $adjudicataire,
+                    'chemin_fichiers' => $chemin_fichiers,
+                    'date_affichage' => $date_affichage,
+                ]
+            );
+        }
+    } catch (\Exception $e) {
+        return redirect()->back()
+            ->with('error', 'Erreur lors de l\'importation : ' . $e->getMessage());
+    } finally {
+        $lock->release();
+    }
+
+    return redirect()->back()
+        ->with('success', 'Le script Selenium pour ResultatBonCommande a été exécuté. Les données ont été mises à jour.');
+}
+
+
+
+    public function getResultatsBonCommandeData()
+    {
+        $resultats = ResultatBonCommande::orderBy('date_adjudications', 'desc')->get();
+
+        return response()->json($resultats);
+    }
+
+    // Affichage page Résultats Bon de Commande
+    public function resultatsBonCommandePage()
+    {
+        return Inertia::render('ressources-humaines/ResultatBonCommande');
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // Add this method to your RessourcesHumainesController
+public function debugImport()
+{
+    try {
+        $csvPath = storage_path('app/public/global-marches/global-marches.csv');
+        $jsonPath = storage_path('app/public/global-marches/global-marches.json');
+        
+        $debugInfo = [
+            'files_exist' => [
+                'csv' => file_exists($csvPath),
+                'json' => file_exists($jsonPath)
+            ],
+            'file_sizes' => [
+                'csv' => file_exists($csvPath) ? filesize($csvPath) : 0,
+                'json' => file_exists($jsonPath) ? filesize($jsonPath) : 0
+            ],
+            'paths' => [
+                'csv' => $csvPath,
+                'json' => $jsonPath
+            ]
+        ];
+
+        if (file_exists($csvPath)) {
+            try {
+                $csv = Reader::createFromPath($csvPath, 'r');
+                $csv->setHeaderOffset(0);
+                $headers = $csv->getHeader();
+                $records = iterator_to_array($csv->getRecords());
+                
+                $debugInfo['csv_info'] = [
+                    'headers' => $headers,
+                    'record_count' => count($records),
+                    'first_record' => count($records) > 0 ? $records[0] : null
+                ];
+            } catch (\Exception $e) {
+                $debugInfo['csv_error'] = $e->getMessage();
+            }
+        }
+
+        if (file_exists($jsonPath)) {
+            try {
+                $jsonContent = file_get_contents($jsonPath);
+                $jsonData = json_decode($jsonContent, true);
+                
+                $debugInfo['json_info'] = [
+                    'record_count' => count($jsonData),
+                    'json_error' => json_last_error_msg(),
+                    'first_record' => count($jsonData) > 0 ? $jsonData[0] : null
+                ];
+            } catch (\Exception $e) {
+                $debugInfo['json_error'] = $e->getMessage();
+            }
+        }
+
+        // Check database connection
+        try {
+            $count = AppelOffer::count();
+            $debugInfo['database'] = [
+                'connected' => true,
+                'current_count' => $count,
+                'last_record' => AppelOffer::latest()->first()
+            ];
+        } catch (\Exception $e) {
+            $debugInfo['database'] = [
+                'connected' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+
+        return response()->json($debugInfo, 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+}
+
+// Add this method to manually test the import process
+public function testImportSingle()
+{
+    try {
+        Log::info("Testing single import process");
+        
+        // Test with your sample data
+        $testData = [
+            'Référence' => '26/SDAD/2025',
+            'Maitre d\'ouvrage' => 'Autres societes /SOCIETE DAKHLA AMÉNAGEMENT ET DEVELOPPEMENT',
+            'Objet' => 'l\'établissement de l\'étude de conception du futur casier d\'enfouissement au CEV de Dakhla et suivi des travaux',
+            'Adjudicataire' => 'ALSENTA',
+            'Ville' => 'dakhla',
+            'Budget(DHs)' => '468.000,00',
+            'Montant(DHs)' => '412 200.00',
+            'Date des adjudications' => '18/08/2025',
+            'Date d\'ouverture' => '18/08/2025',
+            'Date d\'affichage' => '29/09/2025',
+            'Lien_DAO' => 'https://global-marches.com/downoaldcps/1484419.zip',
+            'Lien_PV' => 'https://global-marches.com/downoald-pv/PV-1756828147.zip',
+            'D.A.O' => null,
+            'PV' => null
+        ];
+
+        $jsonIndex = [
+            '26/SDAD/2025' => [
+                'EXTRACTED_FILES' => [
+                    '/storage/global-marches/resultat_offre_0/DCE/avis Ar Ao 26-SDAD-2025.pdf',
+                    '/storage/global-marches/resultat_offre_0/DCE/Avis Fr AO 26-SDAD-2025.pdf'
+                ]
+            ]
+        ];
+
+        $this->processRecord($testData, $jsonIndex);
+
+        $created = AppelOffer::where('reference', '26/SDAD/2025')->first();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Test import successful',
+            'created_record' => $created
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error("Test import failed: " . $e->getMessage(), [
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+}
+
+// Add these routes to your web.php
+/*
+Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+    '/ressources-humaines/debug-import',
+    [RessourcesHumainesController::class, 'debugImport']
+)->name('ressources-humaines.debug-import');
+
+Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+    '/ressources-humaines/test-import-single',
+    [RessourcesHumainesController::class, 'testImportSingle']
+)->name('ressources-humaines.test-import-single');
+*/
+
+
+
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+
+
+    public function MethodologyValidation()
+    {
+        $pending = MethodologyDocument::with('user:id,name,email')
+            ->where('status', 'submitted')
+            ->orderBy('created_at', 'asc')
+            ->get()
+            ->map(function ($doc) {
+                return [
+                    'id' => $doc->id,
+                    'user_id' => $doc->user_id,
+                    'user_name' => $doc->user->name,
+                    'user_email' => $doc->user->email,
+                    'type' => $doc->type,
+                    'file_name' => $doc->file_name,
+                    'file_path' => $doc->file_path,
+                    'file_size' => $doc->file_size,
+                    'status' => $doc->status,
+                    'uploaded_at' => $doc->created_at->toISOString(),
+                ];
+            });
+
+        $validated = MethodologyDocument::with(['user:id,name,email', 'validator:id,name'])
+            ->where('status', 'validated')
+            ->orderBy('validated_at', 'desc')
+            ->get()
+            ->map(function ($doc) {
+                return [
+                    'id' => $doc->id,
+                    'user_id' => $doc->user_id,
+                    'user_name' => $doc->user->name,
+                    'user_email' => $doc->user->email,
+                    'type' => $doc->type,
+                    'file_name' => $doc->file_name,
+                    'file_path' => $doc->file_path,
+                    'file_size' => $doc->file_size,
+                    'status' => $doc->status,
+                    'uploaded_at' => $doc->created_at->toISOString(),
+                    'validated_at' => $doc->validated_at?->toISOString(),
+                    'validator_comment' => $doc->validator_comment,
+                ];
+            });
+
+        $rejected = MethodologyDocument::with(['user:id,name,email', 'validator:id,name'])
+            ->where('status', 'rejected')
+            ->orderBy('validated_at', 'desc')
+            ->get()
+            ->map(function ($doc) {
+                return [
+                    'id' => $doc->id,
+                    'user_id' => $doc->user_id,
+                    'user_name' => $doc->user->name,
+                    'user_email' => $doc->user->email,
+                    'type' => $doc->type,
+                    'file_name' => $doc->file_name,
+                    'file_path' => $doc->file_path,
+                    'file_size' => $doc->file_size,
+                    'status' => $doc->status,
+                    'uploaded_at' => $doc->created_at->toISOString(),
+                    'validated_at' => $doc->validated_at?->toISOString(),
+                    'validator_comment' => $doc->validator_comment,
+                ];
+            });
+
+        $pendingDocs = MethodologyDocument::where('status', 'submitted')->get();
+        $urgentDocs = $pendingDocs->filter(function ($doc) {
+            return $doc->created_at->diffInDays(now()) >= 3;
+        });
+
+        $stats = [
+            'total_pending' => $pendingDocs->count(),
+            'total_validated' => MethodologyDocument::where('status', 'validated')->count(),
+            'total_rejected' => MethodologyDocument::where('status', 'rejected')->count(),
+            'pending_urgent' => $urgentDocs->count(),
+        ];
+
+        return Inertia::render('ressources-humaines/MethodologyValidation', [
+            'documents' => [
+                'pending' => $pending,
+                'validated' => $validated,
+                'rejected' => $rejected,
+            ],
+            'stats' => $stats,
+        ]);
+    }
+
+    public function validateMethodology(Request $request)
+    {
+        $data = $request->validate([
+            'document_id' => 'required|exists:methodology_documents,id',
+            'action' => 'required|in:validate,reject',
+            'comment' => 'nullable|string|max:1000',
+        ]);
+
+        try {
+            $document = MethodologyDocument::findOrFail($data['document_id']);
+
+            if ($document->status !== 'submitted') {
+                return redirect()->back()->withErrors(['message' => 'Ce document a déjà été traité.']);
+            }
+
+            $document->update([
+                'status' => $data['action'] === 'validate' ? 'validated' : 'rejected',
+                'validator_id' => auth()->id(),
+                'validator_comment' => $data['comment'],
+                'validated_at' => now(),
+            ]);
+
+            Log::info('Document validation updated', [
+                'document_id' => $document->id,
+                'action' => $data['action'],
+                'validator_id' => auth()->id(),
+            ]);
+
+            $this->notifyDocumentOwner($document, $data['action'], $data['comment']);
+
+            $message = $data['action'] === 'validate' 
+                ? 'Document validé avec succès! Le fournisseur a été notifié.' 
+                : 'Document rejeté. Le fournisseur a été notifié.';
+
+            return redirect()->back()->with('success', $message);
+
+        } catch (\Exception $e) {
+            Log::error('Error validating document', [
+                'error' => $e->getMessage(),
+                'document_id' => $data['document_id'] ?? null,
+            ]);
+
+            return redirect()->back()->withErrors(['error' => 'Erreur lors de la validation du document.']);
+        }
+    }
+
+    public function downloadMethodology(MethodologyDocument $document)
+    {
+        return Storage::disk('public')->download($document->file_path, $document->file_name);
+    }
+
+    protected function notifyDocumentOwner(MethodologyDocument $document, string $action, ?string $comment)
+    {
+        try {
+            $owner = $document->user;
+
+            $owner->notify(new MethodologyDocumentNotification(
+                $document,
+                $action === 'validate' ? 'validated' : 'rejected',
+                $comment
+            ));
+
+            Log::info('Document owner notified', [
+                'owner_id' => $owner->id,
+                'document_id' => $document->id,
+                'action' => $action,
+            ]);
+
+            $lastNotification = DatabaseNotification::where('notifiable_id', $owner->id)
+                ->where('notifiable_type', User::class)
+                ->latest()
+                ->first();
+
+            if ($lastNotification) {
+                try {
+                    broadcast(new NewNotification($lastNotification, $owner->id))->toOthers();
+                } catch (\Exception $e) {
+                    Log::warning('Broadcasting failed', ['error' => $e->getMessage()]);
+                }
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error notifying document owner', [
+                'error' => $e->getMessage(),
+                'document_id' => $document->id,
+            ]);
+        }
+    }
+
+
+    public function References()
+    {
+        $references = Reference::with('user')
+            ->orderBy('submitted_at', 'desc')
+            ->get();
+
+        $stats = [
+            'total' => $references->count(),
+            'pending' => $references->where('status', 'pending')->count(),
+            'validated' => $references->where('status', 'validated')->count(),
+            'rejected' => $references->where('status', 'rejected')->count(),
+        ];
+
+        return Inertia::render('ressources-humaines/References', [
+            'references' => $references,
+            'stats' => $stats
+        ]);
+    }
+
+    /**
+     * Show single reference details
+     */
+    public function showReference($id)
+    {
+        $reference = Reference::with('user', 'validator')->findOrFail($id);
+
+        return Inertia::render('ressources-humaines/ReferenceDetails', [
+            'reference' => $reference
+        ]);
+    }
+
+    /**
+     * Validate or reject a reference
+     */
+    public function validateReference(Request $request, $id)
+    {
+        try {
+            $validated = $request->validate([
+                'status' => 'required|in:validated,rejected',
+                'validation_comment' => 'nullable|string|max:1000',
+            ]);
+
+            // Require comment for rejection
+            if ($validated['status'] === 'rejected' && empty($validated['validation_comment'])) {
+                return back()->withErrors([
+                    'validation_comment' => 'Un commentaire est requis pour rejeter une référence.'
+                ]);
+            }
+
+            $reference = Reference::with('user')->findOrFail($id);
+
+            Log::info('Validating reference', [
+                'reference_id' => $id,
+                'status' => $validated['status'],
+                'validator_id' => auth()->id(),
+                'supplier_id' => $reference->user_id
+            ]);
+
+            // Update reference status
+            $reference->update([
+                'status' => $validated['status'],
+                'validation_comment' => $validated['validation_comment'],
+                'validated_at' => now(),
+                'validated_by' => auth()->id(),
+            ]);
+
+            // Get the submitter (supplier)
+            $submitter = $reference->user;
+
+            // ========================================
+            // NOTIFY THE SUPPLIER
+            // ========================================
+            try {
+                if ($validated['status'] === 'validated') {
+                    $submitter->notify(new ReferenceValidatedNotification($reference));
+                    $message = 'Référence validée avec succès.';
+                } else {
+                    $submitter->notify(new ReferenceRejectedNotification($reference));
+                    $message = 'Référence rejetée.';
+                }
+
+                // Get the latest notification for the submitter
+                $notification = $submitter->notifications()->latest()->first();
+                
+                if ($notification) {
+                    // Broadcast notification to the supplier
+                    broadcast(new NewNotification($notification, $submitter->id))->toOthers();
+                    
+                    Log::info('Notification sent to supplier', [
+                        'supplier_id' => $submitter->id,
+                        'supplier_name' => $submitter->name,
+                        'notification_type' => $validated['status'],
+                        'notification_id' => $notification->id
+                    ]);
+                } else {
+                    Log::warning('Failed to retrieve notification after creation', [
+                        'supplier_id' => $submitter->id
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::error('Failed to notify supplier', [
+                    'supplier_id' => $submitter->id,
+                    'error' => $e->getMessage()
+                ]);
+            }
+
+            return redirect()
+                ->route('ressources-humaines.references.index')
+                ->with('success', $message);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('Validation failed', ['errors' => $e->errors()]);
+            return back()->withErrors($e->errors());
+            
+        } catch (\Exception $e) {
+            Log::error('Reference validation failed', [
+                'message' => $e->getMessage(),
+                'reference_id' => $id,
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
+            return back()->withErrors([
+                'error' => 'Une erreur est survenue lors de la validation.'
+            ]);
+        }
+    }
+
+    /**
+     * Download reference document (RH side)
+     */
+    public function downloadReferenceDocument($id)
+    {
+        $reference = Reference::findOrFail($id);
+
+        $filePath = storage_path('app/public/' . $reference->document_path);
+
+        if (!file_exists($filePath)) {
+            abort(404, 'Document non trouvé');
+        }
+
+        return response()->download($filePath, $reference->document_name);
+    }
+
+
+###################################################################################################
+###################################################################################################
+###################################################################################################
+###################################################################################################
+###################################################################################################
+
+
+
+
+
+    public function indexEntretiens()
+    {
+        $entretiens = Entretien::with(['salarie' => function($query) {
+                $query->select('id', 'nom', 'prenom', 'email', 'poste', 'telephone', 'date_embauche');
+            }])
+            ->orderBy('date_entretien', 'desc')
+            ->get()
+            ->map(function ($entretien) {
+                return [
+                    'id' => $entretien->id,
+                    'salarie' => $entretien->salarie,
+                    'poste_vise' => $entretien->poste_vise,
+                    'date_entretien' => $entretien->date_entretien->format('Y-m-d'),
+                    'date_entretien_formatted' => $entretien->date_entretien->format('d/m/Y'),
+                    'type_entretien' => $entretien->type_entretien,
+                    'type_entretien_libelle' => $entretien->type_entretien_libelle,
+                    'evaluateur_principal' => $entretien->evaluateur_principal,
+                    'score_total' => $entretien->score_total,
+                    'pourcentage_score' => $entretien->pourcentage_score,
+                    'appreciation' => $entretien->appreciation,
+                    'couleur_score' => $entretien->couleur_score,
+                    'statut' => $entretien->statut,
+                    'statut_libelle' => $entretien->statut_libelle,
+                    'created_at' => $entretien->created_at->format('d/m/Y H:i'),
+                ];
+            });
+
+        return Inertia::render('ressources-humaines/Entretien', [
+            'entretiens' => $entretiens,
+        ]);
+    }
+
+    /**
+     * Affiche le formulaire de création d'entretien
+     */
+    public function createEntretien()
+    {
+        $salaries = Salarie::select('id', 'nom', 'prenom', 'poste', 'email', 'telephone', 'date_embauche')
+            ->orderBy('nom')
+            ->get()
+            ->map(function ($salarie) {
+                return [
+                    'id' => $salarie->id,
+                    'nom' => $salarie->nom,
+                    'prenom' => $salarie->prenom,
+                    'nom_complet' => $salarie->nom_complet ?? "{$salarie->prenom} {$salarie->nom}",
+                    'poste' => $salarie->poste,
+                    'email' => $salarie->email,
+                    'telephone' => $salarie->telephone,
+                    'date_embauche' => $salarie->date_embauche,
+                ];
+            });
+
+        return Inertia::render('ressources-humaines/CreateEntretien', [
+            'salaries' => $salaries,
+        ]);
+    }
+
+    /**
+     * Enregistre un nouvel entretien
+     */
+    public function storeEntretien(Request $request)
+    {
+        Log::info('📝 Starting entretien creation', [
+            'salarie_id' => $request->salarie_id,
+            'has_files' => [
+                'contrat_cdi' => $request->hasFile('contrat_cdi'),
+                'cv' => $request->hasFile('cv'),
+                'diplome' => $request->hasFile('diplome'),
+                'certificat_travail' => $request->hasFile('certificat_travail'),
+            ]
+        ]);
+
+        try {
+            // Validation
+            $validated = $request->validate([
+                // Entretien data
+                'salarie_id' => 'required|exists:salaries,id',
+                'poste_vise' => 'required|string|max:255',
+                'date_entretien' => 'required|date',
+                'type_entretien' => 'required|in:premier,technique,final',
+                'evaluateur_principal' => 'required|string|max:255',
+                'expert_technique' => 'nullable|string|max:255',
+                'responsable_rh' => 'nullable|string|max:255',
+                
+                // Scores
+                'scores_techniques' => 'required|array',
+                'scores_comportementaux' => 'required|array',
+                'scores_adequation' => 'required|array',
+                
+                // Observations
+                'points_forts' => 'nullable|string',
+                'points_vigilance' => 'nullable|string',
+                'recommandation' => 'required|in:fortement_recommande,recommande,reserve,non_recommande',
+                
+                // Documents
+                'contrat_cdi' => 'nullable|file|mimes:pdf,doc,docx|max:5120',
+                'cv' => 'nullable|file|mimes:pdf,doc,docx|max:5120',
+                'diplome' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:5120',
+                'certificat_travail' => 'nullable|file|mimes:pdf,doc,docx|max:5120',
+            ]);
+
+            Log::info('✅ Validation passed');
+
+            // Get salarie
+            $salarie = Salarie::findOrFail($validated['salarie_id']);
+            Log::info('✅ Salarie found', ['id' => $salarie->id, 'nom' => $salarie->nom_complet]);
+
+            // Handle file uploads
+            if ($request->hasFile('contrat_cdi')) {
+                if ($salarie->contrat_cdi_path && Storage::disk('public')->exists($salarie->contrat_cdi_path)) {
+                    Storage::disk('public')->delete($salarie->contrat_cdi_path);
+                }
+                $file = $request->file('contrat_cdi');
+                $filename = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) 
+                          . '_' . now()->format('Ymd_His') 
+                          . '.' . $file->getClientOriginalExtension();
+                $path = $file->storeAs('documents/contrats', $filename, 'public');
+                $salarie->contrat_cdi_path = $path;
+                Log::info('📄 Uploaded contrat_cdi', ['path' => $path]);
+            }
+
+            if ($request->hasFile('cv')) {
+                if ($salarie->cv_path && Storage::disk('public')->exists($salarie->cv_path)) {
+                    Storage::disk('public')->delete($salarie->cv_path);
+                }
+                $file = $request->file('cv');
+                $filename = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) 
+                          . '_' . now()->format('Ymd_His') 
+                          . '.' . $file->getClientOriginalExtension();
+                $path = $file->storeAs('documents/cvs', $filename, 'public');
+                $salarie->cv_path = $path;
+                Log::info('📄 Uploaded cv', ['path' => $path]);
+            }
+
+            if ($request->hasFile('diplome')) {
+                if ($salarie->diplome_path && Storage::disk('public')->exists($salarie->diplome_path)) {
+                    Storage::disk('public')->delete($salarie->diplome_path);
+                }
+                $file = $request->file('diplome');
+                $filename = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) 
+                          . '_' . now()->format('Ymd_His') 
+                          . '.' . $file->getClientOriginalExtension();
+                $path = $file->storeAs('documents/diplomes', $filename, 'public');
+                $salarie->diplome_path = $path;
+                Log::info('📄 Uploaded diplome', ['path' => $path]);
+            }
+
+            if ($request->hasFile('certificat_travail')) {
+                if ($salarie->certificat_travail_path && Storage::disk('public')->exists($salarie->certificat_travail_path)) {
+                    Storage::disk('public')->delete($salarie->certificat_travail_path);
+                }
+                $file = $request->file('certificat_travail');
+                $filename = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) 
+                          . '_' . now()->format('Ymd_His') 
+                          . '.' . $file->getClientOriginalExtension();
+                $path = $file->storeAs('documents/certificats', $filename, 'public');
+                $salarie->certificat_travail_path = $path;
+                Log::info('📄 Uploaded certificat_travail', ['path' => $path]);
+            }
+
+            $salarie->save();
+            Log::info('💾 Salarie saved with documents');
+
+            // Calculate scores
+            $poids = [
+                'techniques' => [
+                    'formation_certifications' => 3,
+                    'maitrise_logiciels' => 4,
+                    'expertise_technique' => 4,
+                    'connaissance_marche' => 3,
+                    'gestion_projets' => 3,
+                    'innovation_veille' => 3,
+                ],
+                'comportementaux' => [
+                    'communication_redaction' => 3,
+                    'travail_equipe' => 2,
+                    'rigueur_precision' => 3,
+                    'gestion_stress' => 2,
+                    'autonomie_initiative' => 2,
+                ],
+                'adequation' => [
+                    'motivation_engagement' => 2,
+                    'disponibilite_mobilite' => 2,
+                    'potentiel_evolution' => 2,
+                    'connaissance_entreprise' => 2,
+                ],
+            ];
+
+            $scoreTechnique = $this->calculateScore($validated['scores_techniques'], $poids['techniques']);
+            $scoreComportemental = $this->calculateScore($validated['scores_comportementaux'], $poids['comportementaux']);
+            $scoreAdequation = $this->calculateScore($validated['scores_adequation'], $poids['adequation']);
+            $scoreTotal = $scoreTechnique + $scoreComportemental + $scoreAdequation;
+
+            Log::info('Scores calculated', [
+                'technique' => $scoreTechnique,
+                'comportemental' => $scoreComportemental,
+                'adequation' => $scoreAdequation,
+                'total' => $scoreTotal,
+            ]);
+
+            // Create entretien
+            $entretien = Entretien::create([
+                'salarie_id' => $validated['salarie_id'],
+                'poste_vise' => $validated['poste_vise'],
+                'date_entretien' => $validated['date_entretien'],
+                'type_entretien' => $validated['type_entretien'],
+                'evaluateur_principal' => $validated['evaluateur_principal'],
+                'expert_technique' => $validated['expert_technique'],
+                'responsable_rh' => $validated['responsable_rh'],
+                'scores_techniques' => $validated['scores_techniques'],
+                'scores_comportementaux' => $validated['scores_comportementaux'],
+                'scores_adequation' => $validated['scores_adequation'],
+                'score_technique' => $scoreTechnique,
+                'score_comportemental' => $scoreComportemental,
+                'score_adequation' => $scoreAdequation,
+                'score_total' => $scoreTotal,
+                'points_forts' => $validated['points_forts'],
+                'points_vigilance' => $validated['points_vigilance'],
+                'recommandation' => $validated['recommandation'],
+                'statut' => 'en_attente_validation',
+            ]);
+
+            Log::info('✅ Entretien created', [
+                'id' => $entretien->id,
+                'statut' => $entretien->statut,
+            ]);
+
+            // Notify Direction Générale
+            $directeurs = User::role('admin')->get();
+            
+            if ($directeurs->isEmpty()) {
+                Log::warning('⚠️ No Direction Générale users found');
+            } else {
+                foreach ($directeurs as $directeur) {
+                    try {
+                        $directeur->notify(new \App\Notifications\EntretienValidationNotification($entretien));
+                        Log::info('📧 Notification sent', ['user' => $directeur->name]);
+                    } catch (\Exception $e) {
+                        Log::error('❌ Notification failed', [
+                            'user' => $directeur->name,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                }
+            }
+
+            return redirect()
+                ->route('entretiens.index')
+                ->with('success', 'Évaluation créée et envoyée pour validation.');
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('❌ Validation failed', ['errors' => $e->errors()]);
+            throw $e;
+            
+        } catch (\Exception $e) {
+            Log::error('❌ Error creating entretien', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            return redirect()
+                ->back()
+                ->withInput()
+                ->with('error', 'Erreur: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Affiche les détails d'un entretien
+     */
+    public function showEntretien(Entretien $entretien)
+{
+    $entretien->load(['salarie' => function($query) {
+        $query->select('id', 'nom', 'prenom', 'email', 'poste', 'telephone', 'date_embauche', 
+                       'contrat_cdi_path', 'cv_path', 'diplome_path', 'certificat_travail_path');
+    }]);
+
+    // Get documents from salarie
+    $documents = [
+        'contrat_cdi' => $entretien->salarie->contrat_cdi_path ? [
+            'path' => $entretien->salarie->contrat_cdi_path,
+            'url' => Storage::url($entretien->salarie->contrat_cdi_path),
+            'exists' => Storage::exists($entretien->salarie->contrat_cdi_path),
+        ] : null,
+        'cv' => $entretien->salarie->cv_path ? [
+            'path' => $entretien->salarie->cv_path,
+            'url' => Storage::url($entretien->salarie->cv_path),
+            'exists' => Storage::exists($entretien->salarie->cv_path),
+        ] : null,
+        'diplome' => $entretien->salarie->diplome_path ? [
+            'path' => $entretien->salarie->diplome_path,
+            'url' => Storage::url($entretien->salarie->diplome_path),
+            'exists' => Storage::exists($entretien->salarie->diplome_path),
+        ] : null,
+        'certificat_travail' => $entretien->salarie->certificat_travail_path ? [
+            'path' => $entretien->salarie->certificat_travail_path,
+            'url' => Storage::url($entretien->salarie->certificat_travail_path),
+            'exists' => Storage::exists($entretien->salarie->certificat_travail_path),
+        ] : null,
+    ];
+
+    $data = [
+        'id' => $entretien->id,
+        'salarie' => $entretien->salarie,
+        'poste_vise' => $entretien->poste_vise,
+        'date_entretien' => $entretien->date_entretien->format('Y-m-d'),
+        'date_entretien_formatted' => $entretien->date_entretien->format('d/m/Y'),
+        'type_entretien' => $entretien->type_entretien,
+        'type_entretien_libelle' => $entretien->type_entretien_libelle,
+        'evaluateur_principal' => $entretien->evaluateur_principal,
+        'expert_technique' => $entretien->expert_technique,
+        'responsable_rh' => $entretien->responsable_rh,
+        'scores_techniques' => $entretien->scores_techniques,
+        'scores_comportementaux' => $entretien->scores_comportementaux,
+        'scores_adequation' => $entretien->scores_adequation,
+        'score_technique' => $entretien->score_technique,
+        'score_comportemental' => $entretien->score_comportemental,
+        'score_adequation' => $entretien->score_adequation,
+        'score_total' => $entretien->score_total,
+        'pourcentage_score' => $entretien->pourcentage_score,
+        'appreciation' => $entretien->appreciation,
+        'couleur_score' => $entretien->couleur_score,
+        'points_forts' => $entretien->points_forts,
+        'points_vigilance' => $entretien->points_vigilance,
+        'recommandation' => $entretien->recommandation,
+        'statut' => $entretien->statut,
+        'statut_libelle' => $entretien->statut_libelle,
+        'documents' => $documents,
+        'created_at' => $entretien->created_at->format('d/m/Y H:i'),
+        'updated_at' => $entretien->updated_at->format('d/m/Y H:i'),
+    ];
+
+    return Inertia::render('ressources-humaines/DetailEntretien', [
+        'entretien' => $data,
+    ]);
+}
+
+
+    /**
+     * Met à jour un entretien
+     */
+    public function updateEntretien(Request $request, Entretien $entretien)
+    {
+        $validated = $request->validate([
+            'statut' => 'nullable|in:en_cours,complete,validee',
+            'recommandation' => 'nullable|string',
+        ]);
+
+        $entretien->update($validated);
+
+        return redirect()
+            ->back()
+            ->with('success', 'Entretien mis à jour avec succès');
+    }
+
+    /**
+     * Supprime un entretien
+     */
+    public function destroyEntretien(Entretien $entretien)
+    {
+        $entretien->delete();
+
+        return redirect()
+            ->route('entretiens.index')
+            ->with('success', 'Entretien supprimé avec succès');
+    }
+
+    /**
+     * Calcule le score pondéré
+     */
+    private function calculateScore(array $scores, array $weights): float
+    {
+        $total = 0;
+        foreach ($scores as $key => $value) {
+            $weight = $weights[$key] ?? 1;
+            $note = $value['note'] ?? 0;
+            $total += ($note * $weight / 5);
+        }
+        return round($total, 2);
+    }
+
+        public function exportEntretien(Entretien $entretien)
+    {
+        $entretien->load(['salarie' => function($query) {
+            $query->select('id', 'nom', 'prenom', 'email', 'poste', 'telephone', 'date_embauche');
+        }]);
+
+        return Inertia::render('ressources-humaines/ExportEntretienPDF', [
+            'entretien' => [
+                'id' => $entretien->id,
+                'salarie' => $entretien->salarie,
+                'poste_vise' => $entretien->poste_vise,
+                'date_entretien' => $entretien->date_entretien->format('Y-m-d'),
+                'date_entretien_formatted' => $entretien->date_entretien->format('d/m/Y'),
+                'type_entretien' => $entretien->type_entretien,
+                'type_entretien_libelle' => $entretien->type_entretien_libelle,
+                'evaluateur_principal' => $entretien->evaluateur_principal,
+                'expert_technique' => $entretien->expert_technique,
+                'responsable_rh' => $entretien->responsable_rh,
+                'scores_techniques' => $entretien->scores_techniques,
+                'scores_comportementaux' => $entretien->scores_comportementaux,
+                'scores_adequation' => $entretien->scores_adequation,
+                'score_technique' => $entretien->score_technique,
+                'score_comportemental' => $entretien->score_comportemental,
+                'score_adequation' => $entretien->score_adequation,
+                'score_total' => $entretien->score_total,
+                'pourcentage_score' => $entretien->pourcentage_score,
+                'appreciation' => $entretien->appreciation,
+                'points_forts' => $entretien->points_forts,
+                'points_vigilance' => $entretien->points_vigilance,
+                'recommandation' => $entretien->recommandation,
+                'statut' => $entretien->statut,
+                'statut_libelle' => $entretien->statut_libelle,
+                'created_at' => $entretien->created_at->format('d/m/Y'),
+            ],
+        ]);
+    }
+
+    public function downloadDocument(Entretien $entretien, string $type)
+{
+    $salarie = $entretien->salarie;
+    
+    // Map type to the correct field name
+    $pathField = match($type) {
+        'contrat_cdi' => 'contrat_cdi_path',
+        'cv' => 'cv_path',
+        'diplome' => 'diplome_path',
+        'certificat_travail' => 'certificat_travail_path',
+        default => null,
+    };
+    
+    if (!$pathField) {
+        return redirect()->back()->with('error', 'Type de document invalide');
+    }
+    
+    $path = $salarie->$pathField;
+    
+    if (!$path || !Storage::exists($path)) {
+        \Log::error('Document not found', [
+            'type' => $type,
+            'path' => $path,
+            'salarie_id' => $salarie->id,
+        ]);
+        return redirect()->back()->with('error', 'Document non trouvé');
+    }
+    
+    $filename = basename($path);
+    return Storage::download($path, $filename);
+}
+
+    
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+
+
+
+public function profilsDemandes()
+    {
+        $demandes = DemandeProfil::with(['demandeur', 'details', 'traitePar'])
+            ->latest()
+            ->get();
+
+        $projets = Projet::select('id', 'nom', 'client', 'statut')
+            ->where('statut', '!=', 'termine')
+            ->orderBy('nom')
+            ->get();
+
+        return Inertia::render('ressources-humaines/ProfilsDemandes', [
+            'demandes' => $demandes,
+            'projets' => $projets,
+        ]);
+    }
+
+    public function updateStatutDemande(Request $request, DemandeProfil $demande)
+    {
+        $validated = $request->validate([
+            'statut' => 'required|in:en_attente,en_cours,validee,refusee,completee',
+            'commentaire_rh' => 'nullable|string',
+        ]);
+
+        $demande->update([
+            'statut' => $validated['statut'],
+            'commentaire_rh' => $validated['commentaire_rh'] ?? $demande->commentaire_rh,
+            'traite_par' => auth()->id(),
+            'traite_le' => now(),
+        ]);
+
+        return redirect()->back()->with('success', 'Statut de la demande mis à jour avec succès');
+    }
+
+    public function searchProfils(Request $request)
+    {
+        $validated = $request->validate([
+            'categorie_profil' => 'required|string',
+            'poste_profil' => 'required|string',
+            'niveau_experience' => 'required|string',
+        ]);
+
+        $profils = Profil::with(['salarie' => function ($query) {
+                $query->select('id', 'nom', 'prenom', 'email', 'poste', 'statut');
+            }])
+            ->where('categorie_profil', $validated['categorie_profil'])
+            ->where('poste_profil', $validated['poste_profil'])
+            ->where('niveau_experience', $validated['niveau_experience'])
+            ->where('actif', true)
+            ->whereHas('salarie', function ($query) {
+                $query->where('statut', 'actif');
+            })
+            ->get()
+            ->map(function ($profil) {
+                return [
+                    'id' => $profil->id,
+                    'salarie' => [
+                        'id' => $profil->salarie->id,
+                        'nom' => $profil->salarie->nom,
+                        'prenom' => $profil->salarie->prenom,
+                        'email' => $profil->salarie->email,
+                        'poste' => $profil->salarie->poste,
+                        'statut' => $profil->salarie->statut,
+                    ],
+                    'categorie_profil' => $profil->categorie_profil,
+                    'poste_profil' => $profil->poste_profil,
+                    'niveau_experience' => $profil->niveau_experience,
+                    'competences_techniques' => $profil->competences_techniques ?? [],
+                    'actif' => $profil->actif,
+                ];
+            });
+
+        return Inertia::render('ressources-humaines/ProfilsDemandes', [
+            'demandes' => DemandeProfil::with(['demandeur', 'details', 'traitePar'])->latest()->get(),
+            'projets' => Projet::select('id', 'nom', 'client', 'statut')
+                ->where('statut', '!=', 'termine')
+                ->orderBy('nom')
+                ->get(),
+            'availableProfils' => $profils,
+        ]);
+    }
+
+    public function assignToProject(Request $request)
+    {
+        $validated = $request->validate([
+            'demande_id' => 'required|exists:demandes_profils,id',
+            'projet_id' => 'required|exists:projets,id',
+            'profil_ids' => 'required|array',
+            'profil_ids.*' => 'exists:profils,id',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $projet = Projet::findOrFail($validated['projet_id']);
+            $demande = DemandeProfil::findOrFail($validated['demande_id']);
+            
+            // Get all salarie IDs from the selected profils
+            $profils = Profil::with('salarie')
+                ->whereIn('id', $validated['profil_ids'])
+                ->get();
+
+            $salarieIds = $profils->pluck('salarie.id')->filter()->toArray();
+
+            // Get current salarie_ids from project
+            $currentSalarieIds = $projet->salarie_ids ?? [];
+            
+            // Merge with new salarie IDs (avoid duplicates)
+            $updatedSalarieIds = array_unique(array_merge($currentSalarieIds, $salarieIds));
+
+            // Update project with new salarie_ids
+            $projet->update([
+                'salarie_ids' => $updatedSalarieIds,
+            ]);
+
+            // Also sync via the pivot table if you're using belongsToMany
+            if (method_exists($projet, 'salaries')) {
+                $projet->salaries()->syncWithoutDetaching($salarieIds);
+            }
+
+            // Update demande status to en_cours if it was en_attente
+            if ($demande->statut === 'en_attente') {
+                $demande->update([
+                    'statut' => 'en_cours',
+                    'traite_par' => auth()->id(),
+                    'traite_le' => now(),
+                ]);
+            }
+
+            // Create notification or log entry (optional)
+            // You can add a notification to the demandeur that profils have been assigned
+
+            DB::commit();
+
+            return redirect()->back()->with('success', count($salarieIds) . ' profil(s) assigné(s) au projet avec succès');
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()->with('error', 'Erreur lors de l\'assignation: ' . $e->getMessage());
+        }
+    }
+
+#######################################################################################################
+#######################################################################################################
+#######################################################################################################
+#######################################################################################################
+
+    public function CNSSDocuments()
+    {
+        return Inertia::render('ressources-humaines/CNSSDocuments');
+    }
+
+    public function ContractsDeclarations()
+    {
+        return Inertia::render('ressources-humaines/ContractsDeclarations');
+    }
+
+    public function CVsDiplomas()
+    {
+        return Inertia::render('ressources-humaines/CVsDiplomas');
+    }
+
+    public function TeamValidation()
+    {
+        return Inertia::render('ressources-humaines/TeamValidation');
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 }

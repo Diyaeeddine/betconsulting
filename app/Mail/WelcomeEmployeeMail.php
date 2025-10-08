@@ -272,12 +272,7 @@ class WelcomeEmployeeMail extends Mailable
                     }
                 }
 
-                /* Dark Mode Support */
-                @media (prefers-color-scheme: dark) {
-                    .email-container {
-                        background-color: #ffffff !important;
-                    }
-                }
+                
             </style>
         </head>
         <body>
