@@ -53,10 +53,10 @@ class TacheDossier extends Model
         return $this->hasMany(AffectationTache::class, 'tache_dossier_id');
     }
 
-    // public function suivis(): HasMany
-    // {
-    //     return $this->hasMany(SuiviTache::class, 'tache_dossier_id');
-    // }
+    public function suivis(): HasMany
+    {
+        return $this->hasMany(SuiviTache::class, 'tache_dossier_id');
+    }
 
     // Scopes
     public function scopeParPriorite($query, $priorite)

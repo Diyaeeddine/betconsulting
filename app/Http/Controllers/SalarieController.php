@@ -204,7 +204,6 @@ public function uploadFichiersTache(Request $request, $tacheId)
         return back()->withErrors(['error' => 'Vous n\'êtes pas autorisé à modifier cette tâche.']);
     }
 
-    // ✅ Variable pour stocker les noms des fichiers uploadés
     $fichiersProduits = [];
 
     foreach ($request->file('fichiers') as $fichier) {
@@ -217,7 +216,6 @@ public function uploadFichiersTache(Request $request, $tacheId)
             'public'
         );
 
-        // ✅ Sauvegarde dans la table documents_dossier
         DocumentDossier::create([
             'dossier_marche_id' => $tache->dossier_marche_id,
             'tache_dossier_id' => $tacheId,
@@ -291,16 +289,18 @@ public function marquerTacheTerminee(Request $request, $tacheId)
 
     $dossier = $tache->dossier;
 
+    // ✅ CORRECTION : Utiliser une seule instance de temps pour éviter les décalages
+    $dateTerminaison = \Carbon\Carbon::now();
+
     // 🔹 Marquer la tâche terminée
-    $tache->update([
-        'statut' => 'terminee',
-        'date_fin' => now(),
-    ]);
+    $tache->statut = 'terminee';
+    $tache->date_fin = $dateTerminaison;
+    $tache->save();
 
     // 🔹 Mettre à jour la date de fin dans l'affectation
-    $affectation->update([
-        'date_terminee' => now(),
-    ]);
+    $affectation->date_terminee = $dateTerminaison;
+    $affectation->statut_affectation = 'terminee'; // ✅ Mettre aussi le statut à jour
+    $affectation->save();
 
     // 🔹 Mettre à jour la participation
     $participation = ParticipationMarche::where('marche_id', $dossier->marche_id)
@@ -310,16 +310,18 @@ public function marquerTacheTerminee(Request $request, $tacheId)
     if ($participation) {
         $participation->increment('nb_taches_terminees');
 
-        $tempsPasse = $tache->suivis()
-            ->where('salarie_id', Auth::id())
-            ->sum('temps_passe');
-
-        if ($tempsPasse > 0) {
-            $participation->increment('temps_total_passe', $tempsPasse);
+        // ✅ Calculer le temps passé depuis l'affectation
+        if ($affectation->date_affectation) {
+            $debut = \Carbon\Carbon::parse($affectation->date_affectation);
+            $tempsPasseHeures = round($debut->diffInHours($dateTerminaison, true), 2);
+            
+            if ($tempsPasseHeures > 0) {
+                $participation->increment('temps_total_passe', $tempsPasseHeures);
+            }
         }
     }
 
-    // 🔹 Historiser l’action
+    // 🔹 Historiser l'action
     HistoriqueMarche::enregistrer(
         marcheId: $dossier->marche_id,
         typeEvenement: 'finalisation_tache',
@@ -329,6 +331,7 @@ public function marquerTacheTerminee(Request $request, $tacheId)
         donneesSupp: [
             'duree_reelle' => $tache->duree_reelle,
             'nb_fichiers' => $nbDocuments,
+            'date_terminaison' => $dateTerminaison->toDateTimeString(),
         ]
     );
 
@@ -338,16 +341,15 @@ public function marquerTacheTerminee(Request $request, $tacheId)
             'salarie_id' => Auth::id(),
             'type_action' => 'finalisation',
             'commentaire' => 'Tâche marquée comme terminée',
-            'date_action' => now(),
+            'date_action' => $dateTerminaison,
         ]);
     }
 
-    // 🔹 Recalculer l’avancement du dossier
+    // 🔹 Recalculer l'avancement du dossier
     $dossier->calculerAvancement();
 
     return back()->with('success', 'Tâche marquée comme terminée');
 }
-
     /**
      * Télécharger un fichier produit
      */

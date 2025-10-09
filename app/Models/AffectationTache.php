@@ -22,9 +22,10 @@ class AffectationTache extends Model
     ];
 
     protected $casts = [
-        'date_affectation' => 'datetime',
-        'date_limite_assignee' => 'datetime'
-    ];
+    'date_affectation' => 'datetime',
+    'date_terminee' => 'datetime',
+    'date_limite_assignee' => 'datetime'
+];
 
     // Relations
     public function tache(): BelongsTo

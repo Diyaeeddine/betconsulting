@@ -16,8 +16,8 @@ return new class extends Migration
             $table->foreignId('tache_dossier_id')->constrained('taches_dossier')->onDelete('cascade');
             $table->foreignId('salarie_id')->constrained('salaries')->onDelete('cascade');
             $table->enum('role_affectation', ['responsable', 'collaborateur', 'support'])->default('collaborateur');
-            $table->timestamp('date_affectation');
-            $table->timestamp('date_terminee');
+            $table->timestamp('date_affectation')->useCurrent();
+            $table->timestamp('date_terminee')->nullable();
             $table->date('date_limite_assignee')->nullable();
             $table->enum('statut_affectation', ['active', 'suspendue', 'terminee'])->default('active');
             $table->text('notes_affectation')->nullable();

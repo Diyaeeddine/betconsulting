@@ -29,6 +29,37 @@ use Spatie\Permission\Models\Role;
 use App\Notifications\ValidationProfileNotification;
 
 
+// App Models
+use App\Notifications\ReferenceRejectedNotification;
+
+use App\Models\ProjetMp;
+use App\Models\Notification;
+use App\Models\Reference;
+use App\Models\Entretien;
+use App\Models\DemandeProfil;
+
+
+use App\Models\DocsRequis;
+// Laravel Facades & Illuminate
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Str;
+
+use App\Models\MethodologyDocument;
+// Third-Party & PHP Core
+use Symfony\Component\Process\Exception\ProcessFailedException;
+use Symfony\Component\Process\Process;
+use Barryvdh\DomPDF\Facade\Pdf;
+
+use App\Notifications\MethodologyDocumentNotification;
+use App\Events\NewNotification;
+use Illuminate\Notifications\DatabaseNotification;
+use App\Notifications\ReferenceValidatedNotification;
+
+
+
 
 class RessourcesHumainesController extends Controller
 {
@@ -1595,4 +1626,6 @@ public function storeUsers(Request $request)
     {
         return Inertia::render('ressources-humaines/ResultatBonCommande');
     }
+     
+
 }

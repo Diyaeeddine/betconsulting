@@ -296,7 +296,7 @@ public function acceptIMP(Request $request, $id)
 {
     $request->validate([
         'importance' => 'required|in:ao_ouvert,ao_important,ao_simplifie,ao_restreint,ao_preselection,ao_bon_commande',
-        'offre_financiere.*' => 'required|file|mimes:pdf,zip,rar|max:10240',
+        'offre_financiere.*' => 'required|file|mimes:pdf,zip|max:10240',
     ]);
 
     DB::beginTransaction();
@@ -819,7 +819,9 @@ private function creerTachesParDefaut($dossier)
             ['nom' => 'Attestation de chiffre d\'affaires']
         ],
         'offre_technique' => [
-            ['nom' => 'Méthodologie, planning, chronogramme'],
+            ['nom' => 'Méthodologie'],
+            ['nom' => 'planning'],
+            ['nom' => 'chronogramme'],
             ['nom' => 'Attestations de références'],
             ['nom' => 'Tableau de l\'équipe projet'],
             ['nom' => 'Diplômes et CVs des membres'],

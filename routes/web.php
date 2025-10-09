@@ -35,6 +35,35 @@ use Illuminate\Http\Request;
 
 
 
+Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/fetch-marche-public',
+        [RessourcesHumainesController::class, 'fetchMarchePublic']
+    )->name('ressources-humaines.fetch-marche-public');
+
+    // Obtenir les données JSON des marchés publics
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/marche-public',
+        [RessourcesHumainesController::class, 'getMarchePublicData']
+    )->name('ressources-humaines.marche-public');
+
+    // Page marchés publics
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->group(function () {
+        Route::get(
+            '/ressources-humaines/marche-public-page',
+            [RessourcesHumainesController::class, 'marchePublicPage']
+        )->name('ressources-humaines.marche-public-page');
+    });
+
+    // À ajouter dans les routes ressources-humaines
+    Route::middleware(['auth', 'verified', 'role:ressources-humaines'])->get(
+        '/ressources-humaines/marches-publics-data',
+        [RessourcesHumainesController::class, 'getMarchesPublicsData']
+    )->name('ressources-humaines.marches-publics-data');
+
+    
+
+
+
 Route::prefix('salarie')->name('salarie.')->group(function () {
     Route::middleware('guest.salarie')->group(function () {
         Route::get('login', [SalarieAuthController::class, 'showLoginForm'])
@@ -560,18 +589,19 @@ Route::middleware(['auth'])->group(function () {
 
 Broadcast::routes(['middleware' => ['auth:web']]);
 
-Route::middleware(['auth','web'])->group(function () {
+    Route::middleware(['auth','web'])->group(function () {
 
-    Route::get('/marches-marketing/tracabilite', [TracabiliteController::class, 'tracabilite'])
-        ->name('users.marches-marketing');
+        Route::get('/marches-marketing/tracabilite', [TracabiliteController::class, 'tracabilite'])
+            ->name('users.marches-marketing');
 
-Route::get('/dossiers/{dossierId}/fichiers', [TracabiliteController::class, 'getDossierFichiers']);
-Route::get('/dossiers/{dossierId}/taches', [TracabiliteController::class, 'getDossierTaches']);
-Route::get('/dossiers/{dossierId}/timeline', [TracabiliteController::class, 'getDossierTimeline']);
-Route::get('/participants/{participantId}/taches', [TracabiliteController::class, 'getParticipantTaches']);
-Route::get('/participants/{participantId}/temps', [TracabiliteController::class, 'getParticipantTemps']);
-Route::get('/marches/{marcheId}/historique', [TracabiliteController::class, 'getMarcheHistorique']);
-});
+        Route::get('/api/dossiers/{dossier}/fichiers', [TracabiliteController::class, 'getDossierFichiers']);
+        Route::get('/api/dossiers/{dossier}/taches', [TracabiliteController::class, 'getDossierTaches']);
+        Route::get('/api/dossiers/{dossier}/timeline', [TracabiliteController::class, 'getDossierTimeline']);
+        Route::get('/api/participants/{participant}/taches', [TracabiliteController::class, 'getParticipantTaches']);
+        Route::get('/api/participants/{participant}/temps', [TracabiliteController::class, 'getParticipantTemps']);
+        Route::get('/api/marches/{marche}/historique', [TracabiliteController::class, 'getMarcheHistorique']);
+        Route::get('/api/fichiers/{fichier}/download', [TracabiliteController::class, 'downloadFichier'])->name('fichiers.download');
+    });
 
 Route::get('/test-pusher', function () {
     $user = auth()->user() ?? User::first();
