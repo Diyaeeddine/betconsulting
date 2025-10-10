@@ -188,9 +188,9 @@ export default function DemanderProfils({ categories, postes, demandes }: Props)
                                             onChange={(e) => setData('urgence', e.target.value as any)}
                                             className="w-full px-4 py-3 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                                         >
-                                            <option value="normale">⚪ Normale</option>
-                                            <option value="urgent">🟠 Urgent</option>
-                                            <option value="critique">🔴 Critique</option>
+                                            <option value="normale">Normale</option>
+                                            <option value="urgent">Urgent</option>
+                                            <option value="critique">Critique</option>
                                         </select>
                                     </div>
 
@@ -333,10 +333,10 @@ export default function DemanderProfils({ categories, postes, demandes }: Props)
                                                         onChange={(e) => updateProfil(index, 'niveau_experience', e.target.value)}
                                                         className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
                                                     >
-                                                        <option value="junior">🟢 Junior</option>
-                                                        <option value="intermediaire">🔵 Intermédiaire</option>
-                                                        <option value="senior">🟣 Senior</option>
-                                                        <option value="expert">⭐ Expert</option>
+                                                        <option value="junior">Junior</option>
+                                                        <option value="intermediaire">Intermédiaire</option>
+                                                        <option value="senior">Senior</option>
+                                                        <option value="expert">Expert</option>
                                                     </select>
                                                 </div>
                                             </div>

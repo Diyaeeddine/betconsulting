@@ -1,0 +1,37 @@
+2025-10-09 14:42:26,641 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=932816&orgAcronyme=d4q
+2025-10-09 14:42:26,642 - INFO - Référence marché: GN4129095/DXG/2025
+2025-10-09 14:42:26,648 - INFO - ====== WebDriver manager ======
+2025-10-09 14:42:28,092 - INFO - Get LATEST chromedriver version for google-chrome
+2025-10-09 14:42:28,988 - INFO - Get LATEST chromedriver version for google-chrome
+2025-10-09 14:42:30,376 - INFO - There is no [win64] chromedriver "141.0.7390.65" for browser google-chrome "141.0.7390" in cache
+2025-10-09 14:42:30,377 - INFO - Get LATEST chromedriver version for google-chrome
+2025-10-09 14:42:33,287 - INFO - WebDriver version 141.0.7390.65 selected
+2025-10-09 14:42:33,296 - INFO - Modern chrome version https://storage.googleapis.com/chrome-for-testing-public/141.0.7390.65/win32/chromedriver-win32.zip
+2025-10-09 14:42:33,296 - INFO - About to download new driver from https://storage.googleapis.com/chrome-for-testing-public/141.0.7390.65/win32/chromedriver-win32.zip
+2025-10-09 14:42:37,215 - INFO - Driver downloading response is 200
+2025-10-09 14:42:37,692 - INFO - Get LATEST chromedriver version for google-chrome
+2025-10-09 14:42:39,413 - INFO - Driver has been saved in cache [C:\Users\Bahae\.wdm\drivers\chromedriver\win64\141.0.7390.65]
+2025-10-09 15:27:50,526 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=937947&orgAcronyme=d4q
+2025-10-09 15:27:50,527 - INFO - Référence marché: TC4129350/2025/ONEEBELEC
+2025-10-09 15:27:50,535 - INFO - ====== WebDriver manager ======
+2025-10-09 15:27:52,176 - INFO - Get LATEST chromedriver version for google-chrome
+2025-10-09 15:27:52,877 - INFO - Get LATEST chromedriver version for google-chrome
+2025-10-09 15:27:53,623 - INFO - Driver [C:\Users\Bahae\.wdm\drivers\chromedriver\win64\141.0.7390.65\chromedriver-win32/chromedriver.exe] found in cache
+2025-10-09 15:30:26,490 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=935711&orgAcronyme=m1i
+2025-10-09 15:30:26,490 - INFO - Référence marché: 2012/2025
+2025-10-09 15:30:26,504 - INFO - ====== WebDriver manager ======
+2025-10-09 15:30:28,134 - INFO - Get LATEST chromedriver version for google-chrome
+2025-10-09 15:30:28,709 - INFO - Get LATEST chromedriver version for google-chrome
+2025-10-09 15:30:29,175 - INFO - Driver [C:\Users\Bahae\.wdm\drivers\chromedriver\win64\141.0.7390.65\chromedriver-win32/chromedriver.exe] found in cache
+2025-10-09 15:50:58,839 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=911075&orgAcronyme=d4q
+2025-10-09 15:50:58,839 - INFO - Référence marché: TS4128507/2025/18/ONEEBELEC
+2025-10-09 15:50:58,850 - INFO - ====== WebDriver manager ======
+2025-10-09 15:51:01,881 - INFO - Get LATEST chromedriver version for google-chrome
+2025-10-09 15:51:02,017 - INFO - Get LATEST chromedriver version for google-chrome
+2025-10-09 15:51:02,128 - INFO - Driver [C:\Users\Bahae\.wdm\drivers\chromedriver\win64\141.0.7390.65\chromedriver-win32/chromedriver.exe] found in cache
+2025-10-09 17:05:14,498 - INFO - URL: https://www.marchespublics.gov.ma/index.php?page=entreprise.EntrepriseDetailConsultation&refConsultation=937947&orgAcronyme=d4q
+2025-10-09 17:05:14,498 - INFO - Référence marché: TC4129350/2025/ONEEBELEC
+2025-10-09 17:05:14,514 - INFO - ====== WebDriver manager ======
+2025-10-09 17:05:16,029 - INFO - Get LATEST chromedriver version for google-chrome
+2025-10-09 17:05:16,170 - INFO - Get LATEST chromedriver version for google-chrome
+2025-10-09 17:05:16,781 - INFO - Driver [C:\Users\Bahae\.wdm\drivers\chromedriver\win64\141.0.7390.65\chromedriver-win32/chromedriver.exe] found in cache

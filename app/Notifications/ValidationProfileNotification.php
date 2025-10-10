@@ -2,7 +2,6 @@
 
 namespace App\Notifications;
 
-use App\Models\Document;
 use Illuminate\Notifications\Notification;
 use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -11,7 +10,7 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 class ValidationProfileNotification extends Notification implements ShouldBroadcast
 {
     protected $salarie;
-    protected $notifiable; // Ajouter cette propriété
+    protected $notifiable;
 
     public function __construct($salarie)
     {
@@ -20,30 +19,74 @@ class ValidationProfileNotification extends Notification implements ShouldBroadc
 
     public function via($notifiable)
     {
-        $this->notifiable = $notifiable; // Stocker le destinataire
+        $this->notifiable = $notifiable;
         return ['database', 'broadcast'];
     }
 
     public function toDatabase($notifiable)
     {
         return [
-            'titre' => 'Nouveau salarié à valider',
-            'commentaire' => "Le salarié {$this->salarie->nom} {$this->salarie->prenom} a été créé.",
             'salarie_id' => $this->salarie->id,
+            'salarie_nom' => $this->salarie->nom,
+            'salarie_prenom' => $this->salarie->prenom,
+            'salarie_matricule' => $this->salarie->matricule ?? null,
+            'titre' => $this->getTitre(),
+            'commentaire' => $this->getCommentaire(),
+            'priority' => $this->getPriority(),
+            'action_required' => true,
+            'type' => 'validation_profile_salarie',
+            'document_type' => 'Validation Profil Salarie',
         ];
     }
 
     public function toBroadcast($notifiable)
     {
         return new BroadcastMessage([
-            'id' => uniqid(),
-            'titre' => 'Nouveau salarié à valider',
-            'commentaire' => "Le salarié {$this->salarie->nom} {$this->salarie->prenom} a été créé.",
-            'salarie_id' => $this->salarie->id,
-            'created_at' => now()->toISOString(),
-            'read_at' => null,
-            'is_read' => false,
+            'notification' => [
+                'id' => uniqid(),
+                'salarie_id' => $this->salarie->id,
+                'salarie_nom' => $this->salarie->nom,
+                'salarie_prenom' => $this->salarie->prenom,
+                'salarie_matricule' => $this->salarie->matricule ?? null,
+                'titre' => $this->getTitre(),
+                'commentaire' => $this->getCommentaire(),
+                'priority' => $this->getPriority(),
+                'action_required' => true,
+                'type' => 'validation_profile_salarie',
+                'document_type' => 'Validation Profil Salarie',
+                'created_at' => now()->toISOString(),
+                'read_at' => null,
+                'is_read' => false,
+            ]
         ]);
+    }
+
+    private function getTitre(): string
+    {
+        return "Nouveau salarie a valider";
+    }
+
+    private function getCommentaire(): string
+    {
+        $baseMessage = "Le profil du salarie {$this->salarie->nom} {$this->salarie->prenom}";
+        
+        if (isset($this->salarie->matricule)) {
+            $baseMessage .= " (Matricule: {$this->salarie->matricule})";
+        }
+        
+        $actionMessage = " a ete cree. Merci de proceder a la validation du profil.";
+        
+        return $baseMessage . $actionMessage;
+    }
+
+    private function getPriority(): string
+    {
+        return 'urgent';
+    }
+
+    public function broadcastOn()
+    {
+        return new PrivateChannel('user.' . $this->notifiable->id);
     }
 
     public function broadcastAs()
@@ -51,9 +94,8 @@ class ValidationProfileNotification extends Notification implements ShouldBroadc
         return 'notification.created';
     }
 
-    public function broadcastOn()
+    public function broadcastWhen()
     {
-        // ✅ Diffuser sur le canal de l'admin destinataire
-        return new PrivateChannel('user.' . $this->notifiable->id);
+        return true;
     }
 }

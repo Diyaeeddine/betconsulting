@@ -22,12 +22,12 @@ use App\Models\Salarie;
 use App\Models\Reference;
 use App\Models\Entretien;
 use App\Models\DemandeProfil;
-
-
-use App\Models\SousTrait;
+use App\Models\ImportedDocument;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Models\SousTrait;
 use App\Models\DocsRequis;
+
  // Laravel Facades & Illuminate
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -525,6 +525,145 @@ class RessourcesHumainesController extends Controller
         ]);
     }
 
+######################################################################################################
+
+
+ // Méthode pour afficher la page des formations
+    public function formations()
+    {
+        $formations = Formation::with(['responsable', 'participants'])
+            ->withCount('participants')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $users = User::all();
+        $salaries = Salarie::where('statut', 'actif')->get(['id', 'nom', 'prenom', 'email', 'statut']);
+
+        return Inertia::render('ressources-humaines/Formations', [
+            'formations' => $formations,
+            'users' => $users,
+            'salaries' => $salaries,
+        ]);
+    }
+
+    // Méthode pour créer une formation 
+    public function storeFormation(Request $request)
+    {
+        $validated = $request->validate([
+            'titre' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'type' => 'required|in:en_ligne,presentiel',
+            'date_debut' => 'nullable|date',
+            'date_fin' => 'nullable|date|after_or_equal:date_debut',
+            'duree' => 'nullable|integer|min:1',
+            'statut' => 'required|in:planifiée,en cours,terminée',
+            'responsable_id' => 'required|exists:users,id',
+            'competences' => 'nullable|string',
+            'lien_meet' => 'nullable|url',
+            'participants' => 'nullable|array',
+            'participants.*' => 'exists:salaries,id',
+        ]);
+
+        // Vérifier si la formation est en ligne et le lien est fourni
+        if ($validated['type'] === 'en_ligne' && empty($validated['lien_meet'])) {
+            return redirect()->back()->withErrors(['lien_meet' => 'Le lien Meet est requis pour une formation en ligne.']);
+        }
+
+        // Extraire les participants avant de créer la formation
+        $participants = $validated['participants'] ?? [];
+        unset($validated['participants']);
+
+        $formation = Formation::create($validated);
+
+        // Attacher les participants à la formation
+        if (!empty($participants)) {
+            $participantsData = [];
+            foreach ($participants as $participantId) {
+                $participantsData[$participantId] = [
+                    'statut' => 'inscrit',
+                    'progression' => 0,
+                ];
+            }
+            $formation->participants()->attach($participantsData);
+        }
+
+        return redirect()->back()->with('success', 'Formation créée avec succès.');
+    }
+
+    // Méthode pour mettre à jour une formation
+    public function updateFormation(Request $request, Formation $formation)
+    {
+        $validated = $request->validate([
+            'titre' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'type' => 'required|in:en_ligne,presentiel',
+            'date_debut' => 'nullable|date',
+            'date_fin' => 'nullable|date|after_or_equal:date_debut',
+            'duree' => 'nullable|integer|min:1',
+            'statut' => 'required|in:planifiée,en cours,terminée',
+            'responsable_id' => 'required|exists:users,id',
+            'competences' => 'nullable|string',
+            'lien_meet' => 'nullable|url',
+            'participants' => 'nullable|array',
+            'participants.*' => 'exists:salaries,id',
+        ]);
+
+        // Vérifier si la formation est en ligne et le lien est fourni
+        if ($validated['type'] === 'en_ligne' && empty($validated['lien_meet'])) {
+            return redirect()->back()->withErrors(['lien_meet' => 'Le lien Meet est requis pour une formation en ligne.']);
+        }
+
+        // Extraire les participants avant de mettre à jour la formation
+        $participants = $validated['participants'] ?? [];
+        unset($validated['participants']);
+
+        $formation->update($validated);
+
+        // Synchroniser les participants (remplace tous les participants existants)
+        if (!empty($participants)) {
+            $participantsData = [];
+            foreach ($participants as $participantId) {
+                $participantsData[$participantId] = [
+                    'statut' => 'inscrit',
+                    'progression' => 0,
+                ];
+            }
+            $formation->participants()->sync($participantsData);
+        } else {
+            // Si aucun participant sélectionné, détacher tous les participants
+            $formation->participants()->detach();
+        }
+
+        return redirect()->back()->with('success', 'Formation mise à jour avec succès.');
+    }
+
+    // Méthode pour supprimer une formation
+    public function destroyFormation(Formation $formation)
+    {
+        $formation->delete();
+        return redirect()->back()->with('success', 'Formation supprimée avec succès.');
+    }
+
+    // Méthode pour récupérer les formations avec les participants
+    public function getFormationsWithParticipants()
+    {
+        $formations = Formation::with(['responsable', 'participants'])
+            ->withCount('participants')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $users = User::all();
+        $salaries = Salarie::where('statut', 'actif')->get();
+
+        return inertia('Formations', [
+            'formations' => $formations,
+            'users' => $users,
+            'salaries' => $salaries,
+        ]);
+    }
+
+######################################################################################################
+
     public function storeMateriel(Request $request)
     {
         $validated = $request->validate([
@@ -635,12 +774,16 @@ class RessourcesHumainesController extends Controller
 
         // 6. Create notification
         Notification::create([
-            'sender' => 'ressources-humaines',
-            'receiver' => 'suivi-controle',
-            'message' => "Nouveau Projet - {$validated['nom']}, Veuillez Commencer L'affectaion de {$totalProfiles} Profils!",
-            'statut' => 'actif',
-            'recorded_at' => Carbon::now(),
+            'titre' => 'Nouveau Projet',   // ✅ required column
+            'commentaire' => "Nouveau Projet - {$validated['nom']}, Veuillez Commencer L'affectaion de {$totalProfiles} Profils!",
+            'type' => 'info',               // optional
+            'user_id' => null,              // if needed
+            'sender' => 'ressources-humaines', // only if your model/table supports it
+            'receiver' => 'suivi-controle',    // only if your model/table supports it
+            'statut' => 'actif',               // only if your table has this column
+            'recorded_at' => Carbon::now(),    // only if your table has this column
         ]);
+
 
         // 7. Redirect with success
         return redirect()->back()->with('success', 'Projet ajouté avec succès.');
@@ -778,6 +921,8 @@ class RessourcesHumainesController extends Controller
                 'projet_ids'      => json_encode([]),
             ]);
 
+            $salarie->assignRole('salarie', 'salarie');
+
             $profil = Profil::create([
                 'user_id'      => $salarie->id,
                 'nom_profil'   => $validatedData['nom_profil'],
@@ -788,7 +933,7 @@ class RessourcesHumainesController extends Controller
             Log::info('Profil created',  ['profil'  => $profil->toArray()]);
 
             return redirect()->back()->with([
-                'success' => 'Employé créé avec succès.',
+                'success' => 'Employé créé avec succès, notification envoyée aux admin.',
                 'created' => [
                     'salarie' => $salarie->only(['id','nom','prenom','email','telephone','statut']),
                     'profil'  => $profil->only(['id','user_id','nom_profil','poste_profil']),
@@ -805,15 +950,10 @@ class RessourcesHumainesController extends Controller
     // ACCESS MANAGEMENT
     // ========================================
     
-    public function access() 
+public function access() 
     {
-        $users = User::role('salarie')
-            ->with('roles')
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        // Load salaries with their profil (singular) and projects
-        $salaries = Salarie::with(['user', 'projets', 'profil']) // Changed from 'profils' to 'profil'
+        // Load salaries with their profil and projects
+        $salaries = Salarie::with(['projets', 'profil'])
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -826,10 +966,9 @@ class RessourcesHumainesController extends Controller
             ->get();
 
         return Inertia::render('ressources-humaines/Access', [
-            'users' => $users,
             'salaries' => $salaries,
             'projets' => $projets,
-            'profils' => $profils, // Add profils to the page props
+            'profils' => $profils,
         ]);
     }
 
@@ -839,41 +978,48 @@ class RessourcesHumainesController extends Controller
             $validated = $request->validate([
                 'nom' => 'required|string|max:255',
                 'prenom' => 'required|string|max:255',
-                'email' => 'required|email|unique:users,email',
+                'email' => 'required|email|unique:salaries,email',
                 'telephone' => 'required|string|max:255',
                 'password' => 'required|string|min:6',
                 'poste' => 'nullable|string|max:255',
                 'salaire_mensuel' => 'nullable|numeric|min:0',
                 'date_embauche' => 'nullable|date',
                 'statut' => 'nullable|in:actif,inactif,conge,demission',
+                'profil_id' => 'nullable|exists:profils,id',
             ]);
 
             DB::beginTransaction();
 
-            $user = User::create([
-                'name' => $validated['prenom'] . ' ' . $validated['nom'],
-                'email' => $validated['email'],
-                'password' => bcrypt($validated['password']),
-            ]);
-
-            $user->assignRole('salarie');
+            Log::info('Creating salarie with data:', $validated);
 
             $salarie = Salarie::create([
                 'nom' => $validated['nom'],
                 'prenom' => $validated['prenom'],
                 'email' => $validated['email'],
                 'telephone' => $validated['telephone'],
+                'password' => Hash::make($validated['password']), // Explicitly use Hash::make
                 'poste' => $validated['poste'] ?? null,
                 'salaire_mensuel' => $validated['salaire_mensuel'] ?? null,
                 'date_embauche' => $validated['date_embauche'] ?? null,
                 'statut' => $validated['statut'] ?? 'actif',
-                'user_id' => $user->id,
+                'profil_id' => $validated['profil_id'] ?? null,
+                'is_accepted' => true, // Auto-approve or set to false for manual approval
             ]);
+
+            Log::info('Salarie created successfully:', ['id' => $salarie->id]);
 
             DB::commit();
 
             return redirect()->back()->with('success', 'Accès créé avec succès.');
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            Log::error('Validation error storing access', [
+                'errors' => $e->errors()
+            ]);
+            return redirect()->back()
+                ->withErrors($e->errors())
+                ->withInput();
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error storing access', [
@@ -882,108 +1028,76 @@ class RessourcesHumainesController extends Controller
             ]);
             
             return redirect()->back()
-                ->with('error', 'Erreur lors de la création de l\'accès: ' . $e->getMessage());
+                ->with('error', 'Erreur lors de la création de l\'accès: ' . $e->getMessage())
+                ->withInput();
         }
     }
 
-    public function updateAccess(Request $request, User $user)
-{
-    try {
-        $validated = $request->validate([
-            'nom' => 'required|string|max:255',
-            'prenom' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email,' . $user->id,
-            'telephone' => 'required|string|max:255',
-            'password' => 'nullable|string|min:6',
-            'poste' => 'nullable|string|max:255',
-            'salaire_mensuel' => 'nullable|numeric|min:0',
-            'date_embauche' => 'nullable|date',
-            'statut' => 'nullable|in:actif,inactif,conge,demission',
-            'profil_id' => 'nullable|exists:profils,id', // Add profil_id validation
-        ]);
+    public function updateAccess(Request $request, Salarie $salarie)
+    {
+        try {
+            $validated = $request->validate([
+                'nom' => 'required|string|max:255',
+                'prenom' => 'required|string|max:255',
+                'email' => 'required|email|unique:salaries,email,' . $salarie->id,
+                'telephone' => 'required|string|max:255',
+                'password' => 'nullable|string|min:6',
+                'poste' => 'nullable|string|max:255',
+                'salaire_mensuel' => 'nullable|numeric|min:0',
+                'date_embauche' => 'nullable|date',
+                'statut' => 'nullable|in:actif,inactif,conge,demission',
+                'profil_id' => 'nullable|exists:profils,id',
+            ]);
 
-        DB::beginTransaction();
+            DB::beginTransaction();
 
-        $userData = [
-            'name' => $validated['prenom'] . ' ' . $validated['nom'],
-            'email' => $validated['email'],
-        ];
+            $salarieData = [
+                'nom' => $validated['nom'],
+                'prenom' => $validated['prenom'],
+                'email' => $validated['email'],
+                'telephone' => $validated['telephone'],
+                'poste' => $validated['poste'] ?? null,
+                'salaire_mensuel' => $validated['salaire_mensuel'] ?? null,
+                'date_embauche' => $validated['date_embauche'] ?? null,
+                'statut' => $validated['statut'] ?? 'actif',
+                'profil_id' => $validated['profil_id'] ?? null,
+            ];
 
-        if (!empty($validated['password'])) {
-            $userData['password'] = bcrypt($validated['password']);
-        }
+            // Only update password if provided
+            if (!empty($validated['password'])) {
+                $salarieData['password'] = Hash::make($validated['password']);
+            }
 
-        $user->update($userData);
-
-        $salarie = Salarie::where('user_id', $user->id)->first();
-        
-        $salarieData = [
-            'nom' => $validated['nom'],
-            'prenom' => $validated['prenom'],
-            'email' => $validated['email'],
-            'telephone' => $validated['telephone'],
-            'poste' => $validated['poste'] ?? null,
-            'salaire_mensuel' => $validated['salaire_mensuel'] ?? null,
-            'date_embauche' => $validated['date_embauche'] ?? null,
-            'statut' => $validated['statut'] ?? 'actif',
-            'user_id' => $user->id,
-        ];
-
-        if ($salarie) {
             $salarie->update($salarieData);
+
+            Log::info('Salarie updated successfully:', ['id' => $salarie->id]);
+
+            DB::commit();
+
+            return redirect()->back()->with('success', 'Accès mis à jour avec succès.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error updating access', [
+                'message' => $e->getMessage()
+            ]);
             
-            // Update profil assignment
-            if (isset($validated['profil_id'])) {
-                // Remove old profil assignment
-                Profil::where('salarie_id', $salarie->id)->update(['salarie_id' => null]);
-                
-                // Assign new profil
-                $profil = Profil::find($validated['profil_id']);
-                if ($profil) {
-                    $profil->update(['salarie_id' => $salarie->id]);
-                }
-            }
-        } else {
-            $salarie = Salarie::create($salarieData);
-            
-            if (isset($validated['profil_id'])) {
-                $profil = Profil::find($validated['profil_id']);
-                if ($profil) {
-                    $profil->update(['salarie_id' => $salarie->id]);
-                }
-            }
+            return redirect()->back()
+                ->with('error', 'Erreur lors de la mise à jour de l\'accès: ' . $e->getMessage());
         }
-
-        DB::commit();
-
-        return redirect()->back()->with('success', 'Accès mis à jour avec succès.');
-
-    } catch (\Exception $e) {
-        DB::rollBack();
-        Log::error('Error updating access', [
-            'message' => $e->getMessage()
-        ]);
-        
-        return redirect()->back()
-            ->with('error', 'Erreur lors de la mise à jour de l\'accès: ' . $e->getMessage());
     }
-}
 
-    public function destroyAccess(User $user)
+    public function destroyAccess(Salarie $salarie)
     {
         try {
             DB::beginTransaction();
 
-            $salarie = Salarie::where('user_id', $user->id)->first();
+            $salarieId = $salarie->id;
             
-            if ($salarie) {
-                // Delete profil if exists
-                Profil::where('salarie_id', $salarie->id)->delete();
-                // Delete salarie
-                $salarie->delete();
-            }
+            // Delete the salarie
+            $salarie->delete();
             
-            $user->delete();
+            Log::info('Salarie deleted successfully:', ['id' => $salarieId]);
             
             DB::commit();
 
@@ -992,7 +1106,7 @@ class RessourcesHumainesController extends Controller
             DB::rollBack();
             Log::error('Erreur suppression accès:', [
                 'message' => $e->getMessage(),
-                'user_id' => $user->id
+                'salarie_id' => $salarie->id
             ]);
             return redirect()->back()->with('error', 'Erreur lors de la suppression de l\'accès.');
         }
@@ -1036,73 +1150,66 @@ class RessourcesHumainesController extends Controller
     }
 
     public function affecterProfil(Request $request, Salarie $salarie)
-{
-    $validated = $request->validate(['profil_id' => 'required|exists:profils,id']);
+    {
+        $validated = $request->validate(['profil_id' => 'required|exists:profils,id']);
 
-    try {
-        DB::beginTransaction();
+        try {
+            DB::beginTransaction();
 
-        \Log::debug('Assigning profil', [
-            'salarie_id' => $salarie->id,
-            'profil_id' => $validated['profil_id'],
-            'current_profil_id' => $salarie->profil_id,
-        ]);
+            Log::debug('Assigning profil', [
+                'salarie_id' => $salarie->id,
+                'profil_id' => $validated['profil_id'],
+                'current_profil_id' => $salarie->profil_id,
+            ]);
 
-        $profilId = $validated['profil_id'];
+            // Assign new profil
+            $salarie->update(['profil_id' => $validated['profil_id']]);
 
-        // Remove previous assignment
-        Salarie::where('profil_id', $profilId)->update(['profil_id' => null]);
+            DB::commit();
 
-        // Assign new profil
-        $salarie->update(['profil_id' => $profilId]);
-
-        DB::commit();
-
-        return redirect()->back()->with('success', 'Profil assigné avec succès.');
-    } catch (\Exception $e) {
-        DB::rollBack();
-        \Log::error('Error assigning profil', ['message' => $e->getMessage()]);
-        return redirect()->back()->with('error', 'Erreur lors de l\'assignation du profil.');
+            return redirect()->back()->with('success', 'Profil assigné avec succès.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error assigning profil', ['message' => $e->getMessage()]);
+            return redirect()->back()->with('error', 'Erreur lors de l\'assignation du profil.');
+        }
     }
-}
 
+    public function storeProfil(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'categorie_profil' => 'required|string|max:255',
+                'poste_profil' => 'required|string|max:255',
+                'niveau_experience' => 'required|in:junior,intermediaire,senior,expert',
+                'competences_techniques' => 'nullable|array',
+                'certifications' => 'nullable|array',
+                'missions' => 'nullable|string',
+                'actif' => 'boolean',
+            ]);
 
+            $profil = Profil::create([
+                'categorie_profil' => $validated['categorie_profil'],
+                'poste_profil' => $validated['poste_profil'],
+                'niveau_experience' => $validated['niveau_experience'],
+                'competences_techniques' => $validated['competences_techniques'] ?? null,
+                'certifications' => $validated['certifications'] ?? null,
+                'missions' => $validated['missions'] ?? null,
+                'actif' => $validated['actif'] ?? true,
+            ]);
 
-public function storeProfil(Request $request)
-{
-    try {
-        $validated = $request->validate([
-            'categorie_profil' => 'required|string|max:255',
-            'poste_profil' => 'required|string|max:255',
-            'niveau_experience' => 'required|in:junior,intermediaire,senior,expert',
-            'competences_techniques' => 'nullable|array',
-            'certifications' => 'nullable|array',
-            'missions' => 'nullable|string',
-            'actif' => 'boolean',
-        ]);
+            return redirect()->back()->with('success', 'Profil créé avec succès.');
 
-        $profil = Profil::create([
-            'categorie_profil' => $validated['categorie_profil'],
-            'poste_profil' => $validated['poste_profil'],
-            'niveau_experience' => $validated['niveau_experience'],
-            'competences_techniques' => $validated['competences_techniques'] ?? null,
-            'certifications' => $validated['certifications'] ?? null,
-            'missions' => $validated['missions'] ?? null,
-            'actif' => $validated['actif'] ?? true,
-        ]);
-
-        return redirect()->back()->with('success', 'Profil créé avec succès.');
-
-    } catch (\Exception $e) {
-        Log::error('Error creating profil', [
-            'message' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ]);
-        
-        return redirect()->back()
-            ->with('error', 'Erreur lors de la création du profil: ' . $e->getMessage());
+        } catch (\Exception $e) {
+            Log::error('Error creating profil', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return redirect()->back()
+                ->with('error', 'Erreur lors de la création du profil: ' . $e->getMessage());
+        }
     }
-}
     
 
 
@@ -1197,11 +1304,510 @@ public function storeProfil(Request $request)
 
 
 
+public function automateConsultation(Request $request)
+{
+    try {
+        // Validation des données
+        $validated = $request->validate([
+            'consultation_url' => 'required|url',
+            'marche_reference' => 'required|string',
+            'marche_id' => 'required|exists:projet_mps,id',
+        ]);
+
+        Log::info('🚀 LANCEMENT AUTOMATISATION CONSULTATION', [
+            'marche_id' => $validated['marche_id'],
+            'reference' => $validated['marche_reference'],
+            'url' => $validated['consultation_url'],
+        ]);
+
+        $pythonScript = base_path('selenium_scripts/consultation_automation.py');
+
+        // Vérifier que le script existe
+        if (!file_exists($pythonScript)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Script Python d\'automatisation introuvable : ' . $pythonScript
+            ], 500);
+        }
+
+        // Lock pour éviter les exécutions simultanées
+        $lockKey = 'consultation_automation_' . $validated['marche_id'];
+        $lock = Cache::lock($lockKey, 300); // 5 minutes
+
+        if (!$lock->get()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Une automatisation est déjà en cours pour ce marché. Veuillez patienter.'
+            ], 423);
+        }
+
+        try {
+            // Préparer les arguments pour le script Python
+            $consultationUrl = escapeshellarg($validated['consultation_url']);
+            $marcheReference = escapeshellarg($validated['marche_reference']);
+
+            // Exécuter le script Python de manière synchrone
+            $command = "python \"{$pythonScript}\" {$consultationUrl} {$marcheReference}";
+            
+            Log::info('Commande Python à exécuter: ' . $command);
+
+            // Exécution avec timeout
+            $output = [];
+            $returnCode = 0;
+            
+            // Exécuter et capturer la sortie
+            exec($command . ' 2>&1', $output, $returnCode);
+            
+            $outputString = implode("\n", $output);
+            
+            Log::info('Sortie du script Python:', [
+                'return_code' => $returnCode,
+                'output' => $outputString,
+            ]);
+
+            // Lire les résultats du fichier JSON généré par le script
+            $resultsFile = base_path('selenium_scripts/consultation_automation_results.json');
+            $results = [];
+            
+            if (file_exists($resultsFile)) {
+                $resultsContent = file_get_contents($resultsFile);
+                $results = json_decode($resultsContent, true) ?? [];
+                
+                Log::info('Résultats de l\'automatisation:', $results);
+                
+                // Supprimer le fichier de résultats après lecture
+                unlink($resultsFile);
+            }
+
+            // Analyser les résultats
+            if ($returnCode === 0 && isset($results['success']) && $results['success']) {
+                Log::info('✅ Automatisation réussie pour le marché: ' . $validated['marche_reference']);
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => $results['message'] ?? 'Automatisation terminée avec succès',
+                    'details' => [
+                        'steps_completed' => $results['steps_completed'] ?? [],
+                        'screenshots' => $results['screenshots'] ?? [],
+                        'marche_reference' => $validated['marche_reference'],
+                    ]
+                ]);
+            } else {
+                Log::error('❌ Échec de l\'automatisation pour le marché: ' . $validated['marche_reference']);
+                
+                $errorMessage = $results['message'] ?? 'Erreur lors de l\'automatisation';
+                $errors = $results['errors'] ?? [$outputString];
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => $errorMessage,
+                    'details' => [
+                        'errors' => $errors,
+                        'return_code' => $returnCode,
+                        'output' => $outputString,
+                    ]
+                ], 500);
+            }
+
+        } finally {
+            $lock->release();
+        }
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        Log::error('❌ Erreur de validation automatisation consultation:', $e->errors());
+        return response()->json([
+            'success' => false,
+            'message' => 'Données de validation invalides',
+            'errors' => $e->errors(),
+        ], 422);
+
+    } catch (\Exception $e) {
+        Log::error('❌ Erreur générale automatisation consultation: ' . $e->getMessage());
+        Log::error('Stack trace: ' . $e->getTraceAsString());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de l\'automatisation: ' . $e->getMessage(),
+            'debug' => app()->environment('local') ? [
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+            ] : null,
+        ], 500);
+    }
+}
+
+
+public function storeImportedDocuments(Request $request)
+{
+    try {
+        Log::info('=== DÉBUT IMPORT DOCUMENTS AMÉLIORÉ ===');
+        Log::info('Données reçues:', [
+            'marche_id' => $request->input('marche_id'),
+            'reference' => $request->input('reference'),
+            'labels_count' => count($request->input('labels', [])),
+        ]);
+
+        // Validation des données de base
+        $validated = $request->validate([
+            'marche_id' => 'required|exists:projet_mps,id',
+            'reference' => 'required|string',
+            'labels' => 'required|array|min:1',
+            'labels.*.name' => 'required|string|max:255',
+            'labels.*.files' => 'required|array|min:1',
+            'labels.*.files.*' => 'required|file|max:20480', // max 20 Mo par fichier
+        ], [
+            'marche_id.required' => 'L\'ID du marché est requis',
+            'marche_id.exists' => 'Le marché spécifié n\'existe pas',
+            'reference.required' => 'La référence est requise',
+            'labels.required' => 'Au moins un label est requis',
+            'labels.*.name.required' => 'Le nom du label est requis',
+            'labels.*.files.required' => 'Au moins un fichier est requis par label',
+            'labels.*.files.*.file' => 'Le fichier n\'est pas valide',
+            'labels.*.files.*.max' => 'Le fichier ne peut pas dépasser 20 Mo',
+        ]);
+
+        Log::info('✅ Validation OK pour marché ID: ' . $validated['marche_id']);
+        
+        // Récupérer le projet marché public
+        $projetMp = ProjetMp::findOrFail($validated['marche_id']);
+        $reference = $this->sanitizeFileName($validated['reference']);
+        
+        Log::info('✅ Projet trouvé avec référence: ' . $reference);
+
+        // 🎯 CHEMIN SELON VOS SPÉCIFICATIONS EXACTES
+        // C:\xampp\htdocs\betconsulting\storage\app\public\marche_public\imported_files\{reference}
+        $baseImportPath = "marche_public/imported_files/{$reference}";
+        
+        // Créer le chemin complet dans le storage public
+        $fullStoragePath = storage_path('app/public/' . $baseImportPath);
+        
+        // S'assurer que le dossier de base existe
+        if (!file_exists($fullStoragePath)) {
+            mkdir($fullStoragePath, 0755, true);
+            Log::info('📁 Dossier de base créé: ' . $fullStoragePath);
+        }
+
+        $savedDocuments = [];
+        $totalFilesProcessed = 0;
+        $totalSizeProcessed = 0;
+
+        // Utilisation d'une transaction pour assurer la cohérence des données
+        DB::beginTransaction();
+
+        try {
+            // Traiter chaque label avec ses fichiers
+            foreach ($validated['labels'] as $labelIndex => $labelData) {
+                $labelName = trim($labelData['name']);
+                $files = $labelData['files'];
+                
+                Log::info("📋 Traitement du label: '{$labelName}' avec " . count($files) . " fichiers");
+
+                // Créer un sous-dossier pour ce label dans le chemin spécifié
+                $sanitizedLabelName = $this->sanitizeFileName($labelName);
+                $labelPath = $baseImportPath . '/' . $sanitizedLabelName;
+                $fullLabelPath = storage_path('app/public/' . $labelPath);
+                
+                if (!file_exists($fullLabelPath)) {
+                    mkdir($fullLabelPath, 0755, true);
+                    Log::info('📁 Sous-dossier label créé: ' . $fullLabelPath);
+                }
+
+                $savedFiles = [];
+
+                // Sauvegarder chaque fichier du label
+                foreach ($files as $fileIndex => $file) {
+                    try {
+                        if (!$file->isValid()) {
+                            Log::error("❌ Fichier invalide à l'index {$fileIndex}");
+                            continue;
+                        }
+
+                        $originalName = $file->getClientOriginalName();
+                        $extension = $file->getClientOriginalExtension();
+                        $sanitizedName = $this->sanitizeFileName(pathinfo($originalName, PATHINFO_FILENAME));
+                        
+                        // Nom unique pour éviter les conflits
+                        $timestamp = now()->format('Y-m-d_H-i-s');
+                        $uniqueFileName = "{$sanitizedName}_{$timestamp}_{$fileIndex}.{$extension}";
+                        
+                        // Chemin complet du fichier dans le label
+                        $filePath = $labelPath . '/' . $uniqueFileName;
+                        
+                        // 🎯 SAUVEGARDER LE FICHIER DIRECTEMENT DANS LE STORAGE PUBLIC
+                        $savedPath = $file->storeAs($labelPath, $uniqueFileName, 'public');
+
+                        
+                        if ($savedPath) {
+                            $fileSize = $file->getSize();
+                            $totalSizeProcessed += $fileSize;
+                            
+                            $savedFiles[] = [
+                                'original_name' => $originalName,
+                                'stored_name' => $uniqueFileName,
+                                'path' => $filePath, // Chemin relatif pour la BD
+                                'full_path' => $fullLabelPath . '/' . $uniqueFileName, // Chemin absolu
+                                'size' => $fileSize,
+                                'mime_type' => $file->getMimeType(),
+                                'uploaded_at' => now()->toISOString(),
+                            ];
+                            
+                            $totalFilesProcessed++;
+                            Log::info("📄 Fichier sauvegardé: {$originalName} -> {$filePath}");
+                        } else {
+                            Log::error("❌ Échec de la sauvegarde du fichier: {$originalName}");
+                        }
+                        
+                    } catch (\Exception $fileError) {
+                        Log::error("❌ Erreur lors de la sauvegarde du fichier {$originalName}: " . $fileError->getMessage());
+                        Log::error("Stack trace fichier: " . $fileError->getTraceAsString());
+                    }
+                }
+
+                // Sauvegarder en base de données seulement si des fichiers ont été sauvés
+                if (!empty($savedFiles)) {
+                    $importedDocument = ImportedDocument::create([
+                        'projet_mp_id' => $projetMp->id,
+                        'label' => $labelName,
+                        'files' => $savedFiles, // Stocké en JSON avec détails complets
+                    ]);
+
+                    $labelTotalSize = array_sum(array_column($savedFiles, 'size'));
+
+                    $savedDocuments[] = [
+                        'id' => $importedDocument->id,
+                        'label' => $labelName,
+                        'files_count' => count($savedFiles),
+                        'total_size' => $labelTotalSize,
+                        'files' => $savedFiles,
+                        'created_at' => $importedDocument->created_at,
+                        'storage_path' => $fullLabelPath,
+                    ];
+
+                    Log::info("✅ Label '{$labelName}' sauvegardé en BD avec " . count($savedFiles) . " fichiers ({$this->formatBytes($labelTotalSize)})");
+                } else {
+                    Log::warning("⚠️ Aucun fichier sauvegardé pour le label: {$labelName}");
+                }
+            }
+
+            // Si tout s'est bien passé, valider la transaction
+            DB::commit();
+
+            Log::info('=== IMPORT TERMINÉ AVEC SUCCÈS ===');
+            Log::info("📊 STATISTIQUES :");
+            Log::info("   • Labels traités : " . count($savedDocuments));
+            Log::info("   • Fichiers traités : {$totalFilesProcessed}");
+            Log::info("   • Taille totale : " . $this->formatBytes($totalSizeProcessed));
+            Log::info("   • Chemin de base : {$fullStoragePath}");
+            Log::info("   • Structure : C:\\xampp\\htdocs\\betconsulting\\storage\\app\\public\\{$baseImportPath}");
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Documents importés avec succès dans le storage spécifié',
+                'data' => [
+                    'projet_mp_id' => $projetMp->id,
+                    'reference' => $reference,
+                    'base_path' => $baseImportPath,
+                    'full_storage_path' => $fullStoragePath,
+                    'windows_path' => str_replace('/', '\\', "C:\\xampp\\htdocs\\betconsulting\\storage\\app\\public\\{$baseImportPath}"),
+                    'labels_processed' => count($savedDocuments),
+                    'total_files' => $totalFilesProcessed,
+                    'total_size' => $totalSizeProcessed,
+                    'total_size_formatted' => $this->formatBytes($totalSizeProcessed),
+                    'documents' => $savedDocuments,
+                ],
+            ], 201);
+
+        } catch (\Exception $transactionError) {
+            // Annuler la transaction en cas d'erreur
+            DB::rollBack();
+            
+            Log::error('❌ Erreur lors de la transaction, rollback effectué');
+            Log::error('Détails: ' . $transactionError->getMessage());
+            
+            throw $transactionError;
+        }
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        Log::error('❌ Erreur de validation:', $e->errors());
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur de validation',
+            'errors' => $e->errors(),
+        ], 422);
+        
+    } catch (\Exception $e) {
+        Log::error('❌ Erreur générale lors de l\'import des documents: ' . $e->getMessage());
+        Log::error('Stack trace: ' . $e->getTraceAsString());
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de l\'import des documents: ' . $e->getMessage(),
+            'debug' => app()->environment('local') ? [
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+                'trace' => $e->getTraceAsString(),
+            ] : null,
+        ], 500);
+    }
+}
+
+/**
+ * Nettoie un nom de fichier pour éviter les problèmes de système de fichiers
+ */
+private function sanitizeFileName($filename)
+{
+    // Supprimer les caractères spéciaux dangereux
+    $filename = preg_replace('/[<>:"\/\\\|?*]/', '_', $filename);
+    
+    // Remplacer les espaces par des underscores
+    $filename = preg_replace('/\s+/', '_', $filename);
+    
+    // Supprimer les caractères non ASCII sauf les lettres accentuées courantes
+    $filename = preg_replace('/[^\w\-\.àáâãäåæçèéêëìíîïñòóôõöøùúûüýÿ]/u', '_', $filename);
+    
+    // Éviter les underscores multiples consécutifs
+    $filename = preg_replace('/_{2,}/', '_', $filename);
+    
+    // Éviter les noms trop longs (max 100 caractères)
+    $filename = substr($filename, 0, 100);
+    
+    // Éviter les noms vides
+    if (empty($filename) || $filename === '' || $filename === '_') {
+        $filename = 'fichier_' . time();
+    }
+    
+    // Supprimer les underscores en début et fin
+    $filename = trim($filename, '_');
+    
+    return $filename;
+}
+
+/**
+ * Formate une taille en bytes en format lisible
+ */
+private function formatBytes($size, $precision = 2)
+{
+    if ($size === 0) return '0 B';
+    
+    $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    $base = log($size, 1024);
+    $pow = min(floor($base), count($units) - 1);
+    
+    return round($size / (1024 ** $pow), $precision) . ' ' . $units[$pow];
+}
+
+/**
+ * Récupère les documents importés pour un marché public (amélioré)
+ */
+public function getImportedDocuments($marcheId)
+{
+    try {
+        Log::info("📋 Récupération des documents importés pour le marché ID: {$marcheId}");
+        
+        $documents = ImportedDocument::where('projet_mp_id', $marcheId)
+            ->with('projetMp:id,reference')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($document) {
+                $totalSize = 0;
+                $files = $document->files ?? [];
+                
+                // Calculer la taille totale
+                foreach ($files as $file) {
+                    $totalSize += $file['size'] ?? 0;
+                }
+                
+                return [
+                    'id' => $document->id,
+                    'label' => $document->label,
+                    'files' => $files,
+                    'files_count' => count($files),
+                    'total_size' => $totalSize,
+                    'total_size_formatted' => $this->formatBytes($totalSize),
+                    'created_at' => $document->created_at,
+                    'updated_at' => $document->updated_at,
+                    'projet_mp_reference' => $document->projetMp->reference ?? null,
+                ];
+            });
+
+        Log::info("✅ {$documents->count()} document(s) trouvé(s) pour le marché {$marcheId}");
+
+        return response()->json([
+            'success' => true,
+            'data' => $documents,
+        ]);
+        
+    } catch (\Exception $e) {
+        Log::error('❌ Erreur lors de la récupération des documents: ' . $e->getMessage());
+        Log::error('Stack trace: ' . $e->getTraceAsString());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors de la récupération des documents',
+            'error' => $e->getMessage(),
+        ], 500);
+    }
+}
+
+/**
+ * Télécharge un fichier importé (amélioré avec sécurité)
+ */
+public function downloadImportedFile(Request $request)
+{
+    try {
+        $filePath = $request->get('path');
+        
+        if (!$filePath) {
+            Log::warning('❌ Tentative de téléchargement sans chemin de fichier');
+            return response()->json(['error' => 'Chemin du fichier manquant'], 400);
+        }
+
+        // 🔒 SÉCURITÉ : s'assurer que le chemin est dans imported_files
+        if (!str_contains($filePath, 'imported_files')) {
+            Log::warning("❌ Tentative d'accès non autorisé au fichier: {$filePath}");
+            return response()->json(['error' => 'Accès non autorisé - le fichier doit être dans imported_files'], 403);
+        }
+
+        // Construire le chemin complet avec normalisation
+        $cleanPath = ltrim(str_replace(['\\', '//', '..'], ['/', '/', ''], $filePath), '/');
+        $fullPath = storage_path('app/public/' . $cleanPath);
+        
+        Log::info("📄 Tentative de téléchargement du fichier:");
+        Log::info("   • Chemin demandé: {$filePath}");
+        Log::info("   • Chemin nettoyé: {$cleanPath}");
+        Log::info("   • Chemin complet: {$fullPath}");
+        
+        // Vérifier que le fichier existe
+        if (!file_exists($fullPath)) {
+            Log::warning("❌ Fichier non trouvé: {$fullPath}");
+            return response()->json(['error' => 'Fichier non trouvé'], 404);
+        }
+
+        // Vérifier que c'est bien un fichier (pas un dossier)
+        if (!is_file($fullPath)) {
+            Log::warning("❌ Le chemin ne correspond pas à un fichier: {$fullPath}");
+            return response()->json(['error' => 'Le chemin ne correspond pas à un fichier'], 400);
+        }
+
+        Log::info("✅ Téléchargement du fichier autorisé: " . basename($fullPath));
+
+        // Retourner le fichier pour téléchargement
+        return response()->download($fullPath, basename($fullPath));
+        
+    } catch (\Exception $e) {
+        Log::error('❌ Erreur lors du téléchargement: ' . $e->getMessage());
+        Log::error('Stack trace: ' . $e->getTraceAsString());
+        
+        return response()->json([
+            'error' => 'Erreur lors du téléchargement',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
 
 
 
-
-
+######################################################################################################
 
 public function fetchMarchePublic()
     {

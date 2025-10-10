@@ -2,7 +2,9 @@ import { LucideIcon } from 'lucide-react';
 import type { Config } from 'ziggy-js';
 
 export interface Auth {
-    user: User;
+    permissions: any;
+    user: User | null;
+    type?: 'user' | 'salarie' | null;
 }
 
 export interface BreadcrumbItem {
@@ -16,11 +18,11 @@ export interface NavGroup {
 }
 
 export interface NavItem {
-  title: string;
-  href?: string; // Make href optional since parent items with subitems don't need href
-  icon?: LucideIcon | null;
-  isActive?: boolean;
-  items?: NavItem[];
+    title: string;
+    href?: string;
+    icon?: LucideIcon | null;
+    isActive?: boolean;
+    items?: NavItem[];
 }
 
 export interface SharedData {
@@ -37,9 +39,13 @@ export interface User {
     name: string;
     email: string;
     avatar?: string;
-    role?: string; 
+    role?: string;
+    permissions: string[];
     email_verified_at: string | null;
     created_at: string;
     updated_at: string;
+    poste?: string;
+    nom_profil?: string;
+    matricule?: string;
     [key: string]: unknown;
 }

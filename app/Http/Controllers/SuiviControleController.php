@@ -13,8 +13,9 @@ use App\Models\plan;
 use App\Models\Document;
 use Illuminate\Support\Facades\Validator;
 
-use App\Models\Task;
 use Illuminate\Http\Request;
+
+use App\Models\Task;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -150,9 +151,6 @@ class SuiviControleController extends Controller
         ];
     });
 
-    $mssgs = Notification::where('receiver', 'suivi-controle')
-        ->where('statut', 'actif')
-        ->get();
 
     return response()->json(compact('terrains', 'projets', 'users', 'mssgs'));
 }
@@ -901,11 +899,6 @@ public function Tracking()
             return $projet;
         });
 
-        // Notifications
-        $mssgs = Notification::where('receiver', 'suivi-controle')
-            ->where('statut', 'actif')
-            ->get();
-
         return response()->json(compact('plans', 'terrains', 'projets', 'salaries', 'mssgs','users'));
     }
 
@@ -941,22 +934,42 @@ public function Tracking()
     }
 
     public function getProjetRessources($projet_id)
-    {
+{
+    try {
         // Fetch the specific project by projet_id
         $projet = Projet::findOrFail($projet_id);
 
-        // Get related data for the project
-        $terrains = Terrain::whereIn('id', $projet->terrain_ids ?? [])->get();
-        $salaries = Salarie::whereIn('id', $projet->salarie_ids ?? [])->where('statut', 'actif')->get();
-        $vehicules = Vehicule::whereIn('salarie_id', $projet->salarie_ids ?? [])->get();
-        $materiels = Materiel::whereIn('salarie_id', $projet->salarie_ids ?? [])->get();
-        $logiciels = Logiciel::whereIn('id', $salaries->pluck('logiciel_id'))->get();
+        // Safely get IDs with fallback to empty array
+        $terrainIds = $projet->terrain_ids ?? [];
+        $salarieIds = $projet->salarie_ids ?? [];
 
-        // ✅ Fetch all profils before using the variable
+        // Get related data for the project
+        $terrains = !empty($terrainIds) 
+            ? Terrain::whereIn('id', $terrainIds)->get() 
+            : collect([]);
+            
+        $salaries = !empty($salarieIds) 
+            ? Salarie::whereIn('id', $salarieIds)->where('statut', 'actif')->get() 
+            : collect([]);
+            
+        $vehicules = !empty($salarieIds) 
+            ? Vehicule::whereIn('salarie_id', $salarieIds)->get() 
+            : collect([]);
+            
+        $materiels = !empty($salarieIds) 
+            ? Materiel::whereIn('salarie_id', $salarieIds)->get() 
+            : collect([]);
+
+        // Get logiciel_ids from salaries
+        $logicielIds = $salaries->pluck('logiciel_id')->filter()->unique()->toArray();
+        $logiciels = !empty($logicielIds) 
+            ? Logiciel::whereIn('id', $logicielIds)->get() 
+            : collect([]);
+
+        // Fetch all profils before using the variable
         $allProfils = Profil::all();
 
         // Lookup maps for performance
-        $salarieLookup = $salaries->keyBy('id');
         $terrainLookup = $terrains->keyBy('id');
 
         // Attach profils to each salarie
@@ -981,244 +994,154 @@ public function Tracking()
         $projetSalaries = $salaries->map(function ($salarie) use ($vehicules, $materiels, $terrainLookup) {
             $salarie->vehicules = $vehicules->where('salarie_id', $salarie->id)->values();
             $salarie->materiels = $materiels->where('salarie_id', $salarie->id)->values();
-            $salarie->terrains = collect($salarie->terrain_ids)->map(function ($terrainId) use ($terrainLookup) {
-                return $terrainLookup->get($terrainId);
-            })->filter();
+            $salarie->terrains = collect($salarie->terrain_ids ?? [])
+                ->map(function ($terrainId) use ($terrainLookup) {
+                    return $terrainLookup->get($terrainId);
+                })
+                ->filter();
             return $salarie;
         });
 
         // Attach salaries to the projet
         $projet->salaries = $projetSalaries;
 
-        // Active notifications for suivi-controle
-        $mssgs = Notification::where('receiver', 'suivi-controle')
-            ->where('statut', 'actif')
-            ->get();
-
-        return response()->json(compact(
-            'projet',
-            'terrains',
-            'salaries',
-            'vehicules',
-            'materiels',
-            'logiciels',
-            'mssgs'
-        ));
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#######################################################################################################################
-#######################################################################################################################
-#######################################################################################################################
-#######################################################################################################################
-#######################################################################################################################
-#######################################################################################################################
-
-        public function planing()
-    {
-        return Inertia::render('suivi-controle/Planings', [
-            'title' => 'Planification - Suivi & Contrôle des Travaux'
+        return response()->json([
+            'projet' => $projet,
+            'terrains' => $terrains,
+            'salaries' => $projetSalaries,
+            'vehicules' => $vehicules,
+            'materiels' => $materiels,
+            'logiciels' => $logiciels,
         ]);
-    }
 
-    /**
-     * Fetch all data needed for the planning page
-     */
-    public function fetchPlans()
+    } catch (\Exception $e) {
+        \Log::error('Error fetching project resources: ' . $e->getMessage());
+        return response()->json([
+            'error' => 'Failed to fetch project resources',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+#######################################################################################################################
+#######################################################################################################################
+#######################################################################################################################
+#######################################################################################################################
+#######################################################################################################################
+#######################################################################################################################
+
+    public function planing()
+{
+    // Fetch all required data
+    $plans = Plan::with('projet')->latest()->get();
+    $terrains = Terrain::all();
+    $projets = Projet::all();
+    $salaries = Salarie::where('statut', 'actif')->get();
+
+
+    return Inertia::render('suivi-controle/Planings', [
+        'title' => 'Planification - Suivi & Contrôle des Travaux',
+        'plans' => $plans,
+        'terrains' => $terrains,
+        'projets' => $projets,
+        'salaries' => $salaries,
+        ]);
+}
+
+
+public function fetchDataPlanings()
+{
+    // Fetch plans with projet
+    $plans = Plan::with('projet')->latest()->get();
+
+    // Fetch terrains, projets
+    $terrains = Terrain::all();
+    $projets  = Projet::all();
+
+    // Fetch only active salaries
+    $salaries = Salarie::where('statut', 'actif')->get();
+
+    // Fetch all profils
+    $allProfils = Profil::all();
+
+    // Fetch required docs
+    $docsRequis = DocsRequis::all();
+
+    // Attach profils to each salarie
+    $salaries->transform(function ($salarie) use ($allProfils) {
+        $salarie->profils = $allProfils
+            ->where('salarie_id', $salarie->id)   // ✅ fixed foreign key
+            ->values() // reset array indices
+            ->map(function ($profil) {
+                return [
+                    'id' => $profil->id,
+                    'nom_profil' => $profil->categorie_profil, // or nom if you have it
+                    'poste_profil' => $profil->poste_profil,
+                ];
+            });
+        return $salarie;
+    });
+
+
+    return response()->json(compact(
+        'plans',
+        'terrains',
+        'projets',
+        'salaries',
+        'mssgs',
+        'docsRequis'
+    ));
+}
+
+
+    public function createPlan(Request $request)
     {
-        try {
-            // Fetch plans with related data
-            $plans = Plan::with(['projet'])
-                ->orderBy('date_debut', 'desc')
-                ->get()
-                ->map(function ($plan) {
-                    return [
-                        'id' => $plan->id,
-                        'date_debut' => $plan->date_debut ? $plan->date_debut->format('Y-m-d H:i:s') : null,
-                        'date_fin' => $plan->date_fin ? $plan->date_fin->format('Y-m-d H:i:s') : null,
-                        'mssg' => $plan->mssg,
-                        'description' => $plan->description,
-                        'terrains_ids' => $plan->terrains_ids ?? [],
-                        'salarie_ids' => $plan->salarie_ids ?? [],
-                        'statut' => $plan->statut,
-                        'projet_id' => $plan->projet_id,
-                        'projet' => $plan->projet ? [
-                            'id' => $plan->projet->id,
-                            'nom' => $plan->projet->nom,
-                            'description' => $plan->projet->description,
-                            'date_debut' => $plan->projet->date_debut,
-                            'date_fin' => $plan->projet->date_fin,
-                            'statut' => $plan->projet->statut,
-                            'client' => $plan->projet->client,
-                            'lieu_realisation' => $plan->projet->lieu_realisation,
-                        ] : null,
-                        'plan_docs' => $plan->plan_docs ?? [],
-                        'docs_ids' => $this->extractDocIds($plan->plan_docs),
-                        'created_at' => $plan->created_at,
-                        'updated_at' => $plan->updated_at,
-                    ];
-                });
+        $validated = $request->validate([
+            'projet_id' => 'required|exists:projets,id',
+            'plans' => 'required|array|min:1',
 
-            // Fetch projects
-            $projets = Projet::select([
-                'id', 'nom', 'description', 'budget_total', 'date_debut', 
-                'date_fin', 'statut', 'client', 'lieu_realisation', 'responsable_id'
-            ])
-            ->orderBy('nom')
-            ->get()
-            ->map(function ($projet) {
-                return [
-                    'id' => $projet->id,
-                    'nom' => $projet->nom,
-                    'description' => $projet->description,
-                    'budget_total' => $projet->budget_total,
-                    'date_debut' => $projet->date_debut,
-                    'date_fin' => $projet->date_fin,
-                    'statut' => $projet->statut,
-                    'client' => $projet->client,
-                    'lieu_realisation' => $projet->lieu_realisation,
-                    'responsable_id' => $projet->responsable_id,
-                    'docs_needs' => $this->getProjectDocsNeeds($projet->id),
-                ];
-            });
+            'plans.*.date_debut' => 'required|date',
+            'plans.*.date_fin' => 'required|date|after_or_equal:plans.*.date_debut',
+            'plans.*.statut' => 'required|string',
+            'plans.*.mssg' => 'nullable|string',
+            'plans.*.description' => 'nullable|string',
+            'plans.*.terrains_ids' => 'nullable|array',
+            'plans.*.terrains_ids.*' => 'integer|exists:terrains,id',
+            'plans.*.salarie_ids' => 'nullable|array',
+            'plans.*.salarie_ids.*' => 'integer|exists:salariess,id', // adjust table name
+            'plans.*.plan_docs' => 'nullable|array',
+            'plans.*.plan_docs.*.doc_req_id' => 'nullable|integer|exists:docs_requis,id',
+            'plans.*.plan_docs.*.file_id' => 'nullable|integer',
+        ]);
 
-            // Fetch terrains with proper relationship loading
-            $terrains = Terrain::with(['projet'])
-                ->select([
-                    'id', 'name', 'description', 'points', 'surface', 'radius', 
-                    'projet_id', 'statut_tech', 'statut_final', 'salarie_ids', 'user_ids'
-                ])
-                ->orderBy('name')
-                ->get()
-                ->map(function ($terrain) {
-                    return [
-                        'id' => $terrain->id,
-                        'name' => $terrain->name,
-                        'description' => $terrain->description,
-                        'points' => $terrain->points ?? [],
-                        'surface' => (float) ($terrain->surface ?? 0),
-                        'radius' => (float) ($terrain->radius ?? 0),
-                        'projet_id' => $terrain->projet_id,
-                        'projet_name' => $terrain->projet ? $terrain->projet->nom : 'Projet inconnu',
-                        'statut_tech' => $terrain->statut_tech,
-                        'statut_final' => $terrain->statut_final,
-                        'salarie_ids' => $terrain->salarie_ids ?? [],
-                        'user_ids' => $terrain->user_ids ?? [],
-                    ];
-                });
-
-            // Fetch salaries
-            $salaries = Salarie::select([
-                'id', 'nom', 'prenom', 'poste', 'email', 'telephone', 
-                'salaire_mensuel', 'date_embauche', 'statut', 'emplacement',
-                'projet_ids', 'terrain_ids', 'user_id'
-            ])
-            ->orderBy('nom')
-            ->get()
-            ->map(function ($salarie) {
-                return [
-                    'id' => $salarie->id,
-                    'nom' => $salarie->nom,
-                    'prenom' => $salarie->prenom,
-                    'poste' => $salarie->poste ?? '',
-                    'email' => $salarie->email,
-                    'telephone' => $salarie->telephone ?? '',
-                    'salaire_mensuel' => (float) ($salarie->salaire_mensuel ?? 0),
-                    'date_embauche' => $salarie->date_embauche,
-                    'statut' => $salarie->statut ?? 'actif',
-                    'emplacement' => $salarie->emplacement ?? 'bureau',
-                    'user_id' => $salarie->user_id,
-                    'projet_ids' => $this->getSalarieProjetIds($salarie->id),
-                    'terrain_ids' => $this->getSalarieTerrainIds($salarie->id),
-                ];
-            });
-
-            // Debug: Log the salaries data to check what's being returned
-            Log::info('Fetched salaries data:', [
-                'total_count' => $salaries->count(),
-                'terrain_salaries_count' => $salaries->where('emplacement', 'terrain')->count(),
-                'sample_data' => $salaries->take(3)->toArray()
+        // create each plan row
+        foreach ($validated['plans'] as $planData) {
+            Plan::create([
+                'date_debut'     => $planData['date_debut'],
+                'date_fin'       => $planData['date_fin'],
+                'mssg'           => $planData['mssg'] ?? null,
+                'description'    => $planData['description'] ?? null,
+                'terrains_ids'   => $planData['terrains_ids'] ?? [],
+                'salarie_ids'    => $planData['salarie_ids'] ?? [],
+                'projet_id'      => $validated['projet_id'],
+                'statut'         => $planData['statut'],
+                'plan_docs'      => $planData['plan_docs'] ?? [],
             ]);
-
-            return response()->json([
-                'plans' => $plans,
-                'projets' => $projets,
-                'terrains' => $terrains,
-                'salaries' => $salaries,
-                'success' => true
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Error fetching plans data: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'error' => 'Erreur lors de la récupération des données: ' . $e->getMessage(),
-                'plans' => [],
-                'projets' => [],
-                'terrains' => [],
-                'salaries' => [],
-                'success' => false
-            ], 500);
         }
+
+        return response()->json(['message' => 'Plans créés avec succès'], 201);
     }
+
 
     /**
      * Store a new plan
@@ -1631,7 +1554,320 @@ public function Tracking()
             return collect();
         }
     }
-    ######################################################
+
+
+
+        
+
+
+
+        public function suiviProjet()
+    {
+        // Fetch all projets with only id and nom
+        $projets = Projet::select('id', 'nom')->get();
+
+        // Pass the projets to the Inertia view
+        return Inertia::render('suivi-controle/SuiviProjet', [
+            'projets' => $projets
+        ]);
+    }
+
+        public function getProjetStats($projetId)
+    {
+        $projet = Projet::with('responsable')->find($projetId); // ✅ Load responsable relationship
+        if (!$projet) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Projet not found.'
+            ], 404);
+        }
+
+        $today = now()->startOfDay();
+
+        // STEP 2: Load plans and tasks with salaries
+        $plans = $projet->plans()->with('tasks')->get();
+        $plansWithDetails = $plans->map(function ($plan) {
+            $tasksWithSalaries = $plan->tasks->map(function ($task) {
+                $salarieIds = $task->salaries_ids ?? [];
+
+                $salaries = Salarie::whereIn('id', $salarieIds)
+                    ->with('profils')
+                    ->get()
+                    ->map(function ($salarie) {
+                        return array_merge(
+                            $salarie->toArray(),
+                            ['profils' => $salarie->profils->map(function ($profil) {
+                                return [
+                                    'id' => $profil->id,
+                                    'nom_profil' => $profil->nom_profil,
+                                    'poste_profil' => $profil->poste_profil,
+                                ];
+                            })->values()]
+                        );
+                    });
+
+                $taskArray = $task->toArray();
+                $taskArray['salaries'] = $salaries;
+
+                return $taskArray;
+            });
+
+            return array_merge($plan->toArray(), [
+                'tasks' => $tasksWithSalaries,
+                'plan_docs' => $plan->plan_docs ?? [],
+            ]);
+        });
+
+        // STEP 3: Terrains
+        $terrains = $projet->terrains->map(function ($terrain) {
+            $salarieIds = $terrain->salarie_ids ?? [];
+
+            $salaries = Salarie::whereIn('id', $salarieIds)
+                ->with('profils')
+                ->get()
+                ->map(function ($salarie) {
+                    return array_merge(
+                        $salarie->toArray(),
+                        ['profils' => $salarie->profils->map(function ($profil) {
+                            return [
+                                'id' => $profil->id,
+                                'nom_profil' => $profil->nom_profil,
+                                'poste_profil' => $profil->poste_profil,
+                            ];
+                        })->values()]
+                    );
+                });
+
+            return array_merge($terrain->toArray(), [
+                'salaries' => $salaries
+            ]);
+        });
+
+        // STEP 4: Fetch docs_needs entries with their doc_req and linked document
+        $docsNeeds = $projet->docs_needs ?? [];
+
+        $documentsInfo = collect($docsNeeds)->map(function ($docNeed) {
+            $docReq = DocsRequis::find($docNeed['doc_req_id'] ?? null);
+
+            // Try to find the document using file_id if available
+            $document = null;
+            $found = false;
+
+            if (!empty($docNeed['file_id'])) {
+                $document = Document::find($docNeed['file_id']);
+                if ($document) {
+                    $found = true;
+                }
+            }
+
+            return [
+                'doc_req' => $docReq,
+                'document' => $document,
+                'found' => $found
+            ];
+        });
+
+        // STEP 5: Messages
+        $messages = ProjetMssg::where('projet_id', $projet->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // STEP 6: Delays
+        $planDelays = collect();
+        $taskDelays = collect();
+
+        foreach ($plansWithDetails as $planArr) {
+            $planDateFin = !empty($planArr['date_fin'])
+                ? \Carbon\Carbon::parse($planArr['date_fin'])->startOfDay()
+                : null;
+
+            if ($planDateFin && $planDateFin->lt($today) && strtolower($planArr['statut']) !== 'termine') {
+                $planDelays->push($planArr);
+            }
+
+            foreach ($planArr['tasks'] as $taskArr) {
+                $taskDateFin = !empty($taskArr['date_fin'])
+                    ? \Carbon\Carbon::parse($taskArr['date_fin'])->startOfDay()
+                    : null;
+
+                $taskStatut = $taskArr['statut'] ?? null;
+                $isTaskDelayed = $taskDateFin && $taskDateFin->lt($today) &&
+                    (empty($taskStatut) || strtolower($taskStatut) !== 'termine');
+
+                if ($isTaskDelayed) {
+                    $taskArr['parent_plan'] = [
+                        'id' => $planArr['id'],
+                        'date_debut' => $planArr['date_debut'],
+                        'date_fin' => $planArr['date_fin'],
+                        'statut' => $planArr['statut'],
+                        'mssg' => $planArr['mssg'],
+                    ];
+                    $taskDelays->push($taskArr);
+                }
+            }
+        }
+
+        $projectDelayed = $planDelays->isNotEmpty() || $taskDelays->isNotEmpty();
+
+        // STEP 7: Final response
+        return response()->json([
+            'success' => true,
+            'projet' => array_merge(
+                $projet->toArray(),
+                [
+                    'responsable' => $projet->responsable
+                        ? [
+                            'id' => $projet->responsable->id,
+                            'name' => $projet->responsable->name,
+                        ]
+                        : null
+                ]
+            ),
+            'plans' => $plansWithDetails,
+            'terrains' => $terrains,
+            'documents' => $documentsInfo,
+            'messages' => $messages,
+            'delays' => [
+                'project_delayed' => $projectDelayed,
+                'plan_delays' => $planDelays->values(),
+                'task_delays' => $taskDelays->values(),
+            ],
+        ]);
+    }
+    
+
+    public function getProjetDoc($docId){
+        return redirect()->back()->with('success', 'Download Doc called with sucess');
+    }
+    public function approuveProjetDoc($docId){
+        return redirect()->back()->with('success', 'Doc Approuve Method with success');
+    }
+    public function commentProjetDoc($docId){
+        return redirect()->back()->with('success', 'Doc Commente Method success');
+    }
+    ###################################################################################
+
+    public function getTechs()
+    {
+        $techs = Salarie::where('emplacement', 'terrain')->get();
+
+        $techs = $techs->map(function ($tech) {
+            $terrains = Terrain::whereJsonContains('salarie_ids', $tech->id)->get();
+            return [
+                'tech' => $tech,
+                'terrains' => $terrains,
+            ];
+        });
+
+        return response()->json($techs);
+    }
+
+    /**
+     * Get detailed info for a specific technician, including terrains and positions.
+     */
+    public function getTechInfo($id)
+    {
+        $salarie = Salarie::findOrFail($id);
+
+        $terrains = Terrain::whereJsonContains('salarie_ids', $salarie->id)->get();
+        $positions = WsTechData::where('salarie_id', $salarie->id)
+            ->orderBy('recorded_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'salarie' => $salarie,
+            'terrains' => $terrains,
+            'positions' => $positions,
+        ]);
+    }
+
+
+    /**
+     * Toggle assignment of a technician to a terrain.
+     */
+    public function affectGrantTech(Request $request)
+    {
+        $request->validate([
+            'salarie_id' => 'required|exists:salaries,id',
+            'terrain_id' => 'required|exists:terrains,id',
+        ]);
+
+        $terrain = Terrain::findOrFail($request->terrain_id);
+        $salarieId = (int) $request->salarie_id;
+
+        $ids = $terrain->salarie_ids ?? [];
+
+        if (in_array($salarieId, $ids)) {
+            // remove
+            $ids = array_values(array_diff($ids, [$salarieId]));
+        } else {
+            // add
+            $ids[] = $salarieId;
+        }
+
+        $terrain->salarie_ids = $ids;
+        $terrain->save();
+
+        return response()->json([
+            'message' => 'Updated successfully',
+            'salarie_ids' => $terrain->salarie_ids,
+        ]);
+    }
+
+    /**
+     * Update statut_tech and statut_final of a terrain.
+     */
+    public function updateStatutTerr(Request $request)
+    {
+        $data = $request->validate([
+            'terrains' => 'required|array',
+            'terrains.*.id' => 'required|exists:terrains,id',
+            'terrains.*.statut_tech' => 'required|in:validé,terminé,en_cours,en_revision',
+            'terrains.*.statut_final' => 'required|in:validé,terminé,en_cours,en_revision',
+        ]);
+
+        $updated = [];
+
+        foreach ($data['terrains'] as $terrainData) {
+            $terrain = Terrain::findOrFail($terrainData['id']);
+            $terrain->updateStatuses(
+                $terrainData['statut_tech'],
+                $terrainData['statut_final']
+            );
+            $updated[] = $terrain;
+        }
+
+        return response()->json([
+            'message' => 'Statuses updated successfully',
+            'terrains' => $updated,
+        ]);
+    }
+
+    public function store_ws_data(Request $request)
+    {
+        $data = $request->validate([
+            'salarie_id'  => 'required|exists:salaries,id',
+            'lat'         => 'required|numeric',
+            'long'        => 'required|numeric',
+            'alt'         => 'nullable|numeric',
+            'recorded_at' => 'required|date',
+        ]);
+
+        $record = WsTechData::create($data);
+
+        // Broadcast the event
+        event(new WsTechDataReceived($record->toArray()));
+
+        return response()->json([
+            'status' => 'ok',
+            'data'   => $record,
+        ]);
+    }
+
+
+
+
+    ###################################################################################
     public function storePosition(Request $request)
     {
         // Validate incoming data

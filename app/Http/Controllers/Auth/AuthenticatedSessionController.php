@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Session;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -18,6 +19,13 @@ class AuthenticatedSessionController extends Controller
      */
     public function create(Request $request): Response
     {
+        // Forcer la déconnexion du guard salarie si actif
+        if (Auth::guard('salarie')->check()) {
+            Auth::guard('salarie')->logout();
+            $request->session()->flush();
+            $request->session()->regenerate();
+        }
+        
         return Inertia::render('auth/login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => $request->session()->get('status'),
@@ -29,41 +37,36 @@ class AuthenticatedSessionController extends Controller
      */
     public function store(LoginRequest $request): RedirectResponse
     {
+        // CRITIQUE: Déconnecter le guard salarie avant d'authentifier
+        if (Auth::guard('salarie')->check()) {
+            Auth::guard('salarie')->logout();
+        }
+        
+        // Nettoyer complètement la session
+        $request->session()->flush();
+        
         $request->authenticate();
         $request->session()->regenerate();
 
         $user = $request->user();
 
         // Role-based redirect
-        if ($user->hasRole('admin')) {
-            return redirect()->route('dashboard.direction-generale');
-        } elseif ($user->hasRole('communication-digitale')) {
-            return redirect()->route('dashboard.communication-digitale');
-        } elseif ($user->hasRole('etudes-techniques')) {
-            return redirect()->route('dashboard.etudes-techniques');
-        } elseif ($user->hasRole('financier-comptabilite')) {
-            return redirect()->route('dashboard.financier-comptabilite');
-        } elseif ($user->hasRole('fournisseurs-traitants')) {
-            return redirect()->route('dashboard.fournisseurs-traitants');
-        } elseif ($user->hasRole('innovation-transition')) {
-            return redirect()->route('dashboard.innovation-transition');
-        } elseif ($user->hasRole('juridique')) {
-            return redirect()->route('dashboard.juridique');
-        } elseif ($user->hasRole('logistique-generaux')) {
-            return redirect()->route('dashboard.logistique-generaux');
-        } elseif ($user->hasRole('marches-marketing')) {
-            return redirect()->route('dashboard.marches-marketing');
-        } elseif ($user->hasRole('qualite-audit')) {
-            return redirect()->route('dashboard.qualite-audit');
-        } elseif ($user->hasRole('ressources-humaines')) {
-            return redirect()->route('dashboard.ressources-humaines');
-        } elseif ($user->hasRole('suivi-controle')) {
-            return redirect()->route('dashboard.suivi-controle');
-        } elseif ($user->hasRole('salarie')) {
-            return redirect()->route('dashboard.salarie');
-        } else {
-            return redirect('/dashboard');
-        }
+        return match (true) {
+            $user->hasRole('admin') => redirect()->route('dashboard.direction-generale'),
+            $user->hasRole('communication-digitale') => redirect()->route('dashboard.communication-digitale'),
+            $user->hasRole('etudes-techniques') => redirect()->route('dashboard.etudes-techniques'),
+            $user->hasRole('financier-comptabilite') => redirect()->route('dashboard.financier-comptabilite'),
+            $user->hasRole('fournisseurs-traitants') => redirect()->route('dashboard.fournisseurs-traitants'),
+            $user->hasRole('innovation-transition') => redirect()->route('dashboard.innovation-transition'),
+            $user->hasRole('juridique') => redirect()->route('dashboard.juridique'),
+            $user->hasRole('logistique-generaux') => redirect()->route('dashboard.logistique-generaux'),
+            $user->hasRole('marches-marketing') => redirect()->route('dashboard.marches-marketing'),
+            $user->hasRole('qualite-audit') => redirect()->route('dashboard.qualite-audit'),
+            $user->hasRole('ressources-humaines') => redirect()->route('dashboard.ressources-humaines'),
+            $user->hasRole('suivi-controle') => redirect()->route('dashboard.suivi-controle'),
+            $user->hasRole('salarie') => redirect()->route('salarie.profile'),
+            default => redirect('/dashboard'),
+        };
     }
 
     /**

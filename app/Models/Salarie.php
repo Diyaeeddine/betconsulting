@@ -1,4 +1,4 @@
-<?php 
+<?php
 
 namespace App\Models;
 
@@ -14,10 +14,14 @@ class Salarie extends Authenticatable
 
     protected $guard = 'salarie';
 
+    /**
+     * Mass assignable attributes
+     */
     protected $fillable = [
         'nom',
         'prenom',
-        'profil_id',
+        'profil_id',              // from first model
+        'nom_profil',             // from second model (string name of profil)
         'poste',
         'is_accepted',
         'email',
@@ -26,16 +30,19 @@ class Salarie extends Authenticatable
         'date_embauche',
         'statut',
         'password',
-        'emplacement',
-        'user_id',
-        'terrain_ids',
+        'emplacement',            // from first model
+        'user_id',                // from first model
+        'terrain_ids',            // from first model
         'projet_ids',
-        'contrat_cdi_path',
-        'cv_path',
-        'diplome_path',
-        'certificat_travail_path',
+        'contrat_cdi_path',       // from first model
+        'cv_path',                // from first model
+        'diplome_path',           // from first model
+        'certificat_travail_path' // from first model
     ];
 
+    /**
+     * Type casting
+     */
     protected $casts = [
         'is_accepted'     => 'boolean',
         'salaire_mensuel' => 'decimal:2',
@@ -45,20 +52,29 @@ class Salarie extends Authenticatable
         'password'        => 'hashed',
     ];
 
+    /**
+     * Default attributes
+     */
     protected $attributes = [
-        'projet_ids'   => '[]',
-        'terrain_ids'  => '[]',
-        'statut'       => 'actif',
-        'emplacement'  => 'bureau',
-        'is_accepted'  => false,
+        'projet_ids'  => '[]',
+        'terrain_ids' => '[]',
+        'statut'      => 'actif',
+        'emplacement' => 'bureau',
+        'is_accepted' => false,
     ];
 
+    /**
+     * Hidden attributes
+     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    // 🔹 Accessors
+    /* ---------------------------------------------------------
+     | ACCESSORS
+     |--------------------------------------------------------- */
+
     public function getNameAttribute(): string
     {
         $prenom = $this->prenom ?? '';
@@ -76,7 +92,10 @@ class Salarie extends Authenticatable
         return strtoupper(substr($this->prenom, 0, 1) . substr($this->nom, 0, 1));
     }
 
-    // 🔹 Scopes
+    /* ---------------------------------------------------------
+     | SCOPES
+     |--------------------------------------------------------- */
+
     public function scopeActif($query)
     {
         return $query->where('statut', 'actif');
@@ -87,12 +106,17 @@ class Salarie extends Authenticatable
         return $query->where('nom_profil', $profil);
     }
 
-    // 🔹 Relations
+    /* ---------------------------------------------------------
+     | RELATIONS
+     |--------------------------------------------------------- */
+
+    // One-to-One
     public function vehicule()
     {
         return $this->hasOne(Vehicule::class);
     }
 
+    // One-to-Many
     public function materiels()
     {
         return $this->hasMany(Materiel::class);
@@ -103,14 +127,13 @@ class Salarie extends Authenticatable
         return $this->hasMany(Profil::class, 'user_id');
     }
 
-    // Salarie.php
-    public function profil() 
+    // BelongsTo single profil
+    public function profil()
     {
         return $this->belongsTo(Profil::class);
     }
 
-
-
+    // Many-to-Many with pivot
     public function projets()
     {
         return $this->belongsToMany(Projet::class, 'projet_salarie')
@@ -140,9 +163,7 @@ class Salarie extends Authenticatable
         return $this->belongsTo(User::class);
     }
 
-
-
-    // Entritient
+    // Entretiens
     public function entretiens()
     {
         return $this->hasMany(Entretien::class);
@@ -153,10 +174,19 @@ class Salarie extends Authenticatable
         return $this->hasOne(Entretien::class)->latestOfMany('date_entretien');
     }
 
-   
     public function scoreMoyenEntretiens()
     {
-        return $this->entretiens()
-            ->avg('score_total');
+        return $this->entretiens()->avg('score_total');
+    }
+
+    // Congés & Certificats médicaux
+    public function conges()
+    {
+        return $this->hasMany(Conge::class);
+    }
+
+    public function certificatsMedicaux()
+    {
+        return $this->hasMany(CertificatMedical::class);
     }
 }

@@ -36,7 +36,7 @@ class DocumentExpirationNotification extends Notification implements ShouldBroad
             'commentaire' => $this->getCommentaire(),
             'priority' => $this->getPriority(),
             'action_required' => true,
-            'icon' => $this->getIcon(),
+            // 'icon' => $this->getIcon(),
         ];
     }
 
@@ -54,7 +54,7 @@ class DocumentExpirationNotification extends Notification implements ShouldBroad
                 'commentaire' => $this->getCommentaire(),
                 'priority' => $this->getPriority(),
                 'action_required' => true,
-                'icon' => $this->getIcon(),
+                // 'icon' => $this->getIcon(),
                 'created_at' => now()->toISOString(),
                 'read_at' => null,
                 'is_read' => false,
@@ -121,15 +121,15 @@ class DocumentExpirationNotification extends Notification implements ShouldBroad
         }
     }
 
-    private function getIcon(): string
-    {
-        return match($this->getUrgencyLevel()) {
-            'critique' => '🚨',
-            'urgent' => '⚠️',
-            'normal' => '📋',
-            default => '📄'
-        };
-    }
+    // private function getIcon(): string
+    // {
+    //     return match($this->getUrgencyLevel()) {
+    //         'critique' => '🚨',
+    //         'urgent' => '⚠️',
+    //         'normal' => '📋',
+    //         default => '📄'
+    //     };
+    // }
 
     public function broadcastOn()
     {

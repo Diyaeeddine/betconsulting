@@ -1,72 +1,73 @@
 <?php
 
-namespace App\Models;
+    namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+    use Illuminate\Database\Eloquent\Factories\HasFactory;
+    use Illuminate\Database\Eloquent\Model;
 
-class Projet extends Model
-{
-    use HasFactory;
-
-    protected $fillable = [
-        'nom',
-        'description',
-        'budget_total',
-        'budget_utilise',
-        'date_debut',
-        'date_fin',
-        'statut',
-        'client',
-        'lieu_realisation',
-        'responsable_id',
-        'type_projet',
-        'latitude',
-        'longitude',
-        'radius',
-        'terrain_ids',
-        'rh_needs',
-        'docs_needs'
-    ];
-
-    protected $casts = [
-        'salarie_ids' => 'array',
-        'terrain_ids' => 'array',
-        'rh_needs' => 'array',
-        'docs_needs' => 'array',
-        
-    ];
-    protected $attributes = [
-        'salarie_ids' => '[]',
-        'terrain_ids' => '[]',
-        'rh_needs' => '[]',
-        'docs_needs' => '[]',
-    ];
-    public function responsable()
+    class Projet extends Model
     {
-        return $this->belongsTo(User::class, 'responsable_id');
-    }
+        use HasFactory;
 
-    public function depenses()
-    {
-        return $this->hasMany(Depense::class);
-    }
+        protected $fillable = [
+            'nom',
+            'description',
+            'budget_total',
+            'budget_utilise',
+            'date_debut',
+            'date_fin',
+            'statut',
+            'client',
+            'lieu_realisation',
+            'responsable_id',
+            'type_projet',
+            'latitude',
+            'longitude',
+            'radius',
+            'terrain_ids',
+            'salarie_ids',
+            'rh_needs',
+            'docs_needs'
+        ];
 
-    public function salaries()
-    {
-        return $this->belongsToMany(Salarie::class, 'projet_salarie');
-    }
-    public function progressions()
-    {
-        return $this->hasMany(Progression::class);
-    }
+        protected $casts = [
+            'salarie_ids' => 'array',
+            'terrain_ids' => 'array',
+            'rh_needs' => 'array',
+            'docs_needs' => 'array',
+            
+        ];
+        protected $attributes = [
+            'salarie_ids' => '[]',
+            'terrain_ids' => '[]',
+            'rh_needs' => '[]',
+            'docs_needs' => '[]',
+        ];
+        public function responsable()
+        {
+            return $this->belongsTo(User::class, 'responsable_id');
+        }
 
-    public function terrains()
-    {
-        return $this->hasMany(Terrain::class);
+        public function depenses()
+        {
+            return $this->hasMany(Depense::class);
+        }
+
+        public function salaries()
+        {
+            return $this->belongsToMany(Salarie::class, 'projet_salarie');
+        }
+        public function progressions()
+        {
+            return $this->hasMany(Progression::class);
+        }
+
+        public function terrains()
+        {
+            return $this->hasMany(Terrain::class);
+        }
+        public function plans()
+        {
+            return $this->hasMany(Plan::class, 'projet_id');
+        }
     }
-    public function plans()
-    {
-        return $this->hasMany(Plan::class, 'projet_id');
-    }
-}

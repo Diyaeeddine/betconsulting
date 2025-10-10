@@ -32,3 +32,12 @@ Broadcast::channel('notifications.{userId}', function ($user, $userId) {
 });
 
 
+Broadcast::channel('salarie.{id}', function ($salarie, $id) {
+    if (!auth('salarie')->check()) {
+        return false;
+    }
+    
+    return (int) $salarie->id === (int) $id;
+});
+
+

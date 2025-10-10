@@ -33,13 +33,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Search, UserPlus, Edit, Trash2, FolderKanban, Eye, EyeOff, UserCog, Briefcase } from "lucide-react"
 
-interface User {
-  id: number
-  name: string
-  email: string
-  created_at: string
-}
-
 interface Profil {
   id: number
   categorie_profil: string
@@ -61,8 +54,6 @@ interface Salarie {
   salaire_mensuel?: number
   date_embauche?: string
   statut: string
-  user_id: number
-  user?: User
   projets?: Projet[]
   profil?: Profil
 }
@@ -75,7 +66,6 @@ interface Projet {
 }
 
 interface PageProps {
-  users: User[]
   salaries: Salarie[]
   projets: Projet[]
   profils: Profil[]
@@ -132,7 +122,6 @@ export default function Access() {
   const [showProjectDialog, setShowProjectDialog] = useState(false)
   const [showProfilDialog, setShowProfilDialog] = useState(false)
   const [showCreateProfilDialog, setShowCreateProfilDialog] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [selectedSalarie, setSelectedSalarie] = useState<Salarie | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [selectedProjects, setSelectedProjects] = useState<number[]>([])
@@ -241,7 +230,6 @@ export default function Access() {
 
   const handleEdit = (salarie: Salarie) => {
     setSelectedSalarie(salarie)
-    setSelectedUser(salarie.user || null)
     setFormData({
       nom: salarie.nom,
       prenom: salarie.prenom,
@@ -259,7 +247,6 @@ export default function Access() {
 
   const handleDelete = (salarie: Salarie) => {
     setSelectedSalarie(salarie)
-    setSelectedUser(salarie.user || null)
     setShowDeleteDialog(true)
   }
 
@@ -275,28 +262,28 @@ export default function Access() {
       setShowProfilDialog(true)
   }
 
-  const submitEdit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!selectedUser) return
-    setProcessing(true)
-    router.put(route("ressources-humaines.access.update", selectedUser.id), formData, {
-      onFinish: () => {
-        setProcessing(false)
-        setShowEditDialog(false)
-      },
-    })
-  }
+const submitEdit = (e: React.FormEvent) => {
+  e.preventDefault()
+  if (!selectedSalarie) return
+  setProcessing(true)
+  router.put(route("ressources-humaines.access.update", selectedSalarie.id), formData, {
+    onFinish: () => {
+      setProcessing(false)
+      setShowEditDialog(false)
+    },
+  })
+}
 
-  const confirmDelete = () => {
-    if (!selectedUser) return
-    setProcessing(true)
-    router.delete(route("ressources-humaines.access.destroy", selectedUser.id), {
-      onFinish: () => {
-        setProcessing(false)
-        setShowDeleteDialog(false)
-      },
-    })
-  }
+const confirmDelete = () => {
+  if (!selectedSalarie) return
+  setProcessing(true)
+  router.delete(route("ressources-humaines.access.destroy", selectedSalarie.id), {
+    onFinish: () => {
+      setProcessing(false)
+      setShowDeleteDialog(false)
+    },
+  })
+}
 
   const submitProjectAssignment = (e: React.FormEvent) => {
     e.preventDefault()

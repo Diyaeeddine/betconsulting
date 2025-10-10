@@ -32,6 +32,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Storage;
 
+use App\Models\DossierMarche;
+use App\Models\TacheDossier;
+use App\Models\ParticipationMarche;
+use App\Models\HistoriqueMarche;
+use App\Models\DocumentDossier;
+use App\Models\AffectationTache;
+
  // Third-Party & PHP Core
 use Carbon\Carbon;
 use League\Csv\Reader;
@@ -84,6 +91,34 @@ class MarchesMarketingController extends Controller
     public function traitementMarches()
     {
         return Inertia::render('marches-marketing/Traitementmarches');
+    }
+
+
+    public function users()
+    {          
+        $salaries = Salarie::where('is_accepted', true)
+            ->where('nom_profil', 'marche_marketing')
+            ->select([
+                'id', 'nom', 'prenom', 'email', 'telephone', 
+                'poste', 'nom_profil', 'salaire_mensuel', 
+                'date_embauche', 'statut', 'projet_ids', 'created_at'
+            ])
+            ->get();          
+
+        $marches = MarchePublic::select([
+            'id', 'reference', 'objet', 'maitre_ouvrage', 
+            'statut', 'type_marche', 'urgence', 
+            'date_limite_soumission', 'montant', 'ville'
+        ])  
+        ->where('is_accepted',true)
+        ->where('etape','preparation')
+        ->orderBy('date_limite_soumission', 'asc')
+        ->get();
+
+        return Inertia::render('marches-marketing/Users', [
+            'salaries' => $salaries,
+            'marches' => $marches,
+        ]);      
     }
 
 
@@ -589,6 +624,9 @@ class MarchesMarketingController extends Controller
             return redirect()->back()->with('error', 'Erreur lors de l\'envoi de la demande: ' . $e->getMessage());
         }
     }
+
+
+
 }
 
 

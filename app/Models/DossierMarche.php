@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\TacheDossier;
+use App\Models\DocumentDossier;
 
 class DossierMarche extends Model
 {
@@ -50,15 +51,20 @@ class DossierMarche extends Model
     }
 
     // ✅ CORRECTION : Calcul de l'avancement + mise à jour automatique du statut
-    public function calculerAvancement()
+    public function calculerAvancement($forceTermine = false)
 {
     $totalTaches = $this->taches()->count();
     
     if ($totalTaches === 0) {
-        $this->update([
-            'pourcentage_avancement' => 0.00,
-            'statut' => 'en_attente'
-        ]);
+        // Ne pas écraser si modification_requis
+        if ($this->statut !== 'modification_requis') {
+            $this->update([
+                'pourcentage_avancement' => 0.00,
+                'statut' => 'en_attente'
+            ]);
+        } else {
+            $this->update(['pourcentage_avancement' => 0.00]);
+        }
         return 0.00;
     }
 
@@ -68,13 +74,40 @@ class DossierMarche extends Model
     
     $pourcentage = round(($tachesTerminees / $totalTaches) * 100, 2);
     
-    $nouveauStatut = $this->determinerStatut($pourcentage, $totalTaches, $tachesTerminees);
-    
-    $this->update([
-        'pourcentage_avancement' => (float) $pourcentage,
-        'statut' => $nouveauStatut,
-        'date_finalisation' => ($nouveauStatut === 'termine') ? now() : $this->date_finalisation
-    ]);
+    // ✅ Si forceTermine = true (lors du remplacement de fichier)
+    if ($forceTermine && $this->statut === 'modification_requis') {
+        $toutesLesTachesTerminees = ($tachesTerminees === $totalTaches);
+        
+        if ($toutesLesTachesTerminees) {
+            $this->update([
+                'pourcentage_avancement' => 100.00,
+                'statut' => 'termine',
+                'date_finalisation' => now()
+            ]);
+        } else {
+            // Pas toutes les tâches terminées, rester en modification_requis
+            $this->update([
+                'pourcentage_avancement' => (float) $pourcentage
+            ]);
+        }
+    }
+    // Si en modification_requis SANS forceTermine (comportement normal)
+    elseif ($this->statut === 'modification_requis') {
+        // Juste mettre à jour le pourcentage, PAS le statut
+        $this->update([
+            'pourcentage_avancement' => (float) $pourcentage
+        ]);
+    } 
+    // Calcul normal pour les autres statuts
+    else {
+        $nouveauStatut = $this->determinerStatut($pourcentage, $totalTaches, $tachesTerminees);
+        
+        $this->update([
+            'pourcentage_avancement' => (float) $pourcentage,
+            'statut' => $nouveauStatut,
+            'date_finalisation' => ($nouveauStatut === 'termine') ? now() : $this->date_finalisation
+        ]);
+    }
     
     return (float) $pourcentage;
 }
@@ -147,6 +180,11 @@ class DossierMarche extends Model
 public function getPourcentageAvancementNumeriqueAttribute()
 {
     return (float) $this->pourcentage_avancement;
+}
+
+public function fichiers()
+{
+    return $this->hasMany(DocumentDossier::class, 'dossier_marche_id');
 }
 
     

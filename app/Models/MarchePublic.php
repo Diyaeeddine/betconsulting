@@ -4,19 +4,17 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\DossierMarche;
+use App\Models\DocumentDossier;
+use App\Models\ParticipationMarche;
+use App\Models\HistoriqueMarche;
 class MarchePublic extends Model
 {
     use HasFactory;
 
-    /**
-     * Nom de la table (optionnel car Laravel peut le deviner).
-     */
     protected $table = 'marche_public';
 
-    /**
-     * Colonnes remplissables en masse.
-     */
     protected $fillable = [
         'reference',
         'maitre_ouvrage',
@@ -46,9 +44,6 @@ class MarchePublic extends Model
         'etape',
     ];
 
-    /**
-     * Casts automatiques pour certains attributs.
-     */
     protected $casts = [
         'caution_provisoire'     => 'decimal:2',
         'date_ouverture'         => 'date',
@@ -59,4 +54,41 @@ class MarchePublic extends Model
         'chemin_fichiers'        => 'array',
         'is_accepted'            => 'boolean',
     ];
+
+    /**
+     * Relation avec les dossiers du marché
+     */
+    public function dossiers()
+    {
+        return $this->hasMany(DossierMarche::class, 'marche_id');
+    }
+
+    public function fichiers()
+{
+    return $this->hasManyThrough(
+        DocumentDossier::class,
+        DossierMarche::class,
+        'marche_id',
+        'dossier_marche_id'
+    );
+}
+
+public function participants()
+{
+    return $this->hasMany(ParticipationMarche::class, 'marche_id');
+}
+
+public function historiques()
+{
+    return $this->hasMany(HistoriqueMarche::class, 'marche_id');
+}
+
+
+public function participations()
+{
+    return $this->hasMany(ParticipationMarche::class, 'marche_public_id');
+}
+
+
+
 }

@@ -1,8 +1,6 @@
-'use client';
-
 import AppLayout from '@/layouts/app-layout';
 import { router } from '@inertiajs/react';
-import { AlertTriangle, XCircle } from 'lucide-react';
+import { CheckCircle, ChevronDown, ChevronUp, Clock, FileText, Filter, Grid3X3, List, Search, XCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 interface MarchePublic {
@@ -35,6 +33,7 @@ interface MarchePublic {
     etape?: string;
     created_at?: string;
     updated_at?: string;
+    a_modification_requise?: boolean;
 }
 
 interface EnCoursProps {
@@ -57,16 +56,6 @@ const IMPORTANCE_LABELS = {
     ao_bon_commande: 'AO Bon de Commande',
 };
 
-const STATUT_LABELS = {
-    detecte: 'Détecté',
-    evalue: 'Évalué',
-    en_preparation: 'En préparation',
-    soumis: 'Soumis',
-    gagne: 'Gagné',
-    perdu: 'Perdu',
-    annule: 'Annulé',
-};
-
 const TYPE_MARCHE_LABELS = {
     etudes: 'Études',
     assistance_technique: 'Assistance technique',
@@ -84,41 +73,33 @@ const URGENCE_LABELS = {
 export default function EnCours({ marcheP }: EnCoursProps) {
     const [selectedMarche, setSelectedMarche] = useState<MarchePublic | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [hoveredRow, setHoveredRow] = useState<number | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterStatus, setFilterStatus] = useState('tous');
-    const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [confirmAction, setConfirmAction] = useState<'accept' | 'cancel' | null>(null);
+    const [filterUrgence, setFilterUrgence] = useState('tous');
+    const [filterType, setFilterType] = useState('tous');
     const [loading, setLoading] = useState(false);
     const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-    // États pour le modal d'annulation avec motif
-    const [showAnnulationModal, setShowAnnulationModal] = useState(false);
-    const [annulationStep, setAnnulationStep] = useState<'motif' | 'confirmation'>('motif');
-    const [motifAnnulation, setMotifAnnulation] = useState('');
-    const [motifPersonnalise, setMotifPersonnalise] = useState('');
+    // États pour les dropdowns et l'affichage
+    const [sectionStates, setSectionStates] = useState({
+        decision_initial: { collapsed: false },
+        preparation: { collapsed: false },
+        pret_soumission: { collapsed: false },
+    });
+    const [tableView, setTableView] = useState(false);
 
-    // Motifs prédéfinis pour l'annulation
-    const motifsAnnulationPredefinis = [
-        'Changement de priorités stratégiques',
-        'Budget insuffisant ou réalloué',
-        'Contraintes techniques non surmontables',
-        'Délais incompatibles avec les besoins',
-        'Évolution des besoins du projet',
-        'Problèmes réglementaires ou administratifs',
-        'Conditions du marché défavorables',
-        'Autres (préciser ci-dessous)',
-    ];
+    const toggleSection = (section: keyof typeof sectionStates) => {
+        setSectionStates((prev) => ({
+            ...prev,
+            [section]: {
+                ...prev[section],
+                collapsed: !prev[section].collapsed,
+            },
+        }));
+    };
 
     const formatDate = (date: string | undefined | null): string => {
         if (!date) return '-';
         return new Date(date).toLocaleDateString('fr-FR');
-    };
-
-    const formatDateTime = (dateTime: string | undefined | null): string => {
-        if (!dateTime) return '-';
-        return new Date(dateTime).toLocaleDateString('fr-FR') + ' à ' + new Date(dateTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     };
 
     const formatCurrency = (amount: number | string | undefined | null): string => {
@@ -126,97 +107,70 @@ export default function EnCours({ marcheP }: EnCoursProps) {
         return new Intl.NumberFormat('fr-FR').format(Number(amount)) + ' DH';
     };
 
-    const getImportanceLabel = (importance: string | undefined): string => {
-        if (!importance) return '-';
-        return IMPORTANCE_LABELS[importance as keyof typeof IMPORTANCE_LABELS] || importance;
-    };
-
-    const getStatutLabel = (statut: string | undefined): string => {
-        if (!statut) return '-';
-        return STATUT_LABELS[statut as keyof typeof STATUT_LABELS] || statut;
-    };
-
-    const getTypeMarcheLabel = (type: string | undefined): string => {
-        if (!type) return '-';
-        return TYPE_MARCHE_LABELS[type as keyof typeof TYPE_MARCHE_LABELS] || type;
-    };
-
-    const getUrgenceLabel = (urgence: string | undefined): string => {
-        if (!urgence) return '-';
-        return URGENCE_LABELS[urgence as keyof typeof URGENCE_LABELS] || urgence;
+    const getUrgenceColor = (urgence: string | undefined) => {
+        switch (urgence) {
+            case 'faible':
+                return 'bg-green-100 text-green-800 border-green-200';
+            case 'moyenne':
+                return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+            case 'elevee':
+                return 'bg-red-100 text-red-800 border-red-200';
+            default:
+                return 'bg-gray-100 text-gray-800 border-gray-200';
+        }
     };
 
     const getImportanceColor = (importance: string | undefined) => {
         switch (importance) {
             case 'ao_important':
-                return 'bg-red-100 text-red-800';
+                return 'bg-red-100 text-red-800 border-red-200';
             case 'ao_ouvert':
-                return 'bg-blue-100 text-blue-800';
+                return 'bg-blue-100 text-blue-800 border-blue-200';
             case 'ao_simplifie':
-                return 'bg-green-100 text-green-800';
+                return 'bg-green-100 text-green-800 border-green-200';
             case 'ao_restreint':
-                return 'bg-purple-100 text-purple-800';
+                return 'bg-purple-100 text-purple-800 border-purple-200';
             case 'ao_preselection':
-                return 'bg-yellow-100 text-yellow-800';
+                return 'bg-yellow-100 text-yellow-800 border-yellow-200';
             case 'ao_bon_commande':
-                return 'bg-gray-100 text-gray-800';
+                return 'bg-gray-100 text-gray-800 border-gray-200';
             default:
-                return 'bg-gray-100 text-gray-800';
+                return 'bg-gray-100 text-gray-800 border-gray-200';
         }
     };
 
-    const getStatutColor = (statut: string | undefined) => {
-        switch (statut) {
-            case 'detecte':
-                return 'bg-blue-100 text-blue-800';
-            case 'evalue':
-                return 'bg-yellow-100 text-yellow-800';
-            case 'en_preparation':
-                return 'bg-orange-100 text-orange-800';
-            case 'soumis':
-                return 'bg-purple-100 text-purple-800';
-            case 'gagne':
-                return 'bg-green-100 text-green-800';
-            case 'perdu':
-                return 'bg-red-100 text-red-800';
-            case 'annule':
-                return 'bg-gray-100 text-gray-800';
-            default:
-                return 'bg-gray-100 text-gray-800';
-        }
-    };
-
-    const getUrgenceColor = (urgence: string | undefined) => {
-        switch (urgence) {
-            case 'faible':
-                return 'bg-green-100 text-green-800';
-            case 'moyenne':
-                return 'bg-yellow-100 text-yellow-800';
-            case 'elevee':
-                return 'bg-red-100 text-red-800';
-            default:
-                return 'bg-gray-100 text-gray-800';
-        }
-    };
-
-    const filteredMarches = useMemo(() => {
+    // Filtrage et organisation des marchés par étapes
+    const marchesFiltres = useMemo(() => {
         return marcheP.filter((marche) => {
             const matchesSearch =
                 searchTerm === '' ||
                 marche.reference?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 marche.objet?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                marche.maitre_ouvrage?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                marche.ville?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                marche.type_marche?.toLowerCase().includes(searchTerm.toLowerCase());
+                marche.maitre_ouvrage?.toLowerCase().includes(searchTerm.toLowerCase());
 
-            const matchesStatus =
-                filterStatus === 'tous' ||
-                (filterStatus === 'accepte' && marche.is_accepted) ||
-                (filterStatus === 'non_accepte' && !marche.is_accepted);
+            const matchesUrgence = filterUrgence === 'tous' || marche.urgence === filterUrgence;
+            const matchesType = filterType === 'tous' || marche.type_marche === filterType;
 
-            return matchesSearch && matchesStatus;
+            return matchesSearch && matchesUrgence && matchesType;
         });
-    }, [marcheP, searchTerm, filterStatus]);
+    }, [marcheP, searchTerm, filterUrgence, filterType]);
+
+    const marchesByEtape = useMemo(() => {
+        const decision_initial = marchesFiltres.filter((m) => m.etape === 'decision admin');
+        const preparation = marchesFiltres.filter((m) => m.etape === 'preparation');
+        const pret_soumission = marchesFiltres.filter((m) => m.etape === 'pret_soumission' || (m.etape === 'preparation' && m.statut === 'soumis'));
+
+        return {
+            decision_initial,
+            preparation,
+            pret_soumission,
+        };
+    }, [marchesFiltres]);
+
+    const showNotification = (type: 'success' | 'error', message: string) => {
+        setNotification({ type, message });
+        setTimeout(() => setNotification(null), 5000);
+    };
 
     const openModal = (marche: MarchePublic) => {
         setSelectedMarche(marche);
@@ -228,129 +182,260 @@ export default function EnCours({ marcheP }: EnCoursProps) {
         setIsModalOpen(false);
     };
 
-    const showNotification = (type: 'success' | 'error', message: string) => {
-        setNotification({ type, message });
-        setTimeout(() => setNotification(null), 5000);
-    };
-
-    const handleConfirmAction = (action: 'accept' | 'cancel') => {
-        if (action === 'cancel') {
-            openAnnulationModal();
-        } else {
-            setConfirmAction(action);
-            setShowConfirmModal(true);
-        }
-    };
-
-    const openAnnulationModal = () => {
-        setShowAnnulationModal(true);
-        setAnnulationStep('motif');
-        setMotifAnnulation('');
-        setMotifPersonnalise('');
-    };
-
-    const closeAnnulationModal = () => {
-        setShowAnnulationModal(false);
-        setAnnulationStep('motif');
-        setMotifAnnulation('');
-        setMotifPersonnalise('');
-    };
-
-    const proceedToConfirmation = () => {
-        const motifFinal = motifAnnulation === 'Autres (préciser ci-dessous)' ? motifPersonnalise : motifAnnulation;
-        if (motifFinal.trim()) {
-            setAnnulationStep('confirmation');
-        }
-    };
-
-    const confirmAnnulationMarche = async () => {
-        if (!selectedMarche) return;
-
-        const motifFinal = motifAnnulation === 'Autres (préciser ci-dessous)' ? motifPersonnalise : motifAnnulation;
-
+    const handleAcceptMarche = async (marche: MarchePublic) => {
         setLoading(true);
-
         try {
             router.post(
-                `/marches/${selectedMarche.id}/annule`,
-                { motif_annulation: motifFinal },
-                {
-                    preserveState: false,
-                    preserveScroll: true,
-                    onSuccess: () => {
-                        showNotification('success', 'Marché annulé avec succès');
-                        selectedMarche.statut = 'annule';
-                        setShowAnnulationModal(false);
-                        closeModal();
-                    },
-                    onError: (errors) => {
-                        console.error('Erreur Inertia:', errors);
-                        const errorMessage =
-                            typeof errors === 'object' && errors !== null
-                                ? (Object.values(errors)[0] as string) || 'Une erreur est survenue'
-                                : 'Une erreur est survenue';
-                        showNotification('error', errorMessage);
-                    },
-                    onFinish: () => {
-                        setLoading(false);
-                    },
-                },
-            );
-        } catch (error) {
-            console.error('Erreur inattendue:', error);
-            showNotification('error', 'Une erreur inattendue est survenue');
-            setLoading(false);
-            setShowAnnulationModal(false);
-        }
-    };
-
-    const executeAction = async () => {
-        if (!selectedMarche || !confirmAction) return;
-
-        setLoading(true);
-        const endpoint = `/marches/${selectedMarche.id}/accept-initial`;
-
-        try {
-            router.post(
-                endpoint,
+                `/marches/${marche.id}/accept-initial`,
                 {},
                 {
-                    preserveState: true,
-                    preserveScroll: true,
                     onSuccess: () => {
                         showNotification('success', 'Marché accepté avec succès');
-                        selectedMarche.etape = 'decision admin';
-                        selectedMarche.is_accepted = true;
-                        setShowConfirmModal(false);
-                        setConfirmAction(null);
-                        closeModal();
+                        marche.etape = 'preparation';
                     },
                     onError: (errors) => {
-                        console.error('Erreur Inertia:', errors);
-                        const errorMessage =
-                            typeof errors === 'object' && errors !== null
-                                ? (Object.values(errors)[0] as string) || 'Une erreur est survenue'
-                                : 'Une erreur est survenue';
-                        showNotification('error', errorMessage);
+                        showNotification('error', "Erreur lors de l'acceptation");
                     },
-                    onFinish: () => {
-                        setLoading(false);
-                    },
+                    onFinish: () => setLoading(false),
                 },
             );
         } catch (error) {
-            console.error('Erreur inattendue:', error);
             showNotification('error', 'Une erreur inattendue est survenue');
             setLoading(false);
-            setShowConfirmModal(false);
-            setConfirmAction(null);
+        }
+    };
+
+    const handleSoumettre = async (marche: MarchePublic) => {
+        setLoading(true);
+        try {
+            router.post(
+                `/marches/${marche.id}/soumettre`,
+                {},
+                {
+                    onSuccess: () => {
+                        showNotification('success', 'Marché soumis avec succès');
+                        marche.etape = 'soumis';
+                        marche.statut = 'soumis';
+                    },
+                    onError: (errors) => {
+                        showNotification('error', 'Erreur lors de la soumission');
+                    },
+                    onFinish: () => setLoading(false),
+                },
+            );
+        } catch (error) {
+            showNotification('error', 'Une erreur inattendue est survenue');
+            setLoading(false);
         }
     };
 
     const clearFilters = () => {
         setSearchTerm('');
-        setFilterStatus('tous');
+        setFilterUrgence('tous');
+        setFilterType('tous');
     };
+
+    const MarcheCard = ({ marche, actions }: { marche: MarchePublic; actions?: React.ReactNode }) => {
+        const joursRestants = marche.date_limite_soumission
+            ? Math.ceil((new Date(marche.date_limite_soumission).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+            : null;
+
+        const isClickable = marche.etape === 'preparation';
+
+        return (
+            <div
+                className={`rounded-lg border ${marche.a_modification_requise ? 'border-2' : 'border-gray-200'} bg-white p-4 transition-shadow hover:shadow-md ${
+                    isClickable ? 'cursor-pointer hover:border-blue-300' : ''
+                }`}
+                onClick={isClickable ? () => router.visit(`/marches-marketing/${marche.id}/dossiers`) : () => openModal(marche)}
+            >
+                {/* ✅ ALERTE MODIFICATION REQUISE */}
+                {marche.a_modification_requise && (
+                    <div className="mb-3 flex items-center gap-2 rounded-md border border-orange-200 bg-orange-50 px-3 py-2">
+                        <svg className="h-4 w-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path
+                                fillRule="evenodd"
+                                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                clipRule="evenodd"
+                            />
+                        </svg>
+                        <span className="text-xs font-medium text-orange-800">Modifications requises</span>
+                    </div>
+                )}
+
+                <div className="mb-3 flex items-start justify-between">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-blue-600">{marche.reference || 'N/A'}</span>
+                        {marche.importance && (
+                            <span
+                                className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${getImportanceColor(marche.importance)}`}
+                            >
+                                {IMPORTANCE_LABELS[marche.importance]}
+                            </span>
+                        )}
+                    </div>
+                    {marche.urgence && (
+                        <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${getUrgenceColor(marche.urgence)}`}>
+                            {URGENCE_LABELS[marche.urgence]}
+                        </span>
+                    )}
+                </div>
+                <h3 className="mb-3 line-clamp-2 text-sm font-medium text-gray-900">{marche.objet || 'Objet non spécifié'}</h3>
+
+                <div className="mb-4 space-y-2 text-xs text-gray-600">
+                    <div className="flex justify-between">
+                        <span>M.O:</span>
+                        <span className="ml-2 truncate font-medium">{marche.maitre_ouvrage || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span>Type:</span>
+                        <span className="font-medium">{TYPE_MARCHE_LABELS[marche.type_marche as keyof typeof TYPE_MARCHE_LABELS] || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span>Budget:</span>
+                        <span className="font-medium text-green-600">{marche.budget || '-'}</span>
+                    </div>
+                    {joursRestants !== null && (
+                        <div className="flex justify-between">
+                            <span>Délai:</span>
+                            <span
+                                className={`font-medium ${joursRestants < 7 ? 'text-red-600' : joursRestants < 15 ? 'text-orange-600' : 'text-green-600'}`}
+                            >
+                                {joursRestants > 0 ? `${joursRestants} jours` : 'Expiré'}
+                            </span>
+                        </div>
+                    )}
+                    <div className="flex justify-between">
+                        <span>Ville:</span>
+                        <span className="font-medium">{marche.ville || '-'}</span>
+                    </div>
+                </div>
+
+                {actions && (
+                    <div className="border-t pt-3" onClick={(e) => e.stopPropagation()}>
+                        {actions}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    const MarcheTable = ({ marches, actions }: { marches: MarchePublic[]; actions?: (marche: MarchePublic) => React.ReactNode }) => {
+        return (
+            <div className="overflow-x-auto">
+                <table className="min-w-full rounded-lg border border-gray-200 bg-white">
+                    <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Référence</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Objet</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">M.O</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Budget</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Délai</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Urgence</th>
+                            {actions && <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Actions</th>}
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                        {marches.map((marche) => {
+                            const joursRestants = marche.date_limite_soumission
+                                ? Math.ceil((new Date(marche.date_limite_soumission).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+                                : null;
+
+                            const isClickable = marche.etape === 'preparation';
+
+                            return (
+                                <tr
+                                    key={marche.id}
+                                    className={`hover:bg-gray-50 ${isClickable ? 'cursor-pointer' : ''} ${marche.a_modification_requise ? 'bg-orange-50' : ''}`}
+                                    onClick={isClickable ? () => router.visit(`/marches-marketing/${marche.id}/dossiers`) : () => openModal(marche)}
+                                >
+                                    <td className="px-4 py-3 text-sm">
+                                        <div className="flex items-center gap-2">
+                                            {/* ✅ AJOUTER CETTE ICÔNE */}
+                                            {marche.a_modification_requise && (
+                                                <svg className="h-4 w-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path
+                                                        fillRule="evenodd"
+                                                        d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                                        clipRule="evenodd"
+                                                    />
+                                                </svg>
+                                            )}
+                                            <span className="font-semibold text-blue-600">{marche.reference || 'N/A'}</span>
+                                            {marche.importance && (
+                                                <span
+                                                    className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${getImportanceColor(marche.importance)}`}
+                                                >
+                                                    {IMPORTANCE_LABELS[marche.importance]}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="max-w-xs truncate px-4 py-3 text-sm text-gray-900">{marche.objet || 'Objet non spécifié'}</td>
+                                    <td className="max-w-xs truncate px-4 py-3 text-sm text-gray-900">{marche.maitre_ouvrage || '-'}</td>
+                                    <td className="px-4 py-3 text-sm font-medium text-green-600">{marche.budget || '-'}</td>
+                                    <td className="px-4 py-3 text-sm">
+                                        {joursRestants !== null && (
+                                            <span
+                                                className={`font-medium ${joursRestants < 7 ? 'text-red-600' : joursRestants < 15 ? 'text-orange-600' : 'text-green-600'}`}
+                                            >
+                                                {joursRestants > 0 ? `${joursRestants} jours` : 'Expiré'}
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm">
+                                        {marche.urgence && (
+                                            <span
+                                                className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${getUrgenceColor(marche.urgence)}`}
+                                            >
+                                                {URGENCE_LABELS[marche.urgence]}
+                                            </span>
+                                        )}
+                                    </td>
+                                    {actions && (
+                                        <td className="px-4 py-3 text-sm" onClick={(e) => e.stopPropagation()}>
+                                            {actions(marche)}
+                                        </td>
+                                    )}
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        );
+    };
+
+    const SectionHeader = ({
+        icon,
+        title,
+        count,
+        sectionKey,
+        color = 'text-gray-900',
+        hint,
+    }: {
+        icon: React.ReactNode;
+        title: string;
+        count: number;
+        sectionKey: keyof typeof sectionStates;
+        color?: string;
+        hint?: string;
+    }) => (
+        <div className="mb-4 flex items-center justify-between">
+            <button
+                onClick={() => toggleSection(sectionKey)}
+                className="flex items-center gap-2 text-xl font-semibold transition-colors hover:text-blue-600"
+            >
+                {icon}
+                <span className={color}>
+                    {title} ({count})
+                </span>
+                {sectionStates[sectionKey].collapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
+            </button>
+
+            {hint && <div className="rounded-full bg-blue-50 px-3 py-1 text-sm text-gray-600">{hint}</div>}
+        </div>
+    );
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -361,827 +446,299 @@ export default function EnCours({ marcheP }: EnCoursProps) {
                             notification.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
                         }`}
                     >
-                        <div className="flex items-center">
-                            <div className="flex-shrink-0">
-                                {notification.type === 'success' ? (
-                                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                                        <path
-                                            fillRule="evenodd"
-                                            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                                            clipRule="evenodd"
-                                        />
-                                    </svg>
-                                ) : (
-                                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                                        <path
-                                            fillRule="evenodd"
-                                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                                            clipRule="evenodd"
-                                        />
-                                    </svg>
-                                )}
-                            </div>
-                            <div className="ml-3">
-                                <p className="text-sm font-medium">{notification.message}</p>
-                            </div>
-                        </div>
+                        {notification.message}
                     </div>
                 )}
 
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                    {/* En-tête */}
                     <div className="mb-8">
-                        <div className="border-l-4 border-[#155DFC] pl-4">
-                            <h1 className="text-3xl font-bold text-gray-900">Marchés Publics en Cours</h1>
-                            <p className="mt-1 text-gray-600">Suivi des appels d'offres actuellement en cours de traitement</p>
+                        <div className="border-l-4 border-blue-600 pl-4">
+                            <h1 className="text-3xl font-bold text-gray-900">Marchés en Cours</h1>
+                            <p className="mt-1 text-gray-600">Suivi par étapes du processus d'appels d'offres</p>
                         </div>
                     </div>
 
+                    {/* Filtres */}
                     <div className="mb-6 rounded-lg bg-white p-6 shadow-sm">
-                        <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0 md:space-x-4">
-                            <div className="relative flex-1">
-                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                                        />
-                                    </svg>
+                        <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-5">
+                            <div>
+                                <label className="mb-2 block text-sm font-medium text-gray-700">Recherche</label>
+                                <div className="relative">
+                                    <Search className="absolute top-3 left-3 h-4 w-4 text-gray-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Référence, objet, M.O..."
+                                        className="w-full rounded-md border border-gray-300 py-2 pr-3 pl-10 focus:border-blue-500 focus:ring-blue-500"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                    />
                                 </div>
-                                <input
-                                    type="text"
-                                    placeholder="Rechercher par référence, objet, maître d'ouvrage, ville ou type de marché..."
-                                    className="block w-full rounded-md border border-gray-300 bg-white py-2 pr-3 pl-10 leading-5 placeholder-gray-500 focus:border-[#155DFC] focus:placeholder-gray-400 focus:ring-1 focus:ring-[#155DFC] focus:outline-none"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                />
                             </div>
 
-                            <div className="flex items-center space-x-4">
-                                <select
-                                    className="block rounded-md border border-gray-300 bg-white px-3 py-2 shadow-sm focus:border-[#155DFC] focus:ring-[#155DFC] focus:outline-none"
-                                    value={filterStatus}
-                                    onChange={(e) => setFilterStatus(e.target.value)}
+                            <div>
+                                <label className="mb-2 block text-sm font-medium text-gray-700">Affichage</label>
+                                <button
+                                    onClick={() => setTableView(!tableView)}
+                                    className="flex w-full items-center justify-center gap-2 rounded-md border border-gray-300 px-3 py-2 text-gray-700 transition-colors hover:bg-gray-50"
+                                    title={tableView ? 'Affichage en cartes' : 'Affichage en tableau'}
                                 >
-                                    <option value="tous">Tous les statuts</option>
-                                    <option value="accepte">Acceptés</option>
-                                    <option value="non_accepte">Non acceptés</option>
-                                </select>
-
-                                {(searchTerm || filterStatus !== 'tous') && (
-                                    <button
-                                        onClick={clearFilters}
-                                        className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-[#155DFC] focus:outline-none"
-                                    >
-                                        <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                        Effacer
-                                    </button>
-                                )}
-
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => setViewMode('grid')}
-                                        className={`rounded p-2 ${viewMode === 'grid' ? 'bg-[#155DFC] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                                    >
-                                        <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                                            <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                                        </svg>
-                                    </button>
-                                    <button
-                                        onClick={() => setViewMode('list')}
-                                        className={`rounded p-2 ${viewMode === 'list' ? 'bg-[#155DFC] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                                    >
-                                        <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                                            <path
-                                                fillRule="evenodd"
-                                                d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
-                                                clipRule="evenodd"
-                                            />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="text-sm whitespace-nowrap text-gray-500">
-                                {filteredMarches.length} marché{filteredMarches.length > 1 ? 's' : ''} trouvé
-                                {filteredMarches.length > 1 ? 's' : ''}
-                            </div>
-                        </div>
-                    </div>
-
-                    {filteredMarches.length === 0 ? (
-                        <div className="rounded-lg bg-white p-12 text-center shadow-sm">
-                            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                />
-                            </svg>
-                            <h3 className="mt-4 text-lg font-medium text-gray-900">
-                                {searchTerm || filterStatus !== 'tous' ? 'Aucun résultat trouvé' : 'Aucun marché en cours'}
-                            </h3>
-                            <p className="mt-2 text-gray-500">
-                                {searchTerm || filterStatus !== 'tous'
-                                    ? 'Essayez de modifier vos critères de recherche.'
-                                    : "Il n'y a aucun marché public en cours pour le moment."}
-                            </p>
-                        </div>
-                    ) : (
-                        <>
-                            {viewMode === 'grid' ? (
-                                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
-                                    {filteredMarches.map((marche: MarchePublic) => (
-                                        <div
-                                            key={marche.id}
-                                            className="relative cursor-pointer rounded-lg bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
-                                            onClick={() => openModal(marche)}
-                                        >
-                                            <div className="mb-2 flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm font-semibold text-[#155DFC]">{marche.reference || 'N/A'}</span>
-                                                    {marche.importance && (
-                                                        <span
-                                                            className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getImportanceColor(marche.importance)}`}
-                                                        >
-                                                            {getImportanceLabel(marche.importance)}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                {marche.urgence && (
-                                                    <span
-                                                        className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getUrgenceColor(marche.urgence)}`}
-                                                    >
-                                                        {getUrgenceLabel(marche.urgence)}
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            <h3 className="mb-3 line-clamp-2 text-sm font-medium text-gray-900">
-                                                {marche.objet || 'Objet non spécifié'}
-                                            </h3>
-
-                                            <div className="space-y-2 text-xs text-gray-600">
-                                                <div className="flex justify-between">
-                                                    <span>M.O:</span>
-                                                    <span className="font-medium">{marche.maitre_ouvrage || '-'}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Type:</span>
-                                                    <span className="font-medium">{getTypeMarcheLabel(marche.type_marche)}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Statut:</span>
-                                                    <span
-                                                        className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getStatutColor(marche.statut)}`}
-                                                    >
-                                                        {getStatutLabel(marche.statut)}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Budget:</span>
-                                                    <span className="font-medium text-green-600">{marche.budget || '-'}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Caution:</span>
-                                                    <span className="font-medium">{formatCurrency(marche.caution_provisoire)}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Date limite:</span>
-                                                    <span className="font-medium">{formatDate(marche.date_limite_soumission)}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Ville:</span>
-                                                    <span className="font-medium">{marche.ville || '-'}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="rounded-lg bg-white shadow-sm">
-                                    <div className="border-b border-gray-200 px-6 py-4">
-                                        <h2 className="text-lg font-semibold text-gray-900">Liste des Marchés</h2>
-                                        <p className="mt-1 text-sm text-gray-500">Cliquez sur une ligne pour voir les détails complets</p>
-                                    </div>
-
-                                    <div className="px-6 py-4">
-                                        <div className="overflow-x-auto">
-                                            <table className="min-w-full divide-y divide-gray-200">
-                                                <thead>
-                                                    <tr className="bg-gray-50">
-                                                        <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                            Référence
-                                                        </th>
-                                                        <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                            Type Marché
-                                                        </th>
-                                                        <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                            Importance
-                                                        </th>
-                                                        <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                            Statut
-                                                        </th>
-                                                        <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                            Objet
-                                                        </th>
-                                                        <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                            M.O
-                                                        </th>
-                                                        <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                            Budget
-                                                        </th>
-                                                        <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                            Caution
-                                                        </th>
-                                                        <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                            Date Limite
-                                                        </th>
-                                                        <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                            Ville
-                                                        </th>
-                                                        <th className="px-4 py-3 text-right text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                            Actions
-                                                        </th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-gray-200 bg-white">
-                                                    {filteredMarches.map((marche: MarchePublic, index: number) => (
-                                                        <tr
-                                                            key={marche.id}
-                                                            className={`cursor-pointer transition-colors duration-200 ${
-                                                                hoveredRow === index
-                                                                    ? 'bg-blue-50'
-                                                                    : index % 2 === 0
-                                                                      ? 'bg-white hover:bg-gray-50'
-                                                                      : 'bg-gray-50 hover:bg-gray-100'
-                                                            }`}
-                                                            onClick={() => openModal(marche)}
-                                                            onMouseEnter={() => setHoveredRow(index)}
-                                                            onMouseLeave={() => setHoveredRow(null)}
-                                                        >
-                                                            <td className="px-4 py-4 whitespace-nowrap">
-                                                                <div className="flex items-center">
-                                                                    <div
-                                                                        className={`text-sm font-medium ${hoveredRow === index ? 'font-bold text-[#155DFC]' : 'text-[#155DFC]'}`}
-                                                                    >
-                                                                        {marche.reference || '-'}
-                                                                    </div>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-4 whitespace-nowrap">
-                                                                <div className="text-sm text-gray-900">{getTypeMarcheLabel(marche.type_marche)}</div>
-                                                            </td>
-                                                            <td className="px-4 py-4 whitespace-nowrap">
-                                                                {marche.importance ? (
-                                                                    <span
-                                                                        className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getImportanceColor(marche.importance)}`}
-                                                                    >
-                                                                        {getImportanceLabel(marche.importance)}
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="text-sm text-gray-500">-</span>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-4 py-4 whitespace-nowrap">
-                                                                <span
-                                                                    className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getStatutColor(marche.statut)}`}
-                                                                >
-                                                                    {getStatutLabel(marche.statut)}
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-4 py-4">
-                                                                <div className="max-w-xs truncate text-sm text-gray-900" title={marche.objet}>
-                                                                    {marche.objet || '-'}
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-4 whitespace-nowrap">
-                                                                <div className="text-sm text-gray-900">{marche.maitre_ouvrage || '-'}</div>
-                                                            </td>
-                                                            <td className="px-4 py-4 whitespace-nowrap">
-                                                                <div className="text-sm font-medium text-gray-900">
-                                                                    {marche.budget || '-'}
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-4 whitespace-nowrap">
-                                                                <div className="text-sm text-gray-900">{formatCurrency(marche.caution_provisoire)}</div>
-                                                            </td>
-                                                            <td className="px-4 py-4 whitespace-nowrap">
-                                                                <div className="text-sm text-gray-900">{formatDate(marche.date_limite_soumission)}</div>
-                                                            </td>
-                                                            <td className="px-4 py-4 whitespace-nowrap">
-                                                                <div className="text-sm text-gray-900">{marche.ville || '-'}</div>
-                                                            </td>
-                                                            <td className="px-4 py-4 text-right text-sm font-medium whitespace-nowrap">
-                                                                {marche.statut !== 'annule' && (
-                                                                    <div className="flex justify-end gap-2">
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                setSelectedMarche(marche);
-                                                                                handleConfirmAction('accept');
-                                                                            }}
-                                                                            className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700"
-                                                                        >
-                                                                            <svg
-                                                                                className="h-3 w-3"
-                                                                                fill="none"
-                                                                                stroke="currentColor"
-                                                                                viewBox="0 0 24 24"
-                                                                            >
-                                                                                <path
-                                                                                    strokeLinecap="round"
-                                                                                    strokeLinejoin="round"
-                                                                                    strokeWidth={2}
-                                                                                    d="M5 13l4 4L19 7"
-                                                                                />
-                                                                            </svg>
-                                                                            Accepter
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                setSelectedMarche(marche);
-                                                                                handleConfirmAction('cancel');
-                                                                            }}
-                                                                            className="inline-flex items-center gap-1 rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"
-                                                                        >
-                                                                            <svg
-                                                                                className="h-3 w-3"
-                                                                                fill="none"
-                                                                                stroke="currentColor"
-                                                                                viewBox="0 0 24 24"
-                                                                            >
-                                                                                <path
-                                                                                    strokeLinecap="round"
-                                                                                    strokeLinejoin="round"
-                                                                                    strokeWidth={2}
-                                                                                    d="M6 18L18 6M6 6l12 12"
-                                                                                />
-                                                                            </svg>
-                                                                            Annuler
-                                                                        </button>
-                                                                    </div>
-                                                                )}
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-
-                                    {filteredMarches.length > 0 && (
-                                        <div className="border-t border-gray-200 bg-gray-50 px-6 py-3">
-                                            <div className="flex items-center justify-between">
-                                                <div className="text-sm text-gray-500">
-                                                    Affichage de {filteredMarches.length} marché{filteredMarches.length > 1 ? 's' : ''}
-                                                </div>
-                                              <div className="text-sm text-gray-500">
-                                                    Dernière mise à jour : {new Date().toLocaleDateString('fr-FR')}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </>
-                    )}
-                </div>
-
-                {isModalOpen && selectedMarche && (
-                    <div className="fixed inset-0 z-50 overflow-y-auto">
-                        <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-                            <div className="bg-opacity-75 fixed inset-0 bg-gray-500 transition-opacity" onClick={closeModal}></div>
-
-                            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-5xl">
-                                <div className="bg-white px-6 py-6">
-                                    <div className="flex items-center justify-between border-b border-gray-200 pb-4">
-                                        <h3 className="text-xl font-bold text-gray-900">Détails du Marché Public</h3>
-                                        <button
-                                            onClick={closeModal}
-                                            className="rounded-md bg-white text-gray-400 hover:text-gray-600 focus:ring-2 focus:ring-[#155DFC] focus:outline-none"
-                                        >
-                                            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    </div>
-
-                                    <div className="mt-6 max-h-96 overflow-y-auto">
-                                        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                                            <div className="space-y-4">
-                                                <h4 className="border-b border-gray-300 pb-2 text-sm font-bold tracking-wide text-gray-900 uppercase">
-                                                    Informations Générales
-                                                </h4>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Référence</dt>
-                                                    <dd className="mt-1 text-sm font-semibold text-gray-900">{selectedMarche.reference || '-'}</dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Type de Marché</dt>
-                                                    <dd className="mt-1 text-sm text-gray-900">{getTypeMarcheLabel(selectedMarche.type_marche)}</dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Importance</dt>
-                                                    <dd className="mt-1">
-                                                        {selectedMarche.importance ? (
-                                                            <span
-                                                                className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getImportanceColor(selectedMarche.importance)}`}
-                                                            >
-                                                                {getImportanceLabel(selectedMarche.importance)}
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-sm text-gray-900">-</span>
-                                                        )}
-                                                    </dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Maître d'Ouvrage</dt>
-                                                    <dd className="mt-1 text-sm text-gray-900">{selectedMarche.maitre_ouvrage || '-'}</dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Statut</dt>
-                                                    <dd className="mt-1">
-                                                        <span
-                                                            className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getStatutColor(selectedMarche.statut)}`}
-                                                        >
-                                                            {getStatutLabel(selectedMarche.statut)}
-                                                        </span>
-                                                    </dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Urgence</dt>
-                                                    <dd className="mt-1">
-                                                        <span
-                                                            className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getUrgenceColor(selectedMarche.urgence)}`}
-                                                        >
-                                                            {getUrgenceLabel(selectedMarche.urgence)}
-                                                        </span>
-                                                    </dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Étape</dt>
-                                                    <dd className="mt-1 text-sm text-gray-900">{selectedMarche.etape || '-'}</dd>
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-4">
-                                                <h4 className="border-b border-gray-300 pb-2 text-sm font-bold tracking-wide text-gray-900 uppercase">
-                                                    Informations Financières & Dates
-                                                </h4>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Budget</dt>
-                                                    <dd className="mt-1 text-sm font-semibold text-gray-900">
-                                                        {selectedMarche.budget || '-'}
-                                                    </dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Montant</dt>
-                                                    <dd className="mt-1 text-sm font-semibold text-gray-900">
-                                                        {selectedMarche.montant || '-'}
-                                                    </dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Caution Provisoire</dt>
-                                                    <dd className="mt-1 text-sm font-semibold text-gray-900">
-                                                        {formatCurrency(selectedMarche.caution_provisoire)}
-                                                    </dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Date Publication</dt>
-                                                    <dd className="mt-1 text-sm text-gray-900">
-                                                        {formatDateTime(selectedMarche.date_publication)}
-                                                    </dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Date Limite Soumission</dt>
-                                                    <dd className="mt-1 text-sm text-gray-900">
-                                                        {formatDateTime(selectedMarche.date_limite_soumission)}
-                                                    </dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Date Ouverture</dt>
-                                                    <dd className="mt-1 text-sm text-gray-900">{formatDate(selectedMarche.date_ouverture)}</dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Date Adjudications</dt>
-                                                    <dd className="mt-1 text-sm text-gray-900">{formatDate(selectedMarche.date_adjudications)}</dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Date Affichage</dt>
-                                                    <dd className="mt-1 text-sm text-gray-900">{formatDate(selectedMarche.date_affichage)}</dd>
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-4">
-                                                <h4 className="border-b border-gray-300 pb-2 text-sm font-bold tracking-wide text-gray-900 uppercase">
-                                                    Informations Géographiques & Liens
-                                                </h4>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Ville</dt>
-                                                    <dd className="mt-1 text-sm text-gray-900">{selectedMarche.ville || '-'}</dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Zone Géographique</dt>
-                                                    <dd className="mt-1 text-sm text-gray-900">{selectedMarche.zone_geographique || '-'}</dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">PV</dt>
-                                                    <dd className="mt-1 text-sm text-gray-900">{selectedMarche.pv || '-'}</dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">DAO</dt>
-                                                    <dd className="mt-1 text-sm text-gray-900">{selectedMarche.dao || '-'}</dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Adjudicataire</dt>
-                                                    <dd className="mt-1 text-sm text-gray-900">{selectedMarche.adjudicataire || '-'}</dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Lien DAO</dt>
-                                                    <dd className="mt-1 text-sm text-gray-900">
-                                                        {selectedMarche.lien_dao ? (
-                                                            <a
-                                                                className="text-blue-600 underline hover:text-blue-800"
-                                                                href={selectedMarche.lien_dao}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                            >
-                                                                Lien vers DAO
-                                                            </a>
-                                                        ) : (
-                                                            '-'
-                                                        )}
-                                                    </dd>
-                                                </div>
-
-                                                <div>
-                                                    <dt className="text-sm font-medium text-gray-600">Lien PV</dt>
-                                                    <dd className="mt-1 text-sm text-gray-900">
-                                                        {selectedMarche.lien_pv ? (
-                                                            <a
-                                                                className="text-blue-600 underline hover:text-blue-800"
-                                                                href={selectedMarche.lien_pv}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                            >
-                                                                Lien vers PV
-                                                            </a>
-                                                        ) : (
-                                                            '-'
-                                                        )}
-                                                    </dd>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="mt-8 space-y-6 border-t border-gray-200 pt-6">
-                                            <h4 className="text-sm font-bold tracking-wide text-gray-900 uppercase">Objet du Marché</h4>
-
-                                            {selectedMarche.objet && (
-                                                <div>
-                                                    <dd className="mt-1 rounded bg-gray-50 p-3 text-sm text-gray-900">{selectedMarche.objet}</dd>
-                                                </div>
-                                            )}
-
-                                            <div className="flex justify-between border-t border-gray-100 pt-4 text-xs text-gray-500">
-                                                <div>Créé le : {formatDate(selectedMarche.created_at)}</div>
-                                                <div>Modifié le : {formatDate(selectedMarche.updated_at)}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="flex justify-end space-x-3 bg-gray-50 px-6 py-4">
-                                    {selectedMarche.statut !== 'annule' && (
+                                    {tableView ? (
                                         <>
-                                            <button
-                                                type="button"
-                                                className="inline-flex items-center rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:outline-none"
-                                                onClick={() => handleConfirmAction('accept')}
-                                            >
-                                                <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                </svg>
-                                                Acceptation Initiale
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="inline-flex items-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:outline-none"
-                                                onClick={() => handleConfirmAction('cancel')}
-                                            >
-                                                <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
-                                                Annuler ce Marché
-                                            </button>
+                                            <Grid3X3 className="h-4 w-4" /> Cartes
+                                        </>
+                                    ) : (
+                                        <>
+                                            <List className="h-4 w-4" /> Tableau
                                         </>
                                     )}
+                                </button>
+                            </div>
+
+                            <div>
+                                <label className="mb-2 block text-sm font-medium text-gray-700">Urgence</label>
+                                <select
+                                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
+                                    value={filterUrgence}
+                                    onChange={(e) => setFilterUrgence(e.target.value)}
+                                >
+                                    <option value="tous">Toutes</option>
+                                    <option value="elevee">Élevée</option>
+                                    <option value="moyenne">Moyenne</option>
+                                    <option value="faible">Faible</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="mb-2 block text-sm font-medium text-gray-700">Type de marché</label>
+                                <select
+                                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
+                                    value={filterType}
+                                    onChange={(e) => setFilterType(e.target.value)}
+                                >
+                                    <option value="tous">Tous les types</option>
+                                    <option value="etudes">Études</option>
+                                    <option value="assistance_technique">Assistance technique</option>
+                                    <option value="batiment">Bâtiment</option>
+                                    <option value="voirie">Voirie</option>
+                                    <option value="hydraulique">Hydraulique</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                {(searchTerm || filterUrgence !== 'tous' || filterType !== 'tous') && (
                                     <button
-                                        type="button"
-                                        className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-gray-300 focus:outline-none"
-                                        onClick={closeModal}
+                                        onClick={clearFilters}
+                                        className="flex items-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50"
                                     >
-                                        Fermer
+                                        <Filter className="h-4 w-4" />
+                                        Effacer filtres
                                     </button>
-                                </div>
+                                )}
                             </div>
                         </div>
                     </div>
-                )}
 
-                {/* Modal d'annulation reste inchangé */}
-                {showAnnulationModal && selectedMarche && (
-                    <div className="bg-opacity-50 fixed inset-0 z-60 flex items-center justify-center bg-black">
-                        <div className="mx-4 w-full max-w-md rounded-lg bg-white shadow-xl">
-                            {annulationStep === 'motif' && (
+                    {/* Sections par étapes */}
+                    <div className="space-y-8">
+                        <div>
+                            <SectionHeader
+                                icon={<Clock className="h-5 w-5 text-orange-500" />}
+                                title="Validation Initiale"
+                                count={marchesByEtape.decision_initial.length}
+                                sectionKey="decision_initial"
+                            />
+
+                            {!sectionStates.decision_initial.collapsed && (
                                 <>
-                                    <div className="border-b border-gray-200 px-6 py-4">
-                                        <div className="flex items-center">
-                                            <div className="mr-3 flex-shrink-0">
-                                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
-                                                    <XCircle className="h-6 w-6 text-red-600" />
+                                    {marchesByEtape.decision_initial.length === 0 ? (
+                                        <div className="rounded-lg bg-white p-8 text-center">
+                                            <Clock className="mx-auto mb-4 h-12 w-12 text-gray-300" />
+                                            <p className="text-gray-500">Aucun marché en attente de validation administrative</p>
+                                        </div>
+                                    ) : tableView ? (
+                                        <MarcheTable
+                                            marches={marchesByEtape.decision_initial}
+                                            // actions={(marche) => (
+                                            //     <button
+                                            //         onClick={() => handleAcceptMarche(marche)}
+                                            //         disabled={loading}
+                                            //         className="rounded-md bg-orange-600 px-3 py-1 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+                                            //     >
+                                            //         Accepter
+                                            //     </button>
+                                            // )}
+                                        />
+                                    ) : (
+                                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                            {marchesByEtape.decision_initial.map((marche) => (
+                                                <MarcheCard
+                                                    key={marche.id}
+                                                    marche={marche}
+                                                    // actions={
+                                                    //     <button
+                                                    //         onClick={() => handleAcceptMarche(marche)}
+                                                    //         disabled={loading}
+                                                    //         className="w-full rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+                                                    //     >
+                                                    //         Accepter
+                                                    //     </button>
+                                                    // }
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        {/* Section Préparation */}
+                        <div>
+                            <SectionHeader
+                                icon={<FileText className="h-5 w-5 text-blue-500" />}
+                                title="Préparation des Dossiers"
+                                count={marchesByEtape.preparation.length}
+                                sectionKey="preparation"
+                               
+                            />
+
+                            {!sectionStates.preparation.collapsed && (
+                                <>
+                                    {marchesByEtape.preparation.length === 0 ? (
+                                        <div className="rounded-lg bg-white p-8 text-center">
+                                            <FileText className="mx-auto mb-4 h-12 w-12 text-gray-300" />
+                                            <p className="text-gray-500">Aucun marché en préparation</p>
+                                        </div>
+                                    ) : tableView ? (
+                                        <MarcheTable marches={marchesByEtape.preparation} />
+                                    ) : (
+                                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                            {marchesByEtape.preparation.map((marche) => (
+                                                <MarcheCard key={marche.id} marche={marche} />
+                                            ))}
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        {/* Section Prêt à Soumettre */}
+                        <div>
+                            <SectionHeader
+                                icon={<CheckCircle className="h-5 w-5 text-green-500" />}
+                                title="Prêt à Soumettre"
+                                count={marchesByEtape.pret_soumission.length}
+                                sectionKey="pret_soumission"
+                            />
+
+                            {!sectionStates.pret_soumission.collapsed && (
+                                <>
+                                    {marchesByEtape.pret_soumission.length === 0 ? (
+                                        <div className="rounded-lg bg-white p-8 text-center">
+                                            <CheckCircle className="mx-auto mb-4 h-12 w-12 text-gray-300" />
+                                            <p className="text-gray-500">Aucun marché prêt à être soumis</p>
+                                        </div>
+                                    ) : tableView ? (
+                                        <MarcheTable
+                                            marches={marchesByEtape.pret_soumission}
+                                            actions={(marche) => (
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => router.visit(`/marches/${marche.id}/revision`)}
+                                                        className="rounded-md bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700"
+                                                    >
+                                                        Réviser
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleSoumettre(marche)}
+                                                        disabled={loading}
+                                                        className="rounded-md bg-green-600 px-3 py-1 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                                                    >
+                                                        Soumettre
+                                                    </button>
                                                 </div>
-                                            </div>
-                                            <div>
-                                                <h3 className="text-lg font-medium text-gray-900">Motif d'annulation</h3>
-                                                <p className="text-sm text-gray-500">Marché {selectedMarche.reference}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="px-6 py-4">
-                                        <div className="mb-4">
-                                            <p className="mb-2 text-sm text-gray-700">
-                                                <strong>Motif sélectionné :</strong>
-                                            </p>
-                                            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                                                <p className="text-sm text-gray-800">
-                                                    {motifAnnulation === 'Autres (préciser ci-dessous)' ? motifPersonnalise : motifAnnulation}
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-                                            <div className="flex">
-                                                <AlertTriangle className="mt-0.5 mr-2 h-5 w-5 flex-shrink-0 text-red-400" />
-                                                <div className="text-sm text-red-700">
-                                                    <p className="font-medium">Attention</p>
-                                                    <p>L'annulation de ce marché sera définitive. L'équipe sera automatiquement notifiée.</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="border-t border-gray-200 bg-gray-50 px-6 py-4">
-                                        <div className="flex justify-between">
-                                            <button
-                                                onClick={() => setAnnulationStep('motif')}
-                                                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-gray-500 focus:outline-none"
-                                                disabled={loading}
-                                            >
-                                                ← Retour
-                                            </button>
-                                            <div className="flex space-x-3">
-                                                <button
-                                                    onClick={closeAnnulationModal}
-                                                    className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-gray-500 focus:outline-none"
-                                                    disabled={loading}
-                                                >
-                                                    Annuler
-                                                </button>
-                                                <button
-                                                    onClick={confirmAnnulationMarche}
-                                                    disabled={loading}
-                                                    className="flex items-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                                >
-                                                    {loading ? (
-                                                        <>
-                                                            <svg
-                                                                className="mr-2 -ml-1 h-4 w-4 animate-spin text-white"
-                                                                fill="none"
-                                                                viewBox="0 0 24 24"
+                                            )}
+                                        />
+                                    ) : (
+                                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                            {marchesByEtape.pret_soumission.map((marche) => (
+                                                <MarcheCard
+                                                    key={marche.id}
+                                                    marche={marche}
+                                                    actions={
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={() => router.visit(`/marches/${marche.id}/revision`)}
+                                                                className="flex-1 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
                                                             >
-                                                                <circle
-                                                                    className="opacity-25"
-                                                                    cx="12"
-                                                                    cy="12"
-                                                                    r="10"
-                                                                    stroke="currentColor"
-                                                                    strokeWidth="4"
-                                                                ></circle>
-                                                                <path
-                                                                    className="opacity-75"
-                                                                    fill="currentColor"
-                                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                                                ></path>
-                                                            </svg>
-                                                            Annulation en cours...
-                                                        </>
-                                                    ) : (
-                                                        "Confirmer l'annulation"
-                                                    )}
-                                                </button>
-                                            </div>
+                                                                Réviser
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleSoumettre(marche)}
+                                                                disabled={loading}
+                                                                className="flex-1 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                                                            >
+                                                                Soumettre
+                                                            </button>
+                                                        </div>
+                                                    }
+                                                />
+                                            ))}
                                         </div>
-                                    </div>
+                                    )}
                                 </>
                             )}
                         </div>
                     </div>
-                )}
+                </div>
 
-                {showConfirmModal && selectedMarche && (
-                    <div className="fixed inset-0 z-60 overflow-y-auto">
-                        <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-                            <div className="bg-opacity-75 fixed inset-0 bg-gray-500 transition-opacity"></div>
+                {/* Modal détails (version simplifiée) */}
+                {isModalOpen && selectedMarche && (
+                    <div className="fixed inset-0 z-50 overflow-y-auto">
+                        <div className="flex min-h-full items-center justify-center p-4">
+                            <div className="bg-opacity-75 fixed inset-0 bg-gray-500" onClick={closeModal}></div>
+                            <div className="relative max-h-96 w-full max-w-2xl overflow-y-auto rounded-lg bg-white">
+                                <div className="p-6">
+                                    <div className="mb-4 flex items-center justify-between">
+                                        <h3 className="text-lg font-medium text-gray-900">{selectedMarche.reference} - Détails</h3>
+                                        <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
+                                            <XCircle className="h-6 w-6" />
+                                        </button>
+                                    </div>
 
-                            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
-                                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                                    <div className="sm:flex sm:items-start">
-                                        <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-green-100 sm:mx-0 sm:h-10 sm:w-10">
-                                            <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                            </svg>
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <div>
+                                            <strong>Objet:</strong> {selectedMarche.objet || '-'}
                                         </div>
-                                        <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                                            <h3 className="text-lg leading-6 font-medium text-gray-900">Confirmer l'acceptation</h3>
-                                            <div className="mt-2">
-                                                <p className="text-sm text-gray-500">
-                                                    Êtes-vous sûr de vouloir accepter le marché {selectedMarche.reference} ? Cette action changera
-                                                    l'étape à "decision admin".
-                                                </p>
-                                            </div>
+                                        <div>
+                                            <strong>Maître d'ouvrage:</strong> {selectedMarche.maitre_ouvrage || '-'}
+                                        </div>
+                                        <div>
+                                            <strong>Budget:</strong> {selectedMarche.budget || '-'}
+                                        </div>
+                                        <div>
+                                            <strong>Caution:</strong> {formatCurrency(selectedMarche.caution_provisoire)}
+                                        </div>
+                                        <div>
+                                            <strong>Date limite:</strong> {formatDate(selectedMarche.date_limite_soumission)}
+                                        </div>
+                                        <div>
+                                            <strong>Ville:</strong> {selectedMarche.ville || '-'}
+                                        </div>
+                                        <div>
+                                            <strong>Étape actuelle:</strong> {selectedMarche.etape || '-'}
+                                        </div>
+                                        <div>
+                                            <strong>Type:</strong>{' '}
+                                            {TYPE_MARCHE_LABELS[selectedMarche.type_marche as keyof typeof TYPE_MARCHE_LABELS] || '-'}
                                         </div>
                                     </div>
-                                </div>
-                                <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
-                                    <button
-                                        type="button"
-                                        className={`inline-flex w-full justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm ${loading ? 'cursor-not-allowed opacity-50' : ''}`}
-                                        onClick={executeAction}
-                                        disabled={loading}
-                                    >
-                                        {loading ? (
-                                            <div className="flex items-center">
-                                                <svg className="mr-3 -ml-1 h-5 w-5 animate-spin text-white" fill="none" viewBox="0 0 24 24">
-                                                    <circle
-                                                        className="opacity-25"
-                                                        cx="12"
-                                                        cy="12"
-                                                        r="10"
-                                                        stroke="currentColor"
-                                                        strokeWidth="4"
-                                                    ></circle>
-                                                    <path
-                                                        className="opacity-75"
-                                                        fill="currentColor"
-                                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                                    ></path>
-                                                </svg>
-                                                Traitement...
-                                            </div>
-                                        ) : (
-                                            'Accepter'
-                                        )}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-                                        onClick={() => {
-                                            setShowConfirmModal(false);
-                                            setConfirmAction(null);
-                                        }}
-                                        disabled={loading}
-                                    >
-                                        Retour
-                                    </button>
+
+                                    <div className="mt-6 flex justify-end">
+                                        <button onClick={closeModal} className="rounded-md bg-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-400">
+                                            Fermer
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>

@@ -9,8 +9,7 @@ use App\Events\NewNotification;
 use Illuminate\Support\Str;
 use Exception;
 
-class CheckDocumentsExpiration extends Command
-
+class CheckDocumentExpiration extends Command
 {
     protected $signature = 'documents:check-expiration';
     protected $description = 'Vérifie les documents expirant bientôt et envoie une notification';

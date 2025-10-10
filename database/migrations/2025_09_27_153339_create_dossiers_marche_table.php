@@ -17,7 +17,7 @@ return new class extends Migration
             $table->enum('type_dossier', ['administratif', 'technique', 'financier', 'offre_technique']);
             $table->string('nom_dossier');
             $table->text('description')->nullable();
-            $table->enum('statut', ['en_attente', 'en_cours', 'termine', 'valide'])->default('en_attente');
+            $table->enum('statut', ['en_attente', 'en_cours', 'termine','modification_requis', 'valide'])->default('en_attente');
             $table->decimal('pourcentage_avancement', 5, 2)->default(0);
             $table->date('date_limite')->nullable();
             $table->date('date_creation');
